@@ -62,13 +62,16 @@ provides messages; live document state provides attachment and status.
 
 ## Related projects
 
-Representative rather than exhaustive; capabilities change over time.
+Representative rather than exhaustive; capabilities change over time. The README's
+[comparison table](https://github.com/mhmdaskari/overleaf-web-mcp#how-it-compares) checks each
+capability against the source of the most widely used servers.
 
 | Implementation | Connection model | Focus |
 | --- | --- | --- |
 | **This project** | Browser-assisted saved session plus private REST and Socket.IO/OT | Project and file management, tracked writing, compilation, review, recent history |
 | [`@netique/overleaf-mcp`](https://github.com/netique/overleaf-mcp) | Browser session plus private REST and Socket.IO/OT | A close web/OT peer with review comments and tracked-change workflows |
-| [`overleaf-mcp-rt`](https://github.com/DanielHou315/overleaf-mcp-rt) | Session authentication plus native OT | Real-time file and compile tooling focused on self-hosted Community Edition |
+| [`overleaf-mcp-rt`](https://github.com/DanielHou315/overleaf-mcp-rt) | Session authentication plus native OT | Real-time file, compile, and comment tooling for `www.overleaf.com` and Community Edition |
+| [`olcli`](https://github.com/aloth/olcli) | Session cookie plus private REST | A command-line client with an MCP mode: whole-file uploads, compilation, comments, and local-folder diffs |
 | [`OverleafMCP`](https://github.com/mjyoo2/OverleafMCP), [`overleaf-mcp-server`](https://github.com/YounesBensafia/overleaf-mcp-server), [`vibeTeX`](https://github.com/oscardvs/vibetex) | Overleaf Git bridge | Git-backed synchronization, editing, and history |
 
 The Git-bridge servers need Overleaf's Git integration, a paid feature on `www.overleaf.com`, and

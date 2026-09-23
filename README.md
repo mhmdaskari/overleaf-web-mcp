@@ -113,6 +113,51 @@ All 24 tools, grouped as in the [tool reference](https://mhmdaskari.github.io/ov
 - Your session cookie stays on your machine in a file only you can read, and is never returned by any tool.
 - While a project is open, up to 90 seconds after the last call, you may appear online to collaborators.
 
+## How it compares
+
+The three most-starred Overleaf MCP servers and the two closest in design to this one, each checked against its own source code on 2026-09-22. They change often, so follow the links for their current state. ✓ supported, ◐ partly (see the numbered notes), ✗ not supported.
+
+| | **This project** | [OverleafMCP](https://github.com/mjyoo2/OverleafMCP) | [olcli](https://github.com/aloth/olcli) | [overleaf-mcp-server](https://github.com/YounesBensafia/overleaf-mcp-server) | [overleaf-mcp-rt](https://github.com/DanielHou315/overleaf-mcp-rt) | [netique/overleaf-mcp](https://github.com/netique/overleaf-mcp) |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
+| Works without Overleaf's paid Git integration | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ |
+| Self-hosted Overleaf | ✓ | ✗ | ✓ | ◐¹ | ✓ | ◐² |
+| List and search your projects | ✓ | ◐³ | ◐⁴ | ✗ | ◐⁵ | ✓ |
+| Returns a document's text to the assistant | ✓ | ✓ | ◐⁶ | ✓ | ✓ | ✓ |
+| Sends edits as collaborative OT operations, not whole files | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Refuses an edit if the document changed since it was read | ✓ | ◐⁷ | ✗ | ✗ | ✓ | ◐⁸ |
+| Writes as tracked changes when asked | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Accepts or rejects tracked changes | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Reads and replaces one `\section` | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Creates, renames, moves, and deletes files and folders | ✓ | ◐⁹ | ◐¹⁰ | ◐⁹ | ✓ | ✗ |
+| Uploads and downloads binary files | ✓ | ✗ | ✓ | ✗ | ✓ | ◐¹¹ |
+| Compares a local folder with the project | ◐¹² | ✗ | ✓ | ✗ | ✗ | ✗ |
+| Compiles on Overleaf | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ |
+| Reads the compile log and errors | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Review comments: list, reply, add, resolve | ✓ | ✗ | ✓ | ✗ | ✓ | ◐¹³ |
+| Creates, clones, imports, archives, and deletes projects | ✓ | ✗ | ◐¹⁴ | ✗ | ✗ | ✗ |
+| Saves the root document, compiler, and TeX Live image | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Reads project history | ✓ | ✗ | ✗ | ✗ | ◐¹⁵ | ✗ |
+| Tools | 24 | 8 | 19 | 4 | 22 | 17 |
+| Installs from | npm | npm | npm, Homebrew | source | npm | npm |
+| License | MIT | MIT | MIT | MIT | AGPL-3.0 | AGPL-3.0 |
+
+1. Only where Overleaf's Git bridge exists, which on a self-hosted instance means Server Pro.
+2. Documented, but sign-in appears to require overleaf.com's `overleaf_session2` cookie, which Community Edition does not set by default.
+3. Only the projects named in its own configuration.
+4. Lists projects without search, and leaves out archived and trashed ones.
+5. Lists projects, with no search or filter.
+6. Files are saved to the server's disk; no tool returns a document's text.
+7. Git rejects the push if Overleaf moved on after the tool's own pull, but an edit made between the assistant's read and that pull is overwritten.
+8. Only with `strict_version: true`; by default a concurrent edit is reported after the write.
+9. Creates files by writing them; no rename, move, or delete.
+10. Creates, renames, and deletes files and folders; no move.
+11. Downloads binary files; no upload.
+12. Binary files only, by comparing `git hash-object` with the hashes in the project tree.
+13. Lists, replies to, resolves, and reopens threads, but cannot add a comment.
+14. Creates and renames projects.
+15. Reports what collaborators changed during the session.
+
 ## Documentation
 
 | Page | What it covers |
