@@ -115,30 +115,30 @@ All 24 tools, grouped as in the [tool reference](https://mhmdaskari.github.io/ov
 
 ## How it compares
 
-The three most-starred Overleaf MCP servers and the two closest in design to this one, each checked against its own source code on 2026-09-22. They change often, so follow the links for their current state. ✓ supported, ◐ partly (see the numbered notes), ✗ not supported.
+The three most-starred Overleaf MCP servers and the two closest in design to this one, each checked against its own source code on 2026-09-22. They change often, so follow the links for their current state. ✅ supported, 🟡 partly (see the numbered notes), ❌ not supported.
 
 | | **This project** | [OverleafMCP](https://github.com/mjyoo2/OverleafMCP) | [olcli](https://github.com/aloth/olcli) | [overleaf-mcp-server](https://github.com/YounesBensafia/overleaf-mcp-server) | [overleaf-mcp-rt](https://github.com/DanielHou315/overleaf-mcp-rt) | [netique/overleaf-mcp](https://github.com/netique/overleaf-mcp) |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
-| Works without Overleaf's paid Git integration | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ |
-| Self-hosted Overleaf | ✓ | ✗ | ✓ | ◐¹ | ✓ | ◐² |
-| List and search your projects | ✓ | ◐³ | ◐⁴ | ✗ | ◐⁵ | ✓ |
-| Returns a document's text to the assistant | ✓ | ✓ | ◐⁶ | ✓ | ✓ | ✓ |
-| Sends edits as collaborative OT operations, not whole files | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
-| Refuses an edit if the document changed since it was read | ✓ | ◐⁷ | ✗ | ✗ | ✓ | ◐⁸ |
-| Writes as tracked changes when asked | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Accepts or rejects tracked changes | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Reads and replaces one `\section` | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Creates, renames, moves, and deletes files and folders | ✓ | ◐⁹ | ◐¹⁰ | ◐⁹ | ✓ | ✗ |
-| Uploads and downloads binary files | ✓ | ✗ | ✓ | ✗ | ✓ | ◐¹¹ |
-| Compares a local folder with the project | ◐¹² | ✗ | ✓ | ✗ | ✗ | ✗ |
-| Compiles on Overleaf | ✓ | ✗ | ✓ | ✗ | ✓ | ✓ |
-| Reads the compile log and errors | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ |
-| Review comments: list, reply, add, resolve | ✓ | ✗ | ✓ | ✗ | ✓ | ◐¹³ |
-| Creates, clones, imports, archives, and deletes projects | ✓ | ✗ | ◐¹⁴ | ✗ | ✗ | ✗ |
-| Saves the root document, compiler, and TeX Live image | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Reads project history | ✓ | ✗ | ✗ | ✗ | ◐¹⁵ | ✗ |
 | Tools | 24 | 8 | 19 | 4 | 22 | 17 |
+| Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Self-hosted Overleaf | ✅ | ❌ | ✅ | 🟡¹ | ✅ | 🟡² |
+| List and search your projects | ✅ | 🟡³ | 🟡⁴ | ❌ | 🟡⁵ | ✅ |
+| Returns a document's text to the assistant | ✅ | ✅ | 🟡⁶ | ✅ | ✅ | ✅ |
+| Sends edits as collaborative OT operations, not whole files | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Refuses an edit if the document changed since it was read | ✅ | 🟡⁷ | ❌ | ❌ | ✅ | 🟡⁸ |
+| Writes as tracked changes when asked | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Accepts or rejects tracked changes | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Reads and replaces one `\section` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Creates, renames, moves, and deletes files and folders | ✅ | 🟡⁹ | 🟡¹⁰ | 🟡⁹ | ✅ | ❌ |
+| Uploads and downloads binary files | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹¹ |
+| Compares a local folder with the project | 🟡¹² | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Compiles on Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Reads the compile log and errors | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Review comments: list, reply, add, resolve | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹³ |
+| Creates, clones, imports, archives, and deletes projects | ✅ | ❌ | 🟡¹⁴ | ❌ | ❌ | ❌ |
+| Saves the root document, compiler, and TeX Live image | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Reads project history | ✅ | ❌ | ❌ | ❌ | 🟡¹⁵ | ❌ |
 | Installs from | npm | npm | npm, Homebrew | source | npm | npm |
 | License | MIT | MIT | MIT | MIT | AGPL-3.0 | AGPL-3.0 |
 
