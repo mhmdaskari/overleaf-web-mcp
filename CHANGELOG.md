@@ -4,6 +4,19 @@ All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
 result shapes may change in a minor or patch release; each such change is listed below.
 
+## [0.3.2] - 2026-09-22
+
+Documentation only. No tool was added, removed, or changed in schema or result shape; the server
+still registers 24 tools.
+
+### Documentation
+
+- **"How it compares" in the README**: a capability table comparing this server with the three
+  most-starred Overleaf MCP servers and the two closest in design, each checked against its own
+  source code, with numbered notes for every partial entry. The related-projects table in the
+  internals page now lists `olcli` and describes `overleaf-mcp-rt` correctly.
+- An updated workflow illustration in the README and the package.
+
 ## [0.3.1] - 2026-09-22
 
 Proxy support. On a network that allows outbound traffic only through an HTTP proxy, listing
@@ -248,6 +261,7 @@ still registers 19 tools. Planned in [ROADMAP.md](https://github.com/mhmdaskari/
 - First release: browser-assisted session capture, project and file management, revision-checked
   and section-level writing, compilation, and review comments.
 
+[0.3.2]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.3.2
 [0.3.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.3.1
 [0.3.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.3.0
 [0.2.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.2.1
