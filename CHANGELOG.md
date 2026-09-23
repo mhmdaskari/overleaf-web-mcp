@@ -4,6 +4,41 @@ All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
 result shapes may change in a minor or patch release; each such change is listed below.
 
+## [0.3.1] - 2026-09-22
+
+Proxy support. On a network that allows outbound traffic only through an HTTP proxy, listing
+projects could work while every project tool failed with `ENOTFOUND`, because the collaboration
+WebSocket never used the proxy. Reported, diagnosed, and first fixed by
+[@Yusuf00Aras](https://github.com/Yusuf00Aras) in
+[#6](https://github.com/mhmdaskari/overleaf-web-mcp/pull/6). No tool was added or removed, and no
+schema or result shape changed; the server still registers 24 tools.
+
+### Fixed
+
+- **REST requests, the Socket.IO handshake, and the collaboration WebSocket all honour
+  `HTTPS_PROXY`, `HTTP_PROXY`, and `NO_PROXY`, and always take the same route.** The server
+  resolves one proxy for `OVERLEAF_BASE_URL` at startup and applies it to every connection.
+  Previously REST requests used a proxy only on recent Node releases with `NODE_USE_ENV_PROXY=1`,
+  and the WebSocket never did. The variable follows the base URL's scheme, lowercase names take
+  precedence, a bare `host:port` means an HTTP proxy, and `NO_PROXY` matches a host and its
+  subdomains, optionally by port. This now works on Node 20, with no `NODE_USE_ENV_PROXY` needed.
+- **An unusable proxy value fails at startup** with `INVALID_ARGUMENT` naming the variable, for
+  example a SOCKS URL or one that does not parse. The message never includes the value, which can
+  hold credentials, and proxy credentials are never printed.
+
+### Changed
+
+- A proxy variable set in the server's environment now takes effect on every supported Node
+  version. If Overleaf is reachable directly while such a variable is set for other tools, list
+  its host in `NO_PROXY`.
+- New runtime dependencies: `undici` for proxied REST requests and `https-proxy-agent` for the
+  proxied WebSocket.
+
+### Documentation
+
+- "Behind a proxy" in the configuration guide, the proxy variables in its reference table, and a
+  troubleshooting entry for networks that require a proxy.
+
 ## [0.3.0] - 2026-09-14
 
 Session keepalive. Overleaf's web session lasts five days from its last use and is refreshed by
@@ -213,6 +248,7 @@ still registers 19 tools. Planned in [ROADMAP.md](https://github.com/mhmdaskari/
 - First release: browser-assisted session capture, project and file management, revision-checked
   and section-level writing, compilation, and review comments.
 
+[0.3.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.3.1
 [0.3.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.3.0
 [0.2.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.2.1
 [0.2.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.2.0

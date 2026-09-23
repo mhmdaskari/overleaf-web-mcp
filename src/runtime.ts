@@ -1,8 +1,9 @@
 import type { AppConfig } from './config.js'
 import { AUTH_LOGIN_INSTRUCTION, McpError } from './core/errors.js'
-import { parseBootstrapMeta } from './http/bootstrap.js'
+import { parseBootstrapMeta, type BootstrapMeta } from './http/bootstrap.js'
 import { OverleafHttpClient } from './http/client.js'
 import { CookieStore } from './http/cookies.js'
+import { createProxyRoute, type ProxyRoute } from './http/proxy.js'
 import type { OverleafToolRuntime } from './mcp/tools.js'
 import { AccountApi } from './overleaf/account.js'
 import { CommentsApi } from './overleaf/comments.js'
@@ -42,6 +43,7 @@ export class OverleafRuntime implements OverleafToolRuntime {
   readonly projects: ProjectsApi
   readonly connections: ProjectConnectionCache<ProjectConnection>
   readonly userId?: string
+  readonly #proxy: ProxyRoute | undefined
 
   private constructor(options: {
     config: AppConfig
@@ -57,6 +59,7 @@ export class OverleafRuntime implements OverleafToolRuntime {
     projects: ProjectsApi
     connections: ProjectConnectionCache<ProjectConnection>
     userId?: string
+    proxy?: ProxyRoute
   }) {
     this.config = options.config
     this.cookieStore = options.cookieStore
@@ -71,6 +74,7 @@ export class OverleafRuntime implements OverleafToolRuntime {
     this.projects = options.projects
     this.connections = options.connections
     if (options.userId !== undefined) this.userId = options.userId
+    this.#proxy = options.proxy
   }
 
   static async create(
@@ -78,6 +82,9 @@ export class OverleafRuntime implements OverleafToolRuntime {
     dependencies: RuntimeDependencies = {}
   ): Promise<OverleafRuntime> {
     const cookieStore = await CookieStore.load(config.cookieJarFile)
+    // One proxy decision, from readConfig, covers REST calls, the handshake, and the WebSocket.
+    const proxy = config.proxyUrl === undefined ? undefined : createProxyRoute(config.proxyUrl)
+    const fetcher = dependencies.fetcher ?? proxy?.fetcher
     const csrf = { token: undefined as string | undefined }
     const http = new OverleafHttpClient({
       baseUrl: config.baseUrl,
@@ -85,18 +92,24 @@ export class OverleafRuntime implements OverleafToolRuntime {
       defaultTimeoutMs: config.requestTimeoutMs,
       csrfToken: () => csrf.token,
       persistSetCookies: async (url, values) => await cookieStore.mergeSetCookies(url, values),
-      ...(dependencies.fetcher === undefined ? {} : { fetcher: dependencies.fetcher }),
+      ...(fetcher === undefined ? {} : { fetcher }),
     })
 
-    const bootstrapResponse = await http.request('GET', '/project')
-    const bootstrap = parseBootstrapMeta(await bootstrapResponse.text())
-    csrf.token = bootstrap.csrfToken
-    if (!csrf.token) {
-      throw new McpError(
-        'AUTH_EXPIRED',
-        `Overleaf did not expose an authenticated CSRF token. ${AUTH_LOGIN_INSTRUCTION}`
-      )
+    let bootstrap: BootstrapMeta
+    try {
+      const bootstrapResponse = await http.request('GET', '/project')
+      bootstrap = parseBootstrapMeta(await bootstrapResponse.text())
+      if (!bootstrap.csrfToken) {
+        throw new McpError(
+          'AUTH_EXPIRED',
+          `Overleaf did not expose an authenticated CSRF token. ${AUTH_LOGIN_INSTRUCTION}`
+        )
+      }
+    } catch (error) {
+      await proxy?.close()
+      throw error
     }
+    csrf.token = bootstrap.csrfToken
 
     // Sockets are cached per project, while each document is freshly joined inside its queued call.
     const factory = dependencies.connectionFactory ?? (async (projectId: string) =>
@@ -108,7 +121,8 @@ export class OverleafRuntime implements OverleafToolRuntime {
         timeoutMs: config.requestTimeoutMs,
         applyTimeoutMs: config.applyTimeoutMs,
         ...(bootstrap.userId === undefined ? {} : { currentUserId: bootstrap.userId }),
-        ...(dependencies.fetcher === undefined ? {} : { fetcher: dependencies.fetcher }),
+        ...(fetcher === undefined ? {} : { fetcher }),
+        ...(proxy === undefined ? {} : { webSocketAgent: proxy.webSocketAgent }),
       }))
     const connections = new ProjectConnectionCache<ProjectConnection>({
       capacity: config.socketCacheSize,
@@ -170,6 +184,7 @@ export class OverleafRuntime implements OverleafToolRuntime {
       projects,
       connections,
       ...(bootstrap.userId === undefined ? {} : { userId: bootstrap.userId }),
+      ...(proxy === undefined ? {} : { proxy }),
     })
   }
 
@@ -240,5 +255,6 @@ export class OverleafRuntime implements OverleafToolRuntime {
 
   async close(): Promise<void> {
     await this.connections.closeAll()
+    await this.#proxy?.close()
   }
 }

@@ -22,6 +22,9 @@ server, for example in the `env` block of the client's MCP configuration. Defaul
 | `OVERLEAF_APPLY_TIMEOUT_MS` | `30000` | OT acknowledgement and application timeout |
 | `OVERLEAF_RECOVERY_TIMEOUT_MS` | `30000` | Ambiguous-mutation observation window |
 | `OVERLEAF_COMPILE_TIMEOUT_MS` | `120000` | Default compile wait, capped at 15 minutes |
+| `HTTPS_PROXY`, `https_proxy` | Unset | Proxy for an `https://` base URL; see [behind a proxy](#behind-a-proxy) |
+| `HTTP_PROXY`, `http_proxy` | Unset | Proxy for an `http://` base URL |
+| `NO_PROXY`, `no_proxy` | Unset | Hosts reached directly, bypassing the proxy |
 
 An `ol-maxDocLength` value advertised by the Overleaf deployment takes precedence over the
 fallback. Content at or above the limit returns `DOC_TOO_LARGE`; an oversized serialized update
@@ -122,6 +125,40 @@ schtasks /Create /SC DAILY /ST 09:00 /TN "overleaf-web-mcp keepalive" /TR "\"C:\
 Running a keepalive while an MCP client has the server open is safe. Cookie refreshes are merged
 under the jar's advisory lock, and the jar is re-read under that lock before it is written, so
 neither process can overwrite the other's refresh.
+
+## Behind a proxy
+
+When outbound traffic must go through an HTTP proxy, set the conventional proxy variables in the
+same `env` block as the others:
+
+```json
+"env": {
+  "HTTPS_PROXY": "http://proxy.example.org:3128",
+  "NO_PROXY": "localhost,.internal.example.org"
+}
+```
+
+The server makes one routing decision for `OVERLEAF_BASE_URL` at startup and applies it to every
+connection: REST requests, the Socket.IO handshake, and the collaboration WebSocket always take
+the same route, as the handshake's load-balancer cookie requires. It does not rely on Node's own
+proxy support, so it works on Node 20 and needs no `NODE_USE_ENV_PROXY`.
+
+- The variable follows the scheme of `OVERLEAF_BASE_URL`: `HTTPS_PROXY` for an `https://` origin,
+  `HTTP_PROXY` for an `http://` one, with no fallback from one to the other. A lowercase name
+  takes precedence over the uppercase one, and an empty value counts as unset.
+- The value is an `http://` or `https://` proxy URL, and a bare `host:port` means `http://`.
+  Credentials go in the URL, percent-encoded where needed, as in
+  `http://user:p%40ss@proxy.example.org:3128`. They are sent only to the proxy and never printed.
+  SOCKS proxies are not supported.
+- `NO_PROXY` is a comma-separated list. An entry matches that host and its subdomains, with or
+  without a leading `.` or `*.`; `*` matches every host; `host:port` matches only that port; an IP
+  address matches only itself. CIDR ranges are not supported.
+- If the variable that applies is invalid, the server exits at startup with `INVALID_ARGUMENT`,
+  naming the variable but not its value. A variable that does not apply, because of the scheme or
+  `NO_PROXY`, is not checked.
+
+`login` signs in through Chrome, which applies its own proxy settings. The check that follows
+sign-in uses the proxy above, as `serve` and `keepalive` do.
 
 ## Presence
 

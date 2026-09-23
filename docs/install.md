@@ -120,6 +120,12 @@ alive, or the `AUTH_EXPIRED` error if it is not, in which case run `npx overleaf
 To stop it recurring, schedule the keepalive daily; see
 [keeping the session alive](configuration.md#keeping-the-session-alive).
 
+**Requests fail or time out on a network that requires a proxy.** Set `HTTPS_PROXY`, and
+`NO_PROXY` if some hosts must be reached directly, in the server's `env` block; see
+[behind a proxy](configuration.md#behind-a-proxy). Releases before 0.3.1 did not send the
+collaboration WebSocket through a proxy, so project tools failed with `ENOTFOUND` even where
+`list_projects` worked.
+
 **`AUTH_EXPIRED` in a tool result.** The saved session has expired or been revoked. Run
 `npx overleaf-web-mcp login` again. Nothing else needs to change.
 

@@ -121,7 +121,7 @@ All 24 tools, grouped as in the [tool reference](https://mhmdaskari.github.io/ov
 | [Using it](https://mhmdaskari.github.io/overleaf-web-mcp/using/) | Example prompts and what happens underneath |
 | [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 24 tools with parameters and results |
 | [Safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) | Revisions, tracked changes, confirmations, error codes |
-| [Configuration](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/) | Environment variables, where the session is stored, and keeping it alive |
+| [Configuration](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/) | Environment variables, proxies, where the session is stored, and keeping it alive |
 | [Internals](https://mhmdaskari.github.io/overleaf-web-mcp/internals/) | Protocol notes, reliability guarantees, related projects |
 | [Roadmap](https://mhmdaskari.github.io/overleaf-web-mcp/roadmap/) and [Changelog](https://mhmdaskari.github.io/overleaf-web-mcp/changelog/) | Where this is going and what changed |
 

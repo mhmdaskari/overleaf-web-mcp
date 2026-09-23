@@ -1,5 +1,6 @@
 import { McpError } from './core/errors.js'
 import { resolveAuthPaths } from './auth/paths.js'
+import { resolveProxyUrl } from './http/proxy.js'
 
 export interface AppConfig {
   baseUrl: string
@@ -16,6 +17,8 @@ export interface AppConfig {
   recoveryTimeoutMs: number
   compileTimeoutMs: number
   supportedProtocolVersions: number[]
+  /** Proxy for every connection to `baseUrl`; absent to connect directly. */
+  proxyUrl?: string
 }
 
 function positiveInteger(
@@ -61,6 +64,8 @@ export function readConfig(
     throw new McpError('INVALID_ARGUMENT', 'OVERLEAF_PROTOCOL_VERSIONS must be integers.')
   }
 
+  const proxyUrl = resolveProxyUrl(baseUrl, env)
+
   return {
     baseUrl: baseUrl.href.replace(/\/$/u, ''),
     cookieJarFile,
@@ -83,5 +88,6 @@ export function readConfig(
       15 * 60_000
     ),
     supportedProtocolVersions,
+    ...(proxyUrl === undefined ? {} : { proxyUrl }),
   }
 }
