@@ -4,6 +4,78 @@ All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
 result shapes may change in a minor or patch release; each such change is listed below.
 
+## [0.4.0] - 2026-09-27
+
+Bulk and sync operations. Bringing one folder up to date used to take a hand-rolled hash
+comparison and a tool call per file: the session the roadmap was written from spent 24 calls on
+it, 20 of them single deletes. `plan_sync` and `sync_directory` now do it in two, and
+`delete_entities` removes a list of entities in one. The server registers 27 tools. Planned in
+[ROADMAP.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/ROADMAP.md).
+
+### Added
+
+- **`plan_sync`** compares a local folder with the project, or with one project folder through
+  `destinationFolderPath`, and changes nothing. Binary files compare by the git blob hash already
+  in the tree; text documents are read and compared as LF-normalized text. It returns `toUpload`
+  (new or changed, with `comparedBy` and `remoteType`), `identical` (a count and the first 25
+  paths unless `verbose`), `remoteOnly` (what mirror mode would delete, each folder collapsed to
+  one entry with a `contains` count), `conflicts` (a file where the other side has a folder, or
+  non-UTF-8 text where the project has a document), `ignored`, and a `planToken`.
+- **`sync_directory`** applies a plan in `additive` or `mirror` mode, which must always be given.
+  With a `planToken` it first compares both sides with the plan again and fails with
+  `REMOTE_DRIFT`, changing nothing, if either one moved, identical files included. Changed
+  documents are replaced through revision-checked `write_file` edits, so an edit made during the
+  sync fails that one file with `REVISION_CONFLICT`; binaries and new files are uploaded, and
+  missing folders are created. With `writeMode: "tracked"`, changed documents are written as
+  tracked changes and new text files are created with tracked content, since an upload is never
+  tracked. Uploads and writes run first and are confirmed in the tree; deletes run only in mirror
+  mode, only with `confirmDeleteCount` equal to the planned count, never after any upload or write
+  failed, and each entity is re-checked just before it is deleted. Failures are per file and
+  nothing is retried. The result carries `status`, `completed`, `failed`, `remaining`,
+  `identicalCount`, and a `planToken` that resumes a partial run while still stopping for a
+  change someone made in between.
+- **`delete_entities`** deletes a list of paths once `confirmCount` equals its length. Every path
+  is resolved before any is deleted, so a missing one fails the call with `NOT_FOUND` and changes
+  nothing; a duplicate, or a path inside a listed folder, is `INVALID_ARGUMENT`.
+- **Ignore rules for folder sync.** Gitignore-style patterns: by default `.git/`, `.DS_Store`,
+  hidden files and folders, `__MACOSX/`, and LaTeX build output (`*.aux`, `*.log`, `*.bbl`,
+  `*.blg`, `*.out`, `*.toc`, `*.synctex.gz`, `*.fdb_latexmk`, `*.fls`), then a `.olignore` file in
+  the folder, then the `ignore` parameter, so `!pattern` re-includes. A path an ignore rule
+  matches is protected on the project side too and is never compared or deleted.
+- **`REMOTE_DRIFT`** for a sync whose plan no longer matches the project or the local folder,
+  with `details.changed` set to `remote`, `local`, or `both`, and **`PATH_OUTSIDE_ROOT`** for a
+  symbolic link that leads out of `localFolderPath`.
+- **Progress notifications.** The three new tools send `notifications/progress` while documents
+  are read and files are applied, when the client supplies a progress token.
+- **`outputSchema` and `structuredContent`** on the three new tools.
+- A gated live test (`RUN_OVERLEAF_LIVE_SYNC_TESTS=1`) that mirrors a temporary folder into a
+  throwaway project, checks that a second plan finds nothing to do, and trashes the project.
+- New runtime dependency: `ignore`, for gitignore-compatible pattern matching.
+
+### Changed
+
+- **`CONFIRMATION_MISMATCH`** also covers `confirmCount` and `confirmDeleteCount`, including a
+  mirror sync called without `confirmDeleteCount`.
+- The initialize instructions gain a paragraph on folder sync, and the rest is tightened so the
+  whole stays under the 450-word bound the test enforces.
+
+### Documentation
+
+- A "Folder sync and bulk delete" section in the tool reference, with the comparison rules, the
+  ignore rules, and the order in which a sync applies changes.
+- The safety model covers what a plan token guarantees and what it does not, and lists the two
+  new error codes. The usage guide's manual hash comparison is replaced by the two-call workflow.
+- The README lists the three tools, and its comparison table now marks folder comparison as
+  supported, where it was binaries only.
+- The tool reference's `auth_status` entry lists `sessionExpiresAt`, added in 0.3.0 but missing
+  from that page until now.
+- `AGENTS.md` records the sync invariants contributors must keep and the new confirm-by-value
+  parameters.
+- The roadmap marks the first v0.4.0 release shipped and records how the design changed on the
+  way: a stateless plan token that covers both sides, `destinationFolderPath`, a `conflicts`
+  list, and no `onConflict` option. `batch_upload` and `download_project_zip` follow in a point
+  release.
+
 ## [0.3.2] - 2026-09-22
 
 Documentation only. No tool was added, removed, or changed in schema or result shape; the server

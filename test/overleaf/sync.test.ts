@@ -1,0 +1,758 @@
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, posix } from 'node:path'
+
+import { describe, expect, test } from 'vitest'
+
+import { McpError } from '../../src/core/errors.js'
+import { gitBlobHash } from '../../src/core/hash.js'
+import { assertRevisionMatches, createRevision } from '../../src/core/revision.js'
+import { normalizeLf } from '../../src/core/text.js'
+import type { WriteMode } from '../../src/overleaf/documents.js'
+import type { EntityAction } from '../../src/overleaf/entities.js'
+import { SyncApi, type SyncDependencies } from '../../src/overleaf/sync.js'
+import type { EntityType, ProjectTree } from '../../src/overleaf/tree.js'
+
+const PROJECT = 'project'
+
+interface FakeEntity {
+  id: string
+  type: EntityType
+  hash?: string
+  content?: string
+  version?: number
+}
+
+type Content = string | Uint8Array
+
+/**
+ * An in-memory Overleaf project that behaves like the primitives a sync is composed of:
+ * revision-checked document writes, in-place uploads keyed by path, and recursive deletes.
+ */
+class FakeProject {
+  readonly entities = new Map<string, FakeEntity>()
+  readonly mutations: string[] = []
+  readonly writeModes: WriteMode[] = []
+  #nextId = 1
+  failUploads = new Set<string>()
+  failFolders = new Set<string>()
+  /** Uploads Overleaf acknowledges without storing anything. */
+  dropUploads = new Set<string>()
+  beforeWrite: ((path: string) => void) | undefined
+  afterUpload: ((path: string) => void) | undefined
+
+  constructor(files: Record<string, Content | null> = {}) {
+    for (const [path, content] of Object.entries(files)) {
+      if (content === null) this.folder(path)
+      else this.put(path, content)
+    }
+  }
+
+  #id(): string {
+    return `id${this.#nextId++}`
+  }
+
+  folder(path: string): void {
+    const parent = posix.dirname(path)
+    if (parent !== '.' && !this.entities.has(parent)) this.folder(parent)
+    if (!this.entities.has(path)) this.entities.set(path, { id: this.#id(), type: 'folder' })
+  }
+
+  /** Text for .tex/.bib/.txt names becomes a document; anything else a binary file. */
+  put(path: string, content: Content): void {
+    const parent = posix.dirname(path)
+    if (parent !== '.') this.folder(parent)
+    const existing = this.entities.get(path)
+    const id = existing?.id ?? this.#id()
+    if (typeof content === 'string' && /\.(tex|bib|txt|cls|sty)$/u.test(path)) {
+      this.entities.set(path, { id, type: 'doc', content: normalizeLf(content), version: (existing?.version ?? 0) + 1 })
+    } else {
+      const bytes = typeof content === 'string' ? new TextEncoder().encode(content) : content
+      this.entities.set(path, { id, type: 'file', hash: gitBlobHash(bytes) })
+    }
+  }
+
+  /** A collaborator's edit, which moves the document's version like any OT update. */
+  edit(path: string, content: string): void {
+    const entity = this.entities.get(path)!
+    entity.content = content
+    entity.version = (entity.version ?? 0) + 1
+  }
+
+  tree(): ProjectTree {
+    return {
+      entities: [...this.entities.entries()].map(([path, entity]) => ({
+        id: entity.id,
+        name: posix.basename(path),
+        path,
+        type: entity.type,
+        parentFolderId: 'root',
+        ...(entity.hash === undefined ? {} : { hash: entity.hash }),
+      })),
+      trackChangesActive: false,
+      hashNote: '',
+    }
+  }
+
+  #revision(path: string): string {
+    const entity = this.entities.get(path)!
+    return createRevision({
+      projectId: PROJECT,
+      docId: entity.id,
+      protocol: 'sharejs',
+      otVersion: entity.version!,
+      content: entity.content!,
+    })
+  }
+
+  #doc(path: string): FakeEntity {
+    const entity = this.entities.get(path)
+    if (entity === undefined) throw new McpError('NOT_FOUND', `Project path was not found: ${path}`)
+    if (entity.type !== 'doc') throw new McpError('INVALID_ARGUMENT', `${path} is not a doc`)
+    return entity
+  }
+
+  deps(options: { currentUserId?: string } = { currentUserId: 'user' }): SyncDependencies {
+    return {
+      getProjectTree: async () => this.tree(),
+      readFile: async (_projectId, filePath) => {
+        const entity = this.#doc(filePath)
+        return {
+          content: entity.content!,
+          revision: this.#revision(filePath),
+          newline: 'LF',
+          protocol: 'sharejs',
+          trackChangesActive: false,
+        }
+      },
+      writeFile: async (_projectId, filePath, revision, content, writeMode) => {
+        this.beforeWrite?.(filePath)
+        const entity = this.#doc(filePath)
+        assertRevisionMatches(revision, {
+          projectId: PROJECT,
+          docId: entity.id,
+          protocol: 'sharejs',
+          otVersion: entity.version!,
+          content: entity.content!,
+        })
+        this.mutations.push(`write ${filePath}`)
+        this.writeModes.push(writeMode)
+        entity.content = normalizeLf(content)
+        entity.version = entity.version! + 1
+        return { revision: this.#revision(filePath), protocol: 'sharejs', trackChangesActive: false, writeMode }
+      },
+      createFile: async (_projectId, filePath, content, writeMode) => {
+        this.mutations.push(`create ${filePath}`)
+        this.writeModes.push(writeMode)
+        this.entities.set(filePath, { id: this.#id(), type: 'doc', content: normalizeLf(content), version: 1 })
+        return { revision: this.#revision(filePath), protocol: 'sharejs', trackChangesActive: false, writeMode }
+      },
+      uploadFile: async (_projectId, localPath, folderPath, name) => {
+        const path = folderPath === '' ? name : `${folderPath}/${name}`
+        if (this.failUploads.has(path)) throw new McpError('REMOTE_ERROR', 'Overleaf returned HTTP 500.')
+        if (folderPath !== '' && this.entities.get(folderPath)?.type !== 'folder') {
+          throw new McpError('INVALID_ARGUMENT', 'The destination folder no longer exists in the project tree.')
+        }
+        this.mutations.push(`upload ${path}`)
+        if (!this.dropUploads.has(path)) {
+          const bytes = await readFile(localPath)
+          const text = new TextDecoder().decode(bytes)
+          this.put(path, /\.(tex|bib|txt)$/u.test(path) ? text : bytes)
+        }
+        this.afterUpload?.(path)
+        const entity = this.entities.get(path)
+        return {
+          ...(entity === undefined ? {} : { entityId: entity.id, entityType: entity.type }),
+          path,
+        }
+      },
+      manageEntity: async (_projectId, action: EntityAction) => {
+        if (action.action === 'create_folder') {
+          if (this.failFolders.has(action.path)) throw new McpError('PERMISSION_DENIED', 'Overleaf returned HTTP 403.')
+          this.mutations.push(`create_folder ${action.path}`)
+          this.folder(action.path)
+          return { action: 'create_folder', created: { _id: this.entities.get(action.path)!.id } }
+        }
+        if (action.action === 'delete') {
+          if (action.confirmPath !== action.path) throw new McpError('CONFIRMATION_MISMATCH', 'mismatch')
+          const entity = this.entities.get(action.path)
+          if (entity === undefined) throw new McpError('NOT_FOUND', `Project path was not found: ${action.path}`)
+          this.mutations.push(`delete ${action.path}`)
+          for (const key of [...this.entities.keys()]) {
+            if (key === action.path || key.startsWith(`${action.path}/`)) this.entities.delete(key)
+          }
+          return { action: 'delete', id: entity.id }
+        }
+        throw new Error(`unexpected ${action.action}`)
+      },
+      currentUserId: options.currentUserId,
+    }
+  }
+}
+
+async function localFolder(files: Record<string, Content>): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'overleaf-sync-'))
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true })
+    await writeFile(join(root, path), content)
+  }
+  return root
+}
+
+const png = (seed: number): Uint8Array => new Uint8Array([0x89, 0x50, 0x4e, 0x47, seed, 0xff])
+
+describe('plan_sync', () => {
+  test('compares binaries by hash and documents by content without changing anything', async () => {
+    const project = new FakeProject({
+      'main.tex': '\\section{Old}\n',
+      'refs.bib': '@book{a}\n',
+      'figures/same.png': png(1),
+      'figures/old.png': png(2),
+      'stale.tex': 'stale\n',
+    })
+    const root = await localFolder({
+      // CRLF and a byte order mark compare equal to the LF document Overleaf holds.
+      'refs.bib': '\uFEFF@book{a}\r\n',
+      'main.tex': '\\section{New}\n',
+      'figures/same.png': png(1),
+      'figures/old.png': png(3),
+      'figures/new.png': png(4),
+      'main.aux': 'build output',
+    })
+
+    const plan = await new SyncApi(project.deps()).planSync(PROJECT, root)
+
+    expect(plan.toUpload).toEqual([
+      { localPath: 'figures/new.png', destinationPath: 'figures/new.png', reason: 'new' },
+      {
+        localPath: 'figures/old.png',
+        destinationPath: 'figures/old.png',
+        reason: 'changed',
+        comparedBy: 'hash',
+        remoteType: 'file',
+      },
+      {
+        localPath: 'main.tex',
+        destinationPath: 'main.tex',
+        reason: 'changed',
+        comparedBy: 'content',
+        remoteType: 'doc',
+      },
+    ])
+    expect(plan.identical).toEqual({ count: 2, paths: ['figures/same.png', 'refs.bib'] })
+    expect(plan.remoteOnly).toEqual([
+      { destinationPath: 'stale.tex', entityId: project.entities.get('stale.tex')!.id, type: 'doc' },
+    ])
+    expect(plan.ignored).toEqual({ count: 1, entries: [{ localPath: 'main.aux', matchedPattern: '*.aux' }] })
+    expect(plan.conflicts).toEqual([])
+    expect(plan.planToken).toEqual(expect.any(String))
+    expect(project.mutations).toEqual([])
+  })
+
+  test('collapses remote-only folders to one entry but never through a protected path', async () => {
+    const project = new FakeProject({
+      'main.tex': 'x',
+      'old/a.png': png(1),
+      'old/deep/b.png': png(2),
+      'build/output.log': 'log',
+      'build/stale.png': png(3),
+      '.latexmkrc': 'rc',
+    })
+    const root = await localFolder({ 'main.tex': 'x' })
+
+    const plan = await new SyncApi(project.deps()).planSync(PROJECT, root)
+
+    // .latexmkrc and output.log match ignore rules, so they are protected, and build/ stays.
+    expect(plan.remoteOnly.map(entry => [entry.destinationPath, entry.type, entry.contains])).toEqual([
+      ['build/stale.png', 'file', undefined],
+      ['old', 'folder', 3],
+    ])
+  })
+
+  test('scopes the comparison to destinationFolderPath and bounds identical unless verbose', async () => {
+    const remote: Record<string, Content> = { 'paper.tex': 'outside the scope' }
+    const local: Record<string, Content> = {}
+    for (let index = 0; index < 30; index += 1) {
+      remote[`figures/f${String(index).padStart(2, '0')}.png`] = png(index)
+      local[`f${String(index).padStart(2, '0')}.png`] = png(index)
+    }
+    const project = new FakeProject(remote)
+    const root = await localFolder(local)
+    const api = new SyncApi(project.deps())
+
+    const bounded = await api.planSync(PROJECT, root, { destinationFolderPath: 'figures' })
+    expect(bounded.identical.count).toBe(30)
+    expect(bounded.identical.paths).toHaveLength(25)
+    expect(bounded.identical.paths[0]).toBe('figures/f00.png')
+    expect(bounded.remoteOnly).toEqual([])
+
+    const verbose = await api.planSync(PROJECT, root, { destinationFolderPath: 'figures/', verbose: true })
+    expect(verbose.destinationFolderPath).toBe('figures')
+    expect(verbose.identical.paths).toHaveLength(30)
+    await expect(api.planSync(PROJECT, root, { destinationFolderPath: '.' })).resolves.toMatchObject({
+      destinationFolderPath: '',
+    })
+  })
+
+  test('reports conflicts that a sync cannot resolve on its own', async () => {
+    const project = new FakeProject({
+      'figures/x.png': png(1),
+      'data': png(2),
+      'notes.tex': 'text',
+    })
+    const root = await localFolder({
+      figures: 'a file where the project has a folder',
+      'data/table.csv': 'a folder where the project has a file',
+      'notes.tex': new Uint8Array([0xff, 0xfe, 0x00]),
+    })
+
+    const plan = await new SyncApi(project.deps()).planSync(PROJECT, root)
+
+    expect(plan.conflicts.map(conflict => [conflict.localPath, conflict.reason])).toEqual([
+      ['data/', 'local_folder_remote_file'],
+      ['figures', 'local_file_remote_folder'],
+      ['notes.tex', 'not_utf8_text'],
+    ])
+    // Nothing inside either side of a conflict is uploaded or planned for deletion.
+    expect(plan.toUpload).toEqual([])
+    expect(plan.remoteOnly).toEqual([])
+  })
+})
+
+describe('sync_directory', () => {
+  test('does the reference cleanup in two calls and never re-uploads identical figures', async () => {
+    const remote: Record<string, Content> = {
+      'main.tex': 'old main\n',
+      'refs.bib': 'old refs\n',
+      'appendix.tex': 'old appendix\n',
+      'plot.pdf': png(100),
+      'stale/a.png': png(101),
+      'stale/b.png': png(102),
+    }
+    const local: Record<string, Content> = {
+      'main.tex': 'new main\n',
+      'refs.bib': 'new refs\n',
+      'appendix.tex': 'new appendix\n',
+      'plot.pdf': png(200),
+    }
+    for (let index = 1; index <= 9; index += 1) {
+      remote[`figures/fig${index}.png`] = png(index)
+      local[`figures/fig${index}.png`] = png(index)
+    }
+    for (let index = 1; index <= 19; index += 1) remote[`old-${index}.png`] = png(50 + index)
+    const project = new FakeProject(remote)
+    const root = await localFolder(local)
+    const api = new SyncApi(project.deps())
+
+    const plan = await api.planSync(PROJECT, root)
+    expect(plan.toUpload).toHaveLength(4)
+    expect(plan.identical.count).toBe(9)
+    expect(plan.remoteOnly).toHaveLength(20)
+
+    const result = await api.syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      planToken: plan.planToken,
+      confirmDeleteCount: 20,
+    })
+
+    expect(result).toMatchObject({ status: 'complete', failed: [], remaining: [], identicalCount: 9 })
+    expect(project.mutations.filter(entry => entry.includes('figures/'))).toEqual([])
+    expect(project.mutations.filter(entry => entry.startsWith('write '))).toEqual([
+      'write appendix.tex',
+      'write main.tex',
+      'write refs.bib',
+    ])
+    expect(project.mutations.filter(entry => entry.startsWith('upload '))).toEqual(['upload plot.pdf'])
+    expect(project.mutations.filter(entry => entry.startsWith('delete '))).toHaveLength(20)
+    expect(project.mutations.indexOf('delete old-1.png')).toBeGreaterThan(project.mutations.indexOf('upload plot.pdf'))
+    expect(project.entities.get('main.tex')?.content).toBe('new main\n')
+    expect(project.entities.has('stale')).toBe(false)
+
+    // The returned token describes the synced state, so a second pass is a verified no-op.
+    const again = await api.syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      planToken: result.planToken,
+      confirmDeleteCount: 0,
+    })
+    expect(again).toMatchObject({ status: 'complete', completed: [], identicalCount: 13 })
+  })
+
+  test('never deletes after a failed upload and resumes with the returned token', async () => {
+    const project = new FakeProject({ 'a.png': png(1), 'stale.png': png(9) })
+    const root = await localFolder({ 'a.png': png(2), 'b.png': png(3), 'c.png': png(4) })
+    const api = new SyncApi(project.deps())
+    const plan = await api.planSync(PROJECT, root)
+    project.failUploads.add('b.png')
+
+    const partial = await api.syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      planToken: plan.planToken,
+      confirmDeleteCount: 1,
+    })
+
+    expect(partial.status).toBe('partial')
+    expect(partial.completed.map(entry => entry.destinationPath)).toEqual(['a.png', 'c.png'])
+    expect(partial.failed).toEqual([
+      { destinationPath: 'b.png', action: 'upload', errorCode: 'REMOTE_ERROR', message: 'Overleaf returned HTTP 500.' },
+    ])
+    expect(partial.remaining).toEqual([{ destinationPath: 'stale.png', action: 'delete' }])
+    expect(project.entities.has('stale.png')).toBe(true)
+    expect(project.mutations.some(entry => entry.startsWith('delete'))).toBe(false)
+
+    project.failUploads.clear()
+    project.mutations.length = 0
+    const resumed = await api.syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      planToken: partial.planToken,
+      confirmDeleteCount: 1,
+    })
+
+    expect(resumed.status).toBe('complete')
+    // Only what was left is done; the completed uploads are not repeated.
+    expect(project.mutations).toEqual(['upload b.png', 'delete stale.png'])
+  })
+
+  test('stops at the first failure with stopOnError and lists the rest as remaining', async () => {
+    const project = new FakeProject({})
+    const root = await localFolder({ 'a.png': png(1), 'b.png': png(2), 'c.png': png(3) })
+    project.failUploads.add('a.png')
+
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+      mode: 'additive',
+      stopOnError: true,
+    })
+
+    expect(result.failed.map(entry => entry.destinationPath)).toEqual(['a.png'])
+    expect(result.remaining).toEqual([
+      { destinationPath: 'b.png', action: 'upload' },
+      { destinationPath: 'c.png', action: 'upload' },
+    ])
+    expect(project.mutations).toEqual([])
+  })
+
+  test('refuses with REMOTE_DRIFT, changing nothing, when the project or the folder changed since the plan', async () => {
+    const project = new FakeProject({ 'main.tex': 'shared\n', 'fig.png': png(1) })
+    const root = await localFolder({ 'main.tex': 'mine\n', 'fig.png': png(2) })
+    const api = new SyncApi(project.deps())
+
+    const plan = await api.planSync(PROJECT, root)
+    project.edit('main.tex', 'a collaborator typed this\n')
+    await expect(
+      api.syncDirectory(PROJECT, root, { mode: 'additive', planToken: plan.planToken })
+    ).rejects.toMatchObject({ code: 'REMOTE_DRIFT', details: { changed: 'remote' } })
+    expect(project.mutations).toEqual([])
+    expect(project.entities.get('main.tex')?.content).toBe('a collaborator typed this\n')
+
+    const fresh = await api.planSync(PROJECT, root)
+    await writeFile(join(root, 'extra.png'), png(7))
+    await expect(
+      api.syncDirectory(PROJECT, root, { mode: 'additive', planToken: fresh.planToken })
+    ).rejects.toMatchObject({ code: 'REMOTE_DRIFT', details: { changed: 'local' } })
+    expect(project.mutations).toEqual([])
+  })
+
+  test('fails one document with REVISION_CONFLICT when a collaborator edits it mid-sync', async () => {
+    const project = new FakeProject({ 'a.tex': 'a\n', 'b.tex': 'b\n', 'stale.png': png(1) })
+    const root = await localFolder({ 'a.tex': 'mine a\n', 'b.tex': 'mine b\n' })
+    project.beforeWrite = path => {
+      if (path === 'a.tex') project.edit('a.tex', 'theirs\n')
+      project.beforeWrite = undefined
+    }
+
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      confirmDeleteCount: 1,
+    })
+
+    expect(result.failed).toEqual([
+      expect.objectContaining({ destinationPath: 'a.tex', action: 'write', errorCode: 'REVISION_CONFLICT' }),
+    ])
+    expect(project.entities.get('a.tex')?.content).toBe('theirs\n')
+    expect(project.entities.get('b.tex')?.content).toBe('mine b\n')
+    expect(result.remaining).toEqual([{ destinationPath: 'stale.png', action: 'delete' }])
+
+    // The token keeps the planned state of the conflicted document, so resuming stops for review.
+    await expect(
+      new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+        mode: 'mirror',
+        planToken: result.planToken,
+        confirmDeleteCount: 1,
+      })
+    ).rejects.toMatchObject({ code: 'REMOTE_DRIFT' })
+  })
+
+  test('requires the exact remote-only count in mirror mode and checks it before any change', async () => {
+    const project = new FakeProject({ 'stale.png': png(1), 'old/a.png': png(2), 'old/b.png': png(3) })
+    const root = await localFolder({ 'new.png': png(4) })
+    const api = new SyncApi(project.deps())
+
+    await expect(api.syncDirectory(PROJECT, root, { mode: 'mirror' })).rejects.toMatchObject({
+      code: 'CONFIRMATION_MISMATCH',
+    })
+    // The folder counts once, not three times.
+    await expect(
+      api.syncDirectory(PROJECT, root, { mode: 'mirror', confirmDeleteCount: 3 })
+    ).rejects.toMatchObject({ code: 'CONFIRMATION_MISMATCH' })
+    expect(project.mutations).toEqual([])
+
+    const result = await api.syncDirectory(PROJECT, root, { mode: 'mirror', confirmDeleteCount: 2 })
+    expect(result.status).toBe('complete')
+    expect([...project.entities.keys()]).toEqual(['new.png'])
+  })
+
+  test('additive mode never deletes and leaves remote-only entries out of remaining', async () => {
+    const project = new FakeProject({ 'keep.png': png(1) })
+    const root = await localFolder({ 'new.png': png(2) })
+
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, { mode: 'additive' })
+
+    expect(result).toMatchObject({ status: 'complete', remaining: [] })
+    expect(project.entities.has('keep.png')).toBe(true)
+  })
+
+  test('creates each missing folder once and never retries one that failed', async () => {
+    const project = new FakeProject({})
+    const root = await localFolder({
+      'figures/a.png': png(1),
+      'figures/b.png': png(2),
+      'locked/c.png': png(3),
+      'locked/d.png': png(4),
+    })
+    project.failFolders.add('locked')
+
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, { mode: 'additive' })
+
+    expect(project.mutations).toEqual(['create_folder figures', 'upload figures/a.png', 'upload figures/b.png'])
+    expect(result.completed[0]).toEqual({
+      destinationPath: 'figures',
+      action: 'create_folder',
+      entityId: project.entities.get('figures')!.id,
+    })
+    expect(result.failed.map(entry => [entry.destinationPath, entry.action, entry.errorCode])).toEqual([
+      ['locked', 'create_folder', 'PERMISSION_DENIED'],
+      ['locked/c.png', 'upload', 'PERMISSION_DENIED'],
+      ['locked/d.png', 'upload', 'PERMISSION_DENIED'],
+    ])
+  })
+
+  test('syncs into a destination folder, creating it when the project has none', async () => {
+    const project = new FakeProject({ 'main.tex': 'root document' })
+    const root = await localFolder({ 'a.png': png(1) })
+
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      destinationFolderPath: 'assets/figures',
+      confirmDeleteCount: 0,
+    })
+
+    expect(project.mutations).toEqual([
+      'create_folder assets',
+      'create_folder assets/figures',
+      'upload assets/figures/a.png',
+    ])
+    expect(result.status).toBe('complete')
+    expect(project.entities.has('main.tex')).toBe(true)
+  })
+
+  test('records text as tracked changes in tracked mode and uploads binaries as usual', async () => {
+    const project = new FakeProject({ 'main.tex': 'old\n' })
+    const root = await localFolder({ 'main.tex': 'new\n', 'intro.tex': 'intro\n', 'empty.tex': '', 'fig.png': png(1) })
+    const api = new SyncApi(project.deps())
+
+    await api.syncDirectory(PROJECT, root, { mode: 'additive', writeMode: 'tracked' })
+
+    expect(project.mutations).toEqual(['create empty.tex', 'upload fig.png', 'create intro.tex', 'write main.tex'])
+    // An empty file has nothing to track; every write with content is tracked.
+    expect(project.writeModes).toEqual(['untracked', 'tracked', 'tracked'])
+
+    await expect(
+      new SyncApi(project.deps({})).syncDirectory(PROJECT, root, { mode: 'additive', writeMode: 'tracked' })
+    ).rejects.toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
+  })
+
+  test('reports conflicts as failures and therefore deletes nothing', async () => {
+    const project = new FakeProject({ figures: png(1), 'stale.png': png(2) })
+    const root = await localFolder({ 'figures/a.png': png(3), 'ok.png': png(4) })
+
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      confirmDeleteCount: 1,
+    })
+
+    expect(result.failed).toEqual([
+      expect.objectContaining({ destinationPath: 'figures', errorCode: 'INVALID_ARGUMENT' }),
+    ])
+    expect(result.completed.map(entry => entry.destinationPath)).toEqual(['ok.png'])
+    expect(result.remaining).toEqual([{ destinationPath: 'stale.png', action: 'delete' }])
+    expect(project.entities.has('stale.png')).toBe(true)
+  })
+
+  test('treats an upload the tree does not show as failed, and withholds deletes', async () => {
+    const project = new FakeProject({ 'stale.png': png(1) })
+    const root = await localFolder({ 'ghost.png': png(2) })
+    project.dropUploads.add('ghost.png')
+
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      confirmDeleteCount: 1,
+    })
+
+    expect(result.completed).toEqual([])
+    expect(result.failed).toEqual([
+      expect.objectContaining({ destinationPath: 'ghost.png', action: 'upload', errorCode: 'REMOTE_ERROR' }),
+    ])
+    expect(project.entities.has('stale.png')).toBe(true)
+  })
+
+  test('leaves a folder in place when its contents changed after the plan', async () => {
+    const project = new FakeProject({ 'old/a.png': png(1) })
+    const root = await localFolder({ 'new.png': png(2) })
+    // A collaborator drops a file into the folder while the sync is uploading.
+    project.afterUpload = () => project.put('old/theirs.png', png(3))
+
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      confirmDeleteCount: 1,
+    })
+
+    expect(result.failed).toEqual([
+      expect.objectContaining({ destinationPath: 'old', action: 'delete', errorCode: 'REMOTE_DRIFT' }),
+    ])
+    expect(project.entities.has('old/theirs.png')).toBe(true)
+  })
+
+  test('stops a resumed sync when a collaborator changed something the partial run left alone', async () => {
+    const project = new FakeProject({ 'untouched.tex': 'same\n' })
+    const root = await localFolder({ 'untouched.tex': 'same\n', 'a.png': png(1), 'b.png': png(2) })
+    const api = new SyncApi(project.deps())
+    project.failUploads.add('b.png')
+
+    const partial = await api.syncDirectory(PROJECT, root, { mode: 'additive' })
+    expect(partial.status).toBe('partial')
+    project.edit('untouched.tex', 'edited during the pause\n')
+    project.failUploads.clear()
+
+    await expect(
+      api.syncDirectory(PROJECT, root, { mode: 'additive', planToken: partial.planToken })
+    ).rejects.toMatchObject({ code: 'REMOTE_DRIFT', details: { changed: 'remote' } })
+  })
+
+  test('refuses a token issued for other arguments or another project', async () => {
+    const project = new FakeProject({})
+    const root = await localFolder({ 'a.png': png(1) })
+    const api = new SyncApi(project.deps())
+    const plan = await api.planSync(PROJECT, root)
+
+    await expect(
+      api.syncDirectory(PROJECT, root, { mode: 'additive', planToken: plan.planToken, ignore: ['*.png'] })
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(
+      api.syncDirectory('other', root, { mode: 'additive', planToken: plan.planToken })
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(
+      api.syncDirectory(PROJECT, root, { mode: 'additive', planToken: 'not-a-token' })
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    expect(project.mutations).toEqual([])
+  })
+
+  test('reports progress that only ever increases across reading and applying', async () => {
+    const project = new FakeProject({ 'a.tex': 'a\n', 'b.tex': 'b\n' })
+    const root = await localFolder({ 'a.tex': 'new a\n', 'b.tex': 'new b\n', 'c.png': png(1) })
+    const updates: Array<[number, number]> = []
+
+    await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+      mode: 'additive',
+      onProgress: async (progress, total) => {
+        updates.push([progress, total])
+      },
+    })
+
+    expect(updates).toEqual([
+      [1, 2],
+      [2, 2],
+      [3, 5],
+      [4, 5],
+      [5, 5],
+    ])
+  })
+
+  test('does not follow a symbolic link out of the folder', async () => {
+    const project = new FakeProject({})
+    const outside = await localFolder({ 'secret.png': png(1) })
+    const root = await localFolder({ 'a.png': png(2) })
+    await symlink(join(outside, 'secret.png'), join(root, 'link.png'))
+
+    await expect(
+      new SyncApi(project.deps()).syncDirectory(PROJECT, root, { mode: 'additive' })
+    ).rejects.toMatchObject({ code: 'PATH_OUTSIDE_ROOT' })
+    expect(project.mutations).toEqual([])
+    await rm(outside, { recursive: true })
+  })
+})
+
+describe('delete_entities', () => {
+  test('deletes every listed path once the count is confirmed', async () => {
+    const project = new FakeProject({ 'a.png': png(1), 'old/b.png': png(2), 'keep.tex': 'k' })
+    const api = new SyncApi(project.deps())
+
+    await expect(api.deleteEntities(PROJECT, ['a.png', 'old'], 1)).rejects.toMatchObject({
+      code: 'CONFIRMATION_MISMATCH',
+    })
+    expect(project.mutations).toEqual([])
+
+    const result = await api.deleteEntities(PROJECT, ['a.png', 'old/'], 2)
+    expect(result).toEqual({
+      status: 'complete',
+      completed: [
+        { path: 'a.png', type: 'file', entityId: 'id1' },
+        { path: 'old', type: 'folder', entityId: 'id2' },
+      ],
+      failed: [],
+      remaining: [],
+    })
+    expect([...project.entities.keys()]).toEqual(['keep.tex'])
+  })
+
+  test('refuses duplicates, nested paths, and missing paths before deleting anything', async () => {
+    const project = new FakeProject({ 'a.png': png(1), 'old/b.png': png(2) })
+    const api = new SyncApi(project.deps())
+
+    await expect(api.deleteEntities(PROJECT, ['a.png', 'a.png'], 2)).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    await expect(api.deleteEntities(PROJECT, ['old', 'old/b.png'], 2)).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    await expect(api.deleteEntities(PROJECT, ['a.png', 'missing.png'], 2)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+    await expect(api.deleteEntities(PROJECT, ['/'], 1)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(api.deleteEntities(PROJECT, ['../outside'], 1)).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    expect(project.mutations).toEqual([])
+  })
+
+  test('continues past a failed delete unless stopOnError is set', async () => {
+    const project = new FakeProject({ 'a.png': png(1), 'b.png': png(2), 'c.png': png(3) })
+    const base = project.deps()
+    const api = new SyncApi({
+      ...base,
+      manageEntity: async (projectId, action) => {
+        if (action.path === 'a.png') throw new McpError('PERMISSION_DENIED', 'Overleaf returned HTTP 403.')
+        return await base.manageEntity(projectId, action)
+      },
+    })
+
+    const stopped = await api.deleteEntities(PROJECT, ['a.png', 'b.png', 'c.png'], 3, { stopOnError: true })
+    expect(stopped).toMatchObject({
+      status: 'partial',
+      failed: [{ path: 'a.png', errorCode: 'PERMISSION_DENIED' }],
+      remaining: [{ path: 'b.png' }, { path: 'c.png' }],
+    })
+
+    const continued = await api.deleteEntities(PROJECT, ['a.png', 'b.png', 'c.png'], 3)
+    expect(continued.completed.map(entry => entry.path)).toEqual(['b.png', 'c.png'])
+    expect(continued.failed.map(entry => entry.path)).toEqual(['a.png'])
+  })
+})

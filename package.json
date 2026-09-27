@@ -1,7 +1,7 @@
 {
   "name": "overleaf-web-mcp",
-  "version": "0.3.2",
-  "description": "Unofficial MCP server for browsing, tracked writing, organizing, compiling, reviewing, and monitoring version history in Overleaf projects through an authenticated web session.",
+  "version": "0.4.0",
+  "description": "Unofficial MCP server for browsing, tracked writing, organizing, syncing local folders, compiling, reviewing, and monitoring version history in Overleaf projects through an authenticated web session.",
   "author": "Mohammad Askari",
   "license": "MIT",
   "repository": {
@@ -40,6 +40,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "https-proxy-agent": "^9.1.0",
+    "ignore": "^7.0.10",
     "proper-lockfile": "^4.1.2",
     "tough-cookie": "^6.0.2",
     "undici": "^6.28.1",
@@ -75,6 +76,7 @@
     "latex",
     "latex-editor",
     "project-management",
+    "sync",
     "compilation",
     "collaboration",
     "comments",

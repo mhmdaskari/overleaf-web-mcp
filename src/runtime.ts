@@ -13,6 +13,7 @@ import { EntitiesApi } from './overleaf/entities.js'
 import { HistoryApi } from './overleaf/history.js'
 import { ProjectsApi } from './overleaf/projects.js'
 import { SectionsApi } from './overleaf/sections-api.js'
+import { SyncApi } from './overleaf/sync.js'
 import { resolveProjectPath, type EntityType } from './overleaf/tree.js'
 import { ProjectConnectionCache } from './protocol/connection-cache.js'
 import { openProjectConnection } from './protocol/connect.js'
@@ -41,6 +42,7 @@ export class OverleafRuntime implements OverleafToolRuntime {
   readonly comments: CommentsApi
   readonly history: HistoryApi
   readonly projects: ProjectsApi
+  readonly sync: SyncApi
   readonly connections: ProjectConnectionCache<ProjectConnection>
   readonly userId?: string
   readonly #proxy: ProxyRoute | undefined
@@ -57,6 +59,7 @@ export class OverleafRuntime implements OverleafToolRuntime {
     comments: CommentsApi
     history: HistoryApi
     projects: ProjectsApi
+    sync: SyncApi
     connections: ProjectConnectionCache<ProjectConnection>
     userId?: string
     proxy?: ProxyRoute
@@ -72,6 +75,7 @@ export class OverleafRuntime implements OverleafToolRuntime {
     this.comments = options.comments
     this.history = options.history
     this.projects = options.projects
+    this.sync = options.sync
     this.connections = options.connections
     if (options.userId !== undefined) this.userId = options.userId
     this.#proxy = options.proxy
@@ -169,8 +173,25 @@ export class OverleafRuntime implements OverleafToolRuntime {
       getProjectTree: async projectId => await entities.getProjectTree(projectId),
       invalidate: async projectId => await connections.invalidate(projectId),
     })
+    // Every sync step is an existing primitive; createFile lives on the runtime itself.
+    const created: { runtime?: OverleafRuntime } = {}
+    const sync = new SyncApi({
+      getProjectTree: async projectId => {
+        await connections.invalidate(projectId)
+        return await entities.getProjectTree(projectId)
+      },
+      readFile: async (projectId, filePath) => await documents.readFile(projectId, filePath),
+      writeFile: async (projectId, filePath, revision, content, writeMode) =>
+        await documents.writeFile(projectId, filePath, revision, content, writeMode),
+      createFile: async (projectId, filePath, content, writeMode) =>
+        await created.runtime!.createFile(projectId, filePath, content, writeMode),
+      uploadFile: async (projectId, localPath, destinationFolderPath, destinationName) =>
+        await entities.uploadFile(projectId, localPath, destinationFolderPath, destinationName),
+      manageEntity: async (projectId, action) => await entities.manageEntity(projectId, action),
+      currentUserId: bootstrap.userId,
+    })
 
-    return new OverleafRuntime({
+    const runtime = new OverleafRuntime({
       config,
       cookieStore,
       http,
@@ -182,10 +203,13 @@ export class OverleafRuntime implements OverleafToolRuntime {
       comments,
       history,
       projects,
+      sync,
       connections,
       ...(bootstrap.userId === undefined ? {} : { userId: bootstrap.userId }),
       ...(proxy === undefined ? {} : { proxy }),
     })
+    created.runtime = runtime
+    return runtime
   }
 
   async authStatus(): Promise<{

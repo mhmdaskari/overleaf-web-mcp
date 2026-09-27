@@ -45,6 +45,11 @@ The capitalised `/Project/` prefix is Overleaf's own; both spellings are live ro
 | `POST /project/:id/upload?folder_id=` | multipart `qqfile` and `name` | `success`, `entity_id`, `entity_type`, `hash`; HTTP 422 with a short `error` code on rejection | `upload_file` |
 | `GET /Project/:id/doc/:entityId/download`, `GET /Project/:id/file/:entityId` | nothing | raw bytes | `download_file` |
 
+`plan_sync`, `sync_directory`, and `delete_entities` add no routes of their own. They are built
+from the rows above and from the document channel: the tree comes from a fresh `joinProject`,
+documents are read and written over OT exactly as for `read_file` and `write_file`, and files,
+folders, and deletes use the same routes as `upload_file` and `manage_entity`.
+
 `:type` is `doc`, `file`, or `folder`. Rejection codes the server translates: `duplicate_file_name`,
 `invalid_filename`, `project_has_too_many_files`, `folder_not_found` (uploads);
 `invalid_zip_file`, `empty_zip_file`, `zip_contents_too_large` (zip import). Only a value matching

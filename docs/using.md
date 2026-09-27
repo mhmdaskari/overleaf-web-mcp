@@ -32,6 +32,14 @@ and check the assistant's behaviour.
 - "Which figures in `./figures` differ from the ones in the project? Upload only those."
 - "Download `references.bib` to my desktop."
 - "Delete `old_draft.tex`." The assistant will confirm the path with you first.
+- "Delete the twenty `old-*.png` figures." One call, with the count confirmed.
+
+**Syncing a folder**
+
+- "Compare `~/papers/thesis` with the project. What would change?"
+- "Upload everything that changed in `~/papers/thesis`, as tracked changes."
+- "Make the project's `figures` folder match `./figures`, deleting what I removed locally." The
+  assistant will show you what would be deleted and confirm the count first.
 
 **Compiling**
 
@@ -107,21 +115,43 @@ tool-argument budget. See [choosing between write_file and upload_file](tools.md
 reads one body; `write_section` replaces one body with the same revision check as `write_file`.
 Section parsing never follows `\input` or `\include`.
 
-### Uploading only the binaries that changed
+### Syncing a local folder
 
-`get_project_tree` reports a git blob hash for every binary file, so a local folder can be
-compared with the project without downloading anything:
+Two calls replace a hand-rolled comparison and one call per file.
 
-```bash
-# For each local figure, print git's own hash next to the path.
-for file in figures/*.png; do
-  printf '%s %s\n' "$(git hash-object "$file")" "$file"
-done
+1. `plan_sync` with `localFolderPath` (and `destinationFolderPath` when the folder corresponds to
+   a project subfolder, for example `figures`) compares both sides and changes nothing. Binaries
+   compare by the git blob hash already in the tree; text documents are read and compared by
+   content. The plan lists `toUpload`, how many files are `identical`, what exists only in the
+   project (`remoteOnly`), `conflicts`, and what the ignore rules skipped.
+2. The assistant shows you the plan, in particular `remoteOnly`, which is what mirror mode deletes.
+3. `sync_directory` with the plan's `planToken` applies it. `mode: "additive"` only uploads and
+   writes; `mode: "mirror"` also deletes, and needs `confirmDeleteCount` equal to the number of
+   `remoteOnly` entries you agreed to.
+
+```json
+{
+  "projectId": "0123456789abcdef01234567",
+  "localFolderPath": "/Users/me/papers/thesis",
+  "mode": "mirror",
+  "planToken": "opaque-token-from-plan-sync",
+  "confirmDeleteCount": 20
+}
 ```
 
-Match each hash against the `hash` of the entity at the same path in the tree, then call
-`upload_file` only for paths that differ or are missing. Text documents have no `hash`; compare
-those with `read_file`.
+If anything changed on either side since the plan, the result is `REMOTE_DRIFT` and nothing
+happens; the assistant plans again. Changed documents are written with the same revision check
+as `write_file`, so a collaborator's edit made during the sync fails that one file with
+`REVISION_CONFLICT` instead of being overwritten. If some files fail, the result is
+`status: "partial"` with `completed`, `failed`, and `remaining`; nothing was deleted, and calling
+`sync_directory` again with the returned `planToken` finishes the job without repeating what
+already succeeded.
+
+To remove several entities without a sync, `delete_entities` takes a list of paths and
+`confirmCount` equal to its length.
+
+The hash in `get_project_tree` is still there for a quick manual check of one binary: it equals
+`git hash-object <file>`. Text documents have no hash; compare those with `read_file`.
 
 ### Compiling
 

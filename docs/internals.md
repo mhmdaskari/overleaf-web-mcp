@@ -39,6 +39,15 @@ No Overleaf Git integration is involved.
   request-time window identify the refreshed message.
 - ShareJS comment status uses the dedicated REST action. History-OT comment status is part of the
   document operation and snapshot.
+- Folder sync is a composition, not a second implementation: `sync_directory` calls the same
+  document write, upload, folder creation, and delete that the single-file tools use, one at a
+  time through the project queue, and each upload or delete re-opens the project so the next
+  step sees a fresh tree. A plan token is a small base64url JSON object holding three truncated
+  SHA-256 digests: of the arguments that decide the scope, of every project entity in scope
+  (path, type, id, and binary hash or document version and content hash), and of every local
+  file's blob hash and folder. Nothing is stored on the server between calls, so a token survives
+  a restart; after a sync, the digest covers what it changed as re-read from the tree and
+  everything else as planned.
 - History monitoring reads one 25-group update window, strips email fields, and keeps no cursor or
   background state on the server.
 
