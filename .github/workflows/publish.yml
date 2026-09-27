@@ -1,26 +1,44 @@
 name: Publish to npm
 
+# Two ways to release, both publishing to npm with trusted publishing from this file:
+# - Publish a GitHub Release with tag vX.Y.Z: its tag is checked, tested, and published.
+# - Run this workflow by hand on main with the version: main is checked, tested, and published,
+#   then the vX.Y.Z tag and the GitHub Release are created, with that version's CHANGELOG.md
+#   section as the notes. A release made this way does not start a second run.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release from main, for example 0.4.0; must equal package.json"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish stable release
-    if: ${{ github.event.release.prerelease == false }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+    outputs:
+      tag: ${{ steps.verify.outputs.tag }}
+      commit: ${{ steps.verify.outputs.commit }}
 
     steps:
-      - name: Check out release tag
+      - name: Check out the release
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.sha }}
           persist-credentials: false
 
       - name: Set up Node.js
@@ -30,16 +48,43 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
-      - name: Verify release tag matches package version
+      - name: Verify the tag, package version, and changelog
+        id: verify
         env:
+          EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           package_version="$(node --print "require('./package.json').version")"
           expected_tag="v${package_version}"
-          if [ "$RELEASE_TAG" != "$expected_tag" ]; then
-            echo "::error::Release tag '$RELEASE_TAG' must equal '$expected_tag'."
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "::error::Run this workflow on main, not '$GITHUB_REF'."
+              exit 1
+            fi
+            tag="v${INPUT_VERSION#v}"
+          else
+            tag="$RELEASE_TAG"
+          fi
+          if [ "$tag" != "$expected_tag" ]; then
+            echo "::error::Release tag '$tag' must equal '$expected_tag'."
             exit 1
           fi
+          if ! grep -q -F "## [${package_version}]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for ${package_version}."
+            exit 1
+          fi
+          commit="$(git rev-parse HEAD)"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            # The last line is the peeled commit when the tag is annotated.
+            existing="$(git ls-remote --tags origin "refs/tags/${tag}" "refs/tags/${tag}^{}" | awk 'END { print $1 }')"
+            if [ -n "$existing" ] && [ "$existing" != "$commit" ]; then
+              echo "::error::Tag '$tag' already exists at ${existing}, not at ${commit}."
+              exit 1
+            fi
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "commit=${commit}" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: npm ci
@@ -54,4 +99,60 @@ jobs:
         run: npm test
 
       - name: Publish package
-        run: npm publish --access public --tag latest
+        run: |
+          package_name="$(node --print "require('./package.json').name")"
+          package_version="$(node --print "require('./package.json').version")"
+          # A re-run after the package went out but the release step failed must not fail here.
+          if curl -fsS -o /dev/null "https://registry.npmjs.org/${package_name}/${package_version}"; then
+            echo "::notice::${package_name}@${package_version} is already on npm; nothing to publish."
+          else
+            npm publish --access public --tag latest
+          fi
+
+  release:
+    name: Create the GitHub Release
+    needs: publish
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out the published commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.publish.outputs.commit }}
+          persist-credentials: false
+
+      - name: Create the tag and the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.publish.outputs.tag }}
+          COMMIT: ${{ needs.publish.outputs.commit }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::notice::Release $TAG already exists; nothing to create."
+            exit 0
+          fi
+          # The notes are the version's CHANGELOG.md section without its heading, as for every
+          # earlier release.
+          awk -v version="${TAG#v}" '
+            index($0, "## [" version "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { lines[++count] = $0 }
+            END {
+              if (!found) exit 1
+              first = 1
+              while (first <= count && lines[first] == "") first++
+              last = count
+              while (last >= first && lines[last] == "") last--
+              if (first > last) exit 1
+              for (line = first; line <= last; line++) print lines[line]
+            }
+          ' CHANGELOG.md > release-notes.md
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$COMMIT" \
+            --title "$TAG" \
+            --notes-file release-notes.md \
+            --latest
