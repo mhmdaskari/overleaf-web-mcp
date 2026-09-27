@@ -13,6 +13,8 @@ export type McpErrorCode =
   | 'INVALID_ARGUMENT'
   | 'CONFIRMATION_MISMATCH'
   | 'RATE_LIMITED'
+  | 'REMOTE_DRIFT'
+  | 'PATH_OUTSIDE_ROOT'
   | 'REMOTE_ERROR'
 
 export const AUTH_LOGIN_INSTRUCTION =

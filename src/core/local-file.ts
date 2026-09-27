@@ -7,19 +7,30 @@ export interface TextContentSource {
   localPath?: string | undefined
 }
 
-function decodeUtf8(bytes: Uint8Array, localPath: string): string {
+/**
+ * Decodes bytes as UTF-8 text the way a document write sees them, without a leading byte order
+ * mark, or returns `undefined` when they are not valid UTF-8.
+ */
+export function decodeUtf8Text(bytes: Uint8Array): string | undefined {
   let decoded: string
   try {
     decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-  } catch (error) {
-    throw new McpError(
-      'INVALID_ARGUMENT',
-      `${localPath} is not valid UTF-8 text. Use upload_file for binary content.`,
-      { cause: error }
-    )
+  } catch {
+    return undefined
   }
   // A leading BOM would otherwise be written into the document as a literal character.
   return decoded.startsWith('﻿') ? decoded.slice(1) : decoded
+}
+
+function decodeUtf8(bytes: Uint8Array, localPath: string): string {
+  const decoded = decodeUtf8Text(bytes)
+  if (decoded === undefined) {
+    throw new McpError(
+      'INVALID_ARGUMENT',
+      `${localPath} is not valid UTF-8 text. Use upload_file for binary content.`
+    )
+  }
+  return decoded
 }
 
 /**
