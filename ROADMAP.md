@@ -45,9 +45,9 @@ Each stage assumes the previous one shipped. Tool names follow the existing snak
 | v0.6.0 | Multi-file documents | 1 | Section tools stop at `\input` boundaries |
 | v1.0.0 | Hardening | 0 | Failure modes that are not yet legible |
 
-**v0.1.3 shipped on 1 September 2026**, followed the same day by **v0.1.4**, a documentation release: a human-first README, the documentation site at <https://mhmdaskari.github.io/overleaf-web-mcp/>, and usage instructions sent to MCP clients at connect time. **v0.2.0 shipped on 10 September 2026** with the five project lifecycle tools, filtered `list_projects`, and the `RATE_LIMITED` and `CONFIRMATION_MISMATCH` error codes, followed the same day by **v0.2.1**, a documentation patch. **v0.3.0 shipped on 14 September 2026** with the `keepalive` command, `sessionExpiresAt` on `auth_status`, and a cookie-jar fix that persists the session deadline. See the [changelog](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/CHANGELOG.md) for what landed.
+**v0.1.3 shipped on 1 September 2026**, followed the same day by **v0.1.4**, a documentation release: a human-first README, the documentation site at <https://mhmdaskari.github.io/overleaf-web-mcp/>, and usage instructions sent to MCP clients at connect time. **v0.2.0 shipped on 10 September 2026** with the five project lifecycle tools, filtered `list_projects`, and the `RATE_LIMITED` and `CONFIRMATION_MISMATCH` error codes, followed the same day by **v0.2.1**, a documentation patch. **v0.3.0 shipped on 14 September 2026** with the `keepalive` command, `sessionExpiresAt` on `auth_status`, and a cookie-jar fix that persists the session deadline, followed on 22 September by **v0.3.1** (proxy support) and **v0.3.2** (documentation). **v0.4.0 shipped on 27 September 2026** with `plan_sync`, `sync_directory`, and `delete_entities`, ignore rules, progress notifications, and the `REMOTE_DRIFT` and `PATH_OUTSIDE_ROOT` error codes; `batch_upload` and `download_project_zip` follow in a point release. See the [changelog](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/CHANGELOG.md) for what landed.
 
-After v1.0.0 the server would register 32 tools (24 today). Every tool description costs the MCP
+After v1.0.0 the server would register 32 tools (27 today). Every tool description costs the MCP
 client context on every turn, so the lifecycle stage below deliberately reuses the
 `manage_entity` action-enum pattern instead of adding one tool per verb.
 
@@ -69,11 +69,12 @@ The code moves on between releases. Confirm the following before touching anythi
 what you find:
 
 - [ ] `npm view overleaf-web-mcp version` and `git tag` agree with `package.json` and
-      `SERVER_VERSION` in `src/version.ts`. Current release: `0.3.0`.
-- [ ] `TOOL_NAMES` in `src/mcp/tools.ts` lists the 24 registered tools: `auth_status`,
+      `SERVER_VERSION` in `src/version.ts`. Current release: `0.4.0`.
+- [ ] `TOOL_NAMES` in `src/mcp/tools.ts` lists the 27 registered tools: `auth_status`,
       `list_projects`, `create_project`, `clone_project`, `import_project_zip`, `manage_project`,
       `update_project_settings`, `get_project_tree`, `read_file`, `write_file`, `create_file`,
-      `manage_entity`, `upload_file`, `download_file`, `get_sections`, `get_section_content`,
+      `manage_entity`, `upload_file`, `download_file`, `plan_sync`, `sync_directory`,
+      `delete_entities`, `get_sections`, `get_section_content`,
       `write_section`, `compile_project`, `stop_compile`, `list_comments`, `reply_to_comment`,
       `add_comment`, `set_comment_status`, `monitor_project_history`. The README badge and
       `docs/tools.md` must agree (`test/mcp/tools.test.ts` enforces it).
@@ -269,7 +270,7 @@ This stage was split out of the bulk-sync work, now v0.4.0, so the fix could shi
 
 ---
 
-## v0.4.0 — Bulk and sync operations
+## v0.4.0 — Bulk and sync operations (first release shipped)
 
 **Motivation:** almost everything after authentication in the session was one-file-at-a-time: 3 text overwrites, 1 binary upload, and **20 individual `manage_entity` delete calls**, each needing its own `confirmPath`. Before that, a hand-rolled diff over 9 local figures established that none of them needed re-uploading. That comparison is generically useful and should not be reinvented per caller.
 
@@ -282,45 +283,71 @@ This stage was split out of the bulk-sync work, now v0.4.0, so the fix could shi
 - **Partial failure is the normal case.** Return per-file outcomes `{ path, action: "uploaded" | "written" | "created" | "deleted" | "skipped" | "failed", entityId?, error? }` and continue past individual failures unless `stopOnError` is set. The existing `PARTIAL_CLEANUP` code shows the pattern.
 - **Bound the response.** `identical` on a real project can be hundreds of paths. Return counts plus the first N, with `verbose` to get everything.
 
+**Design decisions made while building the first release, and why the draft above changed:**
+
+- **The plan token is stateless and covers both sides.** It is a small base64url object with three truncated SHA-256 digests: of the arguments that decide the scope (project, resolved folder, destination, ignore list), of every project entity in scope (path, type, id, and binary hash or document version and content hash), and of every included local file's blob hash and folder. Nothing is stored between calls, so a token survives a server restart, and it stays short enough to pass through a model's context. It covers *identical* entries too: a collaborator's edit to a file the plan called identical would otherwise be overwritten by the sync without anyone having seen it. A local change that alters the plan is also `REMOTE_DRIFT`, with `details.changed: "local"`, rather than a separate code: in both cases the plan the user approved is stale.
+- **The token a sync returns describes what that sync left**: what it changed as the tree shows it afterwards, everything else as planned. That makes a partial run resumable while a change someone made during the pause still stops it. The first draft's alternative, re-planning from scratch, would silently absorb that change into the new token.
+- **No `onConflict`.** With a token, any moved revision is already `REMOTE_DRIFT`; during the sync, a moved revision fails that file with `REVISION_CONFLICT`. An `overwrite` option could only mean discarding a collaborator's edit, which the acceptance criteria rule out.
+- **`destinationFolderPath`** (default `""`, the project root) was added, so `./figures` can be synced against the project's `figures/` without mirroring the whole project.
+- **A `conflicts` list.** A local file where the project has a folder, a local folder where it has a file, and non-UTF-8 text where it has a document cannot be applied without a person deciding. `plan_sync` lists them; `sync_directory` reports them as failures, so they also block deletes.
+- **Ignore rules protect the project side.** A remote entity an ignore rule matches is never compared or deleted, the way rsync treats excluded files, so mirror mode cannot remove the `.latexmkrc` it was told to ignore. A remote-only folder that holds such an entity is not collapsed; its other contents are listed individually. Patterns are applied in the order defaults, `.olignore`, `ignore`, so `!pattern` re-includes, using the `ignore` package, and match case-insensitively.
+- **Tracked mode covers new text files.** An upload is never tracked, so with `writeMode: "tracked"` new files Overleaf treats as text are created the way `create_file` does, as an empty document followed by a tracked write; binaries are uploaded as usual.
+- **Uploads are confirmed before deletes.** After the upload phase the tree is read back; an upload that is missing or whose hash differs from the local file counts as a failure, which withholds every delete. Each delete re-checks the entity's id, and for a folder its contents, against the plan first.
+- **Empty folders.** A remote folder with no local counterpart is deleted whole, which is how required semantic 4's "remove folders left empty" is met. A remote folder whose local counterpart exists is kept even when the sync empties it, because mirror mode reproduces the local side, and only folders needed to hold uploaded files are created, so an empty local folder is not reproduced.
+- **`mode` is required.** There is no default that could delete.
+- **Walk limits.** More than 2,000 included files (Overleaf's own per-project limit) or 20,000 scanned entries fail fast with `INVALID_ARGUMENT`, so a mistaken `localFolderPath` does not hash a home folder.
+- **Only `identical` and `ignored` are bounded** (25 unless `verbose`). `toUpload`, `remoteOnly`, and `conflicts` are what the user is approving, so they are always complete.
+
 ### Tools
 
 ```ts
-plan_sync({ projectId: string, localFolderPath: string, ignore?: string[] })
+// Shipped in 0.4.0.
+plan_sync({ projectId: string, localFolderPath: string, destinationFolderPath?: string,
+            ignore?: string[], verbose?: boolean })
   → {
-      planToken: string,       // opaque; snapshots remote hashes and per-doc revisions
-      toUpload:  [{ localPath, destinationPath, reason: "new" | "changed", comparedBy: "hash" | "content" }],
-      identical: { count, paths? },
-      remoteOnly:[{ destinationPath, entityId, type: "doc" | "file" | "folder" }],  // collapsed to highest ancestor
-      ignored:   [{ localPath, matchedPattern }]
+      planToken: string,       // opaque; digests of the scope, the project side, and the local side
+      localFolderPath, destinationFolderPath,
+      toUpload:  [{ localPath, destinationPath, reason: "new" | "changed",
+                    comparedBy?: "hash" | "content", remoteType?: "doc" | "file" }],
+      identical: { count, paths },                  // first 25 unless verbose
+      remoteOnly:[{ destinationPath, entityId, type: "doc" | "file" | "folder", contains? }],  // collapsed
+      conflicts: [{ localPath, destinationPath, reason, message }],
+      ignored:   { count, entries: [{ localPath, matchedPattern? , reason? }] }
     }
   // Side-effect free. annotations: readOnlyHint true
 
 sync_directory({
   projectId: string,
   localFolderPath: string,
-  mode: "additive" | "mirror",
-  planToken?: string,          // if given, refuse with REMOTE_DRIFT when the live tree no longer matches the snapshot
-  confirmDeleteCount?: number, // REQUIRED in mirror mode; must equal the collapsed remoteOnly count, else CONFIRMATION_MISMATCH
+  mode: "additive" | "mirror",  // required
+  destinationFolderPath?: string,
+  planToken?: string,           // if given, REMOTE_DRIFT when either side no longer matches it
+  confirmDeleteCount?: number,  // REQUIRED in mirror mode; must equal remoteOnly.length, else CONFIRMATION_MISMATCH
   ignore?: string[],
   writeMode?: "untracked" | "tracked",
-  onConflict?: "skip" | "overwrite",  // for docs whose revision moved since planToken; default "skip"
   stopOnError?: boolean
 })
   → {
       status: "complete" | "partial",
-      completed: [{ destinationPath, action, entityId }],
+      mode,
+      completed: [{ destinationPath, action, entityId? }],
       failed:    [{ destinationPath, action, errorCode, message }],
       remaining: [{ destinationPath, action }],
-      planToken: string        // re-run with this to resume
+      identicalCount: number,
+      planToken?: string        // re-run with this to resume; absent if the result could not be re-read
     }
-  // annotations: destructiveHint true (always: uploads overwrite), idempotentHint true
+  // action: "create_folder" | "upload" | "write" | "create" | "delete"
+  // annotations: destructiveHint true, idempotentHint true
 
+delete_entities({ projectId: string, paths: string[], confirmCount: number, stopOnError?: boolean })
+  → { status, completed: [{ path, type, entityId }], failed: [{ path, errorCode, message }], remaining: [{ path }] }
+  // Composes manage_entity's delete; collapses the session's 20 calls into one.
+  // annotations: destructiveHint true
+
+// Planned for the point release.
 batch_upload({ projectId: string, files: [{ localPath: string, destinationPath: string }],
                onConflict?: "skip" | "overwrite" })   // default "overwrite", matching upload_file
   → same { status, completed, failed, remaining } shape as sync_directory
-
-delete_entities({ projectId: string, paths: string[], confirmCount: number })
-  // Composes manage_entity's delete; would have collapsed the session's 20 calls into one.
 
 download_project_zip({ projectId: string, localPath: string, overwrite?: boolean })
   // GET /Project/:id/download/zip. The reverse direction of sync; recommend it as the backup
@@ -344,12 +371,13 @@ The first release of this stage ships `plan_sync`, `sync_directory`, and `delete
 
 ### Tasks
 
-- [ ] Streaming `gitBlobHash` helper plus unit tests against `git hash-object` fixtures (text, binary, empty file).
-- [ ] Ignore-pattern matcher (reuse a gitignore-compatible library; support `.olignore`).
-- [ ] `plan_sync`, then `sync_directory`, `batch_upload`, `delete_entities`, and `download_project_zip` composed from existing primitives.
-- [ ] Fault-injection tests: fail upload N of M; assert no deletes ran and `remaining` is correct; assert resume completes.
-- [ ] Drift test: mutate a remote doc between `plan_sync` and `sync_directory`; assert `REMOTE_DRIFT`.
-- [ ] Progress notifications (`notifications/progress`) per file when the client supplies a progress token.
+- [x] Streaming `gitBlobHash` helper plus unit tests against `git hash-object` fixtures (text, binary, empty file).
+- [x] Ignore-pattern matcher (reuse a gitignore-compatible library; support `.olignore`).
+- [x] `plan_sync`, `sync_directory`, and `delete_entities` composed from existing primitives.
+- [ ] `batch_upload` and `download_project_zip`, in the point release.
+- [x] Fault-injection tests: fail upload N of M; assert no deletes ran and `remaining` is correct; assert resume completes.
+- [x] Drift test: mutate a remote doc between `plan_sync` and `sync_directory`; assert `REMOTE_DRIFT`.
+- [x] Progress notifications (`notifications/progress`) per file when the client supplies a progress token.
 
 ### Acceptance
 
@@ -491,8 +519,8 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 | `REMOTE_ERROR` | 0.1.0 | Anything else |
 | `CONFIRMATION_MISMATCH` | v0.2.0 | `confirmPath` / `confirmName` / `confirmDeleteCount` wrong |
 | `RATE_LIMITED` | v0.2.0 | HTTP 429; `details.retryAfterMs` when Overleaf said how long |
-| `REMOTE_DRIFT` | v0.4.0 | Live tree differs from the `planToken` snapshot |
-| `PATH_OUTSIDE_ROOT` | v0.4.0 | Local path escapes `localFolderPath` |
+| `REMOTE_DRIFT` | v0.4.0 | The project or the local folder differs from the `planToken` snapshot, or an entity changed just before its delete |
+| `PATH_OUTSIDE_ROOT` | v0.4.0 | A symbolic link in `localFolderPath` resolves outside it |
 | `COMPILE_RATE_LIMITED`, `COMPILE_TIMEOUT` | v0.5.0 | Compile throttled by Overleaf; compile timed out |
 | `NO_BUILD`, `BUILD_NOT_FOUND` | v0.5.0 | No compile yet / CLSI output evicted |
 | `INCLUDE_CYCLE`, `INCLUDE_DEPTH_EXCEEDED` | v0.6.0 | `\input` graph problems |
@@ -506,7 +534,7 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 - [ ] **do not add cursor pagination to `list_projects`.** Overleaf has no server-side pagination; `/api/project` returns every project and the dashboard paginates in the browser. A cursor would be theatre. v0.2.0's `query`, `limit`, `sort`, and `totalMatched` are the right fix; keep them. (The first draft asked for `cursor` / `nextCursor`; this is the reasoned answer.)
 - [ ] **MCP elicitation** for `manage_project` trash/delete and mirror `sync_directory` when the client advertises the capability; confirm-by-value remains mandatory as the fallback.
 - [ ] **Resources:** `overleaf://project/{id}/tree`, `overleaf://project/{id}/file/{path}`, plus the v0.5.0 output resources.
-- [ ] **Progress notifications** for `compile_project`, `sync_directory`, `get_full_document`.
+- [ ] **Progress notifications** for `compile_project` and `get_full_document`; the sync tools send them since v0.4.0.
 - [ ] **Back-fill `outputSchema`** on every tool that returns structured data.
 - [ ] **automated smoke test against Community Edition, not `www.overleaf.com`.** A CI job that logs into the public service conflicts with the README's own Terms-of-Service caution and needs a long-lived session cookie stored as a CI secret. Instead run `create_project → update_project_settings → sync_directory → compile_project → download_compile_output → manage_project(trash)` against Overleaf Community Edition in a Docker service container on a pinned image tag. That also pins the private-API version the suite is tested against. Comments and tracked changes are Server Pro features, so the existing env-gated live tests for those stay manual and opt-in.
 - [ ] **README:** security model (cookie-jar permissions, stdout reserved for protocol, no content logging), ToS posture, and a "what breaks when Overleaf changes" section pointing at `API_SHAPE_CHANGED`.
@@ -537,12 +565,12 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 
 ## Competitive position this roadmap targets
 
-| Capability | v0.3.0 (today) | After roadmap | `@netique/overleaf-mcp` | Git-bridge MCPs |
+| Capability | v0.4.0 (today) | After roadmap | `@netique/overleaf-mcp` | Git-bridge MCPs |
 | --- | :---: | :---: | :---: | :---: |
 | Works on a free plan | ✅ | ✅ | ✅ | ❌ (paid) |
 | Create / clone / import / rename / trash project, set root | ✅ | ✅ | ❌ | partial |
 | Filtered `list_projects` | ✅ | ✅ | ✅ | ❌ |
-| Dry-run diff + safe mirror sync + ignore rules | ❌ | ✅ | ❌ | via git |
+| Dry-run diff + safe mirror sync + ignore rules | ✅ | ✅ | ❌ | via git |
 | Typed compile summary + PDF/log download | stats only | ✅ | summary + log, no PDF | varies |
 | `\input`/`\include` flattening with source map | ❌ | ✅ | ❌ | ❌ |
 | Tracked changes as suggestions | ✅ | ✅ | ✅ | ❌ (bypassed) |
