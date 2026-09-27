@@ -58,6 +58,11 @@ it, 20 of them single deletes. `plan_sync` and `sync_directory` now do it in two
   mirror sync called without `confirmDeleteCount`.
 - The initialize instructions gain a paragraph on folder sync, and the rest is tightened so the
   whole stays under the 450-word bound the test enforces.
+- **Releases can be published from GitHub Actions.** Running the `Publish to npm` workflow on
+  `main` with a version checks it against `package.json` and this changelog, runs the checks,
+  publishes to npm with trusted publishing, and then creates the `vX.Y.Z` tag and the GitHub
+  Release with the changelog section as its notes. Publishing a GitHub Release by hand works as
+  before.
 
 ### Documentation
 
