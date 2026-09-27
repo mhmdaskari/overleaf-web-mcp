@@ -68,9 +68,19 @@ work on GitHub, npm, and the site alike.
    example with `npm version X.Y.Z --no-git-tag-version`, and in `SERVER_VERSION` in
    `src/version.ts`.
 2. Merge to `main` with CI green.
-3. Create a GitHub Release with tag `vX.Y.Z`. The publish workflow checks that the tag equals the
-   package version, re-runs check, lint, test, and build, and publishes to npm with trusted
-   publishing. No npm token is stored in the repository.
+3. Publish, in either of two ways. Both run the `Publish to npm` workflow, which checks that the
+   tag equals the package version and that `CHANGELOG.md` has a section for it, re-runs check,
+   lint, test, and build, and publishes to npm with trusted publishing. No npm token is stored in
+   the repository.
+    - **From the Actions tab:** run `Publish to npm` on `main` with the version, for example
+      `0.4.0` (or `gh workflow run publish.yml --ref main -f version=0.4.0`). After publishing, it
+      creates the `vX.Y.Z` tag on the published commit and the GitHub Release, titled `vX.Y.Z`,
+      with that version's `CHANGELOG.md` section as its notes.
+    - **From a GitHub Release:** create a Release with tag `vX.Y.Z` yourself; publishing it starts
+      the workflow on that tag.
+
+    Re-running a publish that already reached npm skips the upload, so a run that failed after
+    publishing can be re-run to create the missing release.
 
 ## For coding agents
 
