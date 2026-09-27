@@ -35,6 +35,16 @@ which is reversible, and permanent deletion only from the trash. `download_file`
 replace an existing local file unless `overwrite` is `true`. `upload_file` replaces whatever exists
 at the destination path, so it is annotated as destructive and its description says so.
 
+**A folder sync does only what you reviewed.** `plan_sync` changes nothing and returns a
+`planToken` that covers both sides: every entity in scope in the project, with its binary hash
+or document revision, and every file in the local folder. `sync_directory` with that token
+compares both sides again first and stops with `REMOTE_DRIFT`, changing nothing, if either one
+moved. Changed documents are replaced through the same revision-checked write as `write_file`,
+so an edit that lands mid-sync fails that file with `REVISION_CONFLICT` instead of being
+overwritten. Uploads and writes always run before deletes, deletes happen only in mirror mode
+with `confirmDeleteCount` equal to the planned count, and no delete runs once any upload or write
+has failed. A path an ignore rule matches is protected on both sides and is never deleted.
+
 **Your session stays yours.** Cookies are saved in a file only your user can read, are never
 returned by any tool, and are never logged. The server logs no document content, diffs,
 filenames, quoted context, or review-message bodies, and reserves stdout for protocol frames.
@@ -67,6 +77,18 @@ repeats this notice.
   change, and is annotated `destructiveHint: true`.
 - `download_file` fails with `INVALID_ARGUMENT` when the local path exists and `overwrite` is not
   `true`.
+- `plan_sync` is read-only. `sync_directory` with a `planToken` fails with `REMOTE_DRIFT` before
+  any change when the project or the local folder differs from the plan. In mirror mode it
+  requires `confirmDeleteCount` equal to the number of `remoteOnly` entries, else
+  `CONFIRMATION_MISMATCH`; it runs deletes only after every upload and write succeeded and was
+  confirmed in the tree, and re-checks each entity's identity just before deleting it.
+- `sync_directory` replaces changed documents only through revision-checked writes, never by
+  upload, and with `writeMode: "tracked"` records every text change it writes as tracked
+  changes. It never retries a step.
+- `delete_entities` requires `confirmCount` equal to the number of paths, else
+  `CONFIRMATION_MISMATCH`, and resolves every path before deleting any.
+- Folder sync resolves `localFolderPath` on the server's disk and refuses a symbolic link that
+  leads outside it with `PATH_OUTSIDE_ROOT`.
 - Compiles use the account's compile allowance. `compile_project.timeoutMs` bounds only how long
   the call waits.
 
@@ -89,8 +111,10 @@ Every failure is returned as JSON with `code`, `message`, `retryable`, and optio
 | `COMPILE_FAILED` | Overleaf finished the compile with a status other than success. `details.result.status` carries the status. | Inspect the status; fix LaTeX errors or wait if the account was rate-limited. |
 | `PARTIAL_CLEANUP` | A multi-step operation applied some steps and could not undo them all. `details` says what remains. | Inspect the project and finish the cleanup by hand. |
 | `INVALID_ARGUMENT` | The call was malformed, a path was invalid, an entity had the wrong type, or Overleaf rejected a name. `details.overleafError` may carry Overleaf's short reason code. | Fix the arguments. |
-| `CONFIRMATION_MISMATCH` | A confirm-by-value parameter (`confirmPath`, `confirmName`) did not equal the value it must repeat exactly. Nothing was changed. | Re-read the path or project name and pass it back verbatim, after confirming with the user. |
+| `CONFIRMATION_MISMATCH` | A confirm-by-value parameter (`confirmPath`, `confirmName`, `confirmCount`, `confirmDeleteCount`) did not equal the value it must repeat exactly, or mirror mode was called without `confirmDeleteCount`. Nothing was changed. | Re-read the path, name, or plan and pass the value back verbatim, after confirming with the user. |
 | `RATE_LIMITED` | Overleaf answered HTTP 429, most often on project creation or zip import. `details.retryAfterMs` carries Overleaf's hint when it sent one. Nothing was applied. | Wait at least that long, then try once more. |
+| `REMOTE_DRIFT` | The project, or the local folder, changed since the `planToken` was issued (`details.changed` is `remote`, `local`, or `both`), or an entity planned for deletion changed just before it would have been deleted. Nothing was changed by that step. | Run `plan_sync` again and review the new plan with the user. |
+| `PATH_OUTSIDE_ROOT` | A symbolic link in `localFolderPath` resolves outside it. Nothing was compared or changed. | Remove the link, or exclude it with an `ignore` pattern. |
 | `REMOTE_ERROR` | Anything else Overleaf returned or a network failure. `details.status` carries the HTTP status when there is one. | Retry once if `retryable` is `true`; otherwise report it. |
 
 ## Limits
@@ -110,8 +134,13 @@ client's tool-argument budget. `localPath` exists for that reason.
 - **Terms of Service.** This is an unofficial client of private APIs. Overleaf may change them
   without notice or object to automation. Use a disposable project first, keep volume low, and
   read Overleaf's current terms.
-- **Blind uploads.** `upload_file` and, through it, any bulk replacement of text documents
-  overwrite a collaborator's concurrent edits. Use `write_file` for text when others may be
-  editing.
+- **Blind uploads.** `upload_file` overwrites a collaborator's concurrent edits; use `write_file`
+  for text when others may be editing. `sync_directory` writes documents with revision checks,
+  but replaces binaries by upload: its only protection for those is the `planToken` check before
+  it starts. A sync run without a `planToken` has no such check.
+- **Deletes between the last check and the request.** `sync_directory` compares a document's
+  content when the sync starts and checks each entity's identity just before deleting it, but
+  does not re-read a document's text right before deleting it. Overleaf keeps deleted documents
+  in the project history, where they can be restored.
 - **A compromised machine.** The cookie jar is a credential. Anyone who can read your user's files
   can act as you on Overleaf until the session expires.

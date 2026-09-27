@@ -17,7 +17,12 @@ before publishing.
 Unit and deterministic integration tests cover revision identity, Unicode positions, section
 parsing, tracked and untracked OT operations, history normalization, update limits, queue and
 cache behaviour, Socket.IO frames, timeout recovery, comment attachment, file-tree events, MCP
-registration, and the initialize instructions.
+registration, progress notifications, and the initialize instructions. Folder sync is tested
+against an in-memory project: git blob hashes against `git hash-object` values, ignore rules and
+symbolic links, plan comparison and folder collapsing, an upload failing midway (no delete runs,
+and the returned token resumes), a remote or local change between plan and sync (`REMOTE_DRIFT`,
+nothing applied), and a collaborator's edit during the sync (`REVISION_CONFLICT` for that file
+only).
 
 ## Live tests
 
@@ -33,7 +38,10 @@ Add `RUN_OVERLEAF_LIVE_REVIEW_TESTS=1` for review reads,
 `RUN_OVERLEAF_LIVE_TRACKED_WRITE_TESTS=1` for a disposable tracked file create and delete,
 `RUN_OVERLEAF_LIVE_HISTORY_TESTS=1` for read-only history normalization, or
 `RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS=1` to create a throwaway project named `mcp-lifecycle-<time>`,
-set its root document, compile it once, and trash it. The lifecycle test never deletes
+set its root document, compile it once, and trash it, or
+`RUN_OVERLEAF_LIVE_SYNC_TESTS=1` to create a throwaway project named `mcp-sync-<time>`, mirror a
+temporary local folder into it with `plan_sync` and `sync_directory`, check that a second plan
+finds nothing to do, and trash it. Neither test deletes a project
 permanently; remove the trashed project by hand from the web UI's Trashed view. Feature
 availability depends on the deployment and account. Keep request volume low and treat cleanup
 failures as test failures.

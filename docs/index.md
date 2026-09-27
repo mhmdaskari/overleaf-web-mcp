@@ -24,6 +24,7 @@ Once connected, you talk to your assistant in plain language. The assistant pick
 - "Rewrite the introduction of `main.tex` for a general audience, as a tracked change."
 - "Compile the paper and tell me whether it built."
 - "Which figures in `./figures` differ from what's in the project? Upload only those."
+- "Make the project match `~/papers/thesis`, and show me what would be deleted first."
 - "Summarize the open review comments and reply to the one about Table 2."
 
 ## What it can do
@@ -35,6 +36,9 @@ TeX engine, and TeX Live image so the web editor's Recompile follows.
 **Browse and organize.** List and search projects, read the file tree with the configured root
 document and compiler, create folders and files, rename, move, upload, download, and delete with
 confirmation.
+
+**Sync a folder.** Compare a local folder with the project without changing anything, then
+upload only what changed, and optionally delete what you removed locally, in one confirmed call.
 
 **Write safely.** Replace a whole document or a single section. Every edit is checked against the
 revision you read first, so a collaborator's concurrent change is reported instead of overwritten.
@@ -55,7 +59,9 @@ text, and resolve or reopen threads.
 - Text edits require the revision from a prior read and fail with a conflict if the document
   changed underneath.
 - Tracked changes are opt-in and never silently downgraded to plain edits.
-- Deletes require the path to be confirmed; downloads never overwrite a local file unless asked.
+- Deletes require the path, or the number of entries, to be confirmed; downloads never
+  overwrite a local file unless asked.
+- A folder sync applies only the plan you reviewed and stops if either side changed since.
 - A write that times out is observed, never resubmitted, so nothing is applied twice.
 - Your session cookie stays on your machine in a file only you can read, and is never returned by
   any tool.
