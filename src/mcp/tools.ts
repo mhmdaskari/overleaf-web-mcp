@@ -20,6 +20,7 @@ import {
   type ProjectTemplate,
 } from '../overleaf/projects.js'
 import type { SectionsApi } from '../overleaf/sections-api.js'
+import type { ProgressReporter, SyncApi, SyncMode } from '../overleaf/sync.js'
 
 export const TOOL_NAMES = [
   'auth_status',
@@ -36,6 +37,9 @@ export const TOOL_NAMES = [
   'manage_entity',
   'upload_file',
   'download_file',
+  'plan_sync',
+  'sync_directory',
+  'delete_entities',
   'get_sections',
   'get_section_content',
   'write_section',
@@ -73,13 +77,23 @@ export interface OverleafToolRuntime {
     'listComments' | 'replyToComment' | 'addComment' | 'setCommentStatus'
   >
   history: Pick<HistoryApi, 'monitorProjectHistory'>
+  sync: Pick<SyncApi, 'planSync' | 'syncDirectory' | 'deleteEntities'>
+}
+
+/** The part of the SDK's per-request context a tool uses: the progress token and a notifier. */
+export interface ToolCallExtra {
+  _meta?: { progressToken?: string | number | undefined } | undefined
+  sendNotification?: (notification: {
+    method: 'notifications/progress'
+    params: { progressToken: string | number; progress: number; total?: number; message?: string }
+  }) => Promise<void>
 }
 
 interface ToolRegistrar {
   registerTool(
     name: string,
     config: Record<string, unknown>,
-    handler: (args: any) => Promise<Record<string, unknown>>
+    handler: (args: any, extra?: any) => Promise<Record<string, unknown>>
   ): unknown
 }
 
@@ -123,17 +137,56 @@ function handler<T>(operation: (args: T) => Promise<unknown>): (args: T) => Prom
  * `structuredContent` and as the JSON text block older clients read.
  */
 function structured<T>(
-  operation: (args: T) => Promise<Record<string, unknown>>
-): (args: T) => Promise<Record<string, unknown>> {
-  return async args => {
+  operation: (args: T, extra?: ToolCallExtra) => Promise<Record<string, unknown>>
+): (args: T, extra?: ToolCallExtra) => Promise<Record<string, unknown>> {
+  return async (args, extra) => {
     try {
-      const value = await operation(args)
+      const value = await operation(args, extra)
       return { ...success(value), structuredContent: value }
     } catch (error) {
       return failure(error)
     }
   }
 }
+
+/**
+ * Sends `notifications/progress` when the client asked for them with a progress token.
+ * Progress is advisory, so a notification that cannot be delivered never fails the call.
+ */
+function progressReporter(extra: ToolCallExtra | undefined): ProgressReporter | undefined {
+  const progressToken = extra?._meta?.progressToken
+  const send = extra?.sendNotification
+  if (progressToken === undefined || send === undefined) return undefined
+  return async (progress, total, message) => {
+    try {
+      await send({
+        method: 'notifications/progress',
+        params: { progressToken, progress, total, message },
+      })
+    } catch {
+      // The call's own result is what matters.
+    }
+  }
+}
+
+const localFolderPath = z
+  .string()
+  .min(1)
+  .describe("Local folder on the server's own disk, synced as a whole")
+const destinationFolderPath = z
+  .string()
+  .default('')
+  .describe('Project folder the local folder corresponds to; "" (the default) is the project root')
+const ignorePatterns = z
+  .array(z.string().min(1).max(500))
+  .max(200)
+  .optional()
+  .describe(
+    'Extra gitignore-style patterns, applied after the defaults (hidden files and folders, __MACOSX/, and LaTeX build output: *.aux, *.log, *.bbl, *.blg, *.out, *.toc, *.synctex.gz, *.fdb_latexmk, *.fls) and after any .olignore file in the folder; "!pattern" re-includes, for example "!.latexmkrc". Ignored paths are never uploaded, compared, or deleted, on either side.'
+  )
+const entityTypeSchema = z.enum(['doc', 'file', 'folder'])
+const syncActionSchema = z.enum(['create_folder', 'upload', 'write', 'create', 'delete'])
+const errorCodeSchema = z.string()
 
 const projectSummarySchema = z.object({
   id: z.string(),
@@ -513,6 +566,184 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
         args.overwrite
       )
     )
+  )
+  server.registerTool(
+    'plan_sync',
+    {
+      description:
+        "Compare a local folder with a project folder and report what sync_directory would do, changing nothing. Binary files compare by git blob hash at no cost; each text document with a local counterpart, or present only in the project, is read once through the project's queue, so this suits tens of documents, not thousands. Returns toUpload (new or changed), identical (a count and the first 25 paths unless verbose), remoteOnly (what mirror mode would delete, each folder collapsed to one entry that includes its contents), conflicts (a file where the other side has a folder, or non-UTF-8 text where the project has a document; sync_directory cannot apply these), ignored, and planToken. Show the plan to the user before syncing. localFolderPath is on the server's disk; a symbolic link that leads outside it fails with PATH_OUTSIDE_ROOT.",
+      inputSchema: {
+        projectId,
+        localFolderPath,
+        destinationFolderPath,
+        ignore: ignorePatterns,
+        verbose: z
+          .boolean()
+          .default(false)
+          .describe('List every identical path and ignored entry instead of the first 25'),
+      },
+      outputSchema: {
+        planToken: z.string(),
+        localFolderPath: z.string(),
+        destinationFolderPath: z.string(),
+        toUpload: z.array(
+          z.object({
+            localPath: z.string(),
+            destinationPath: z.string(),
+            reason: z.enum(['new', 'changed']),
+            comparedBy: z.enum(['hash', 'content']).optional(),
+            remoteType: z.enum(['doc', 'file']).optional(),
+          })
+        ),
+        identical: z.object({ count: z.number().int(), paths: z.array(z.string()) }),
+        remoteOnly: z.array(
+          z.object({
+            destinationPath: z.string(),
+            entityId: z.string(),
+            type: entityTypeSchema,
+            contains: z.number().int().optional(),
+          })
+        ),
+        conflicts: z.array(
+          z.object({
+            localPath: z.string(),
+            destinationPath: z.string(),
+            reason: z.enum(['local_file_remote_folder', 'local_folder_remote_file', 'not_utf8_text']),
+            message: z.string(),
+          })
+        ),
+        ignored: z.object({
+          count: z.number().int(),
+          entries: z.array(
+            z.object({
+              localPath: z.string(),
+              matchedPattern: z.string().optional(),
+              reason: z.string().optional(),
+            })
+          ),
+        }),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    structured(async (args: {
+      projectId: string
+      localFolderPath: string
+      destinationFolderPath: string
+      ignore?: string[]
+      verbose: boolean
+    }, extra) => ({
+      ...(await runtime.sync.planSync(args.projectId, args.localFolderPath, {
+        destinationFolderPath: args.destinationFolderPath,
+        ignore: args.ignore,
+        verbose: args.verbose,
+        onProgress: progressReporter(extra),
+      })),
+    }))
+  )
+  server.registerTool(
+    'sync_directory',
+    {
+      description:
+        "Make a project folder match a local folder: upload new and changed files, and in mirror mode also delete what exists only in the project. Call plan_sync first, confirm the plan with the user, and pass its planToken; if the project or the folder changed since, REMOTE_DRIFT is returned and nothing changes. Changed text documents are replaced through revision-checked write_file edits, recorded as tracked changes when writeMode is tracked, so a concurrent edit fails that file with REVISION_CONFLICT rather than being overwritten. Binaries and new files are uploaded; with writeMode tracked, new .tex, .bib, and similar text files are created with tracked content instead. Missing folders are created. Uploads and writes run first. Deletes run only in mirror mode, only when confirmDeleteCount equals the number of remoteOnly entries, else CONFIRMATION_MISMATCH, and never after any upload or write failed. Failures are per file and nothing is retried: the call continues unless stopOnError, then returns status, completed, failed, remaining, and a planToken to resume with. It saves tool calls, not time.",
+      inputSchema: {
+        projectId,
+        localFolderPath,
+        mode: z
+          .enum(['additive', 'mirror'])
+          .describe('additive only uploads and writes; mirror also deletes what exists only in the project'),
+        destinationFolderPath,
+        planToken: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('From plan_sync, or from a partial sync_directory to resume it'),
+        confirmDeleteCount: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Required in mirror mode: the number of entries in plan_sync's remoteOnly, each folder counting once"),
+        ignore: ignorePatterns,
+        writeMode,
+        stopOnError: z.boolean().default(false).describe('Stop at the first failure instead of continuing'),
+      },
+      outputSchema: {
+        status: z.enum(['complete', 'partial']),
+        mode: z.enum(['additive', 'mirror']),
+        completed: z.array(
+          z.object({ destinationPath: z.string(), action: syncActionSchema, entityId: z.string().optional() })
+        ),
+        failed: z.array(
+          z.object({
+            destinationPath: z.string(),
+            action: syncActionSchema,
+            errorCode: errorCodeSchema,
+            message: z.string(),
+          })
+        ),
+        remaining: z.array(z.object({ destinationPath: z.string(), action: syncActionSchema })),
+        identicalCount: z.number().int(),
+        planToken: z.string().optional(),
+      },
+      annotations: { destructiveHint: true, idempotentHint: true },
+    },
+    structured(async (args: {
+      projectId: string
+      localFolderPath: string
+      mode: SyncMode
+      destinationFolderPath: string
+      planToken?: string
+      confirmDeleteCount?: number
+      ignore?: string[]
+      writeMode: WriteMode
+      stopOnError: boolean
+    }, extra) => ({
+      ...(await runtime.sync.syncDirectory(args.projectId, args.localFolderPath, {
+        mode: args.mode,
+        destinationFolderPath: args.destinationFolderPath,
+        planToken: args.planToken,
+        confirmDeleteCount: args.confirmDeleteCount,
+        ignore: args.ignore,
+        writeMode: args.writeMode,
+        stopOnError: args.stopOnError,
+        onProgress: progressReporter(extra),
+      })),
+    }))
+  )
+  server.registerTool(
+    'delete_entities',
+    {
+      description:
+        'Delete several documents, files, or folders in one call. confirmCount must equal the number of paths, else CONFIRMATION_MISMATCH. Every path is resolved before anything is deleted, so a missing one fails the call with NOT_FOUND and changes nothing. Deleting a folder removes everything inside it, so list the folder alone, not its contents too. Continues past a failed delete unless stopOnError, and returns status, completed, failed, and remaining. Confirm the list with the user first.',
+      inputSchema: {
+        projectId,
+        paths: z.array(filePath).min(1).max(500).describe('Project paths to delete'),
+        confirmCount: z
+          .number()
+          .int()
+          .positive()
+          .describe('The number of paths, repeated after confirming the list with the user'),
+        stopOnError: z.boolean().default(false).describe('Stop at the first failure instead of continuing'),
+      },
+      outputSchema: {
+        status: z.enum(['complete', 'partial']),
+        completed: z.array(z.object({ path: z.string(), type: entityTypeSchema, entityId: z.string() })),
+        failed: z.array(z.object({ path: z.string(), errorCode: errorCodeSchema, message: z.string() })),
+        remaining: z.array(z.object({ path: z.string() })),
+      },
+      annotations: { destructiveHint: true, idempotentHint: false },
+    },
+    structured(async (args: {
+      projectId: string
+      paths: string[]
+      confirmCount: number
+      stopOnError: boolean
+    }, extra) => ({
+      ...(await runtime.sync.deleteEntities(args.projectId, args.paths, args.confirmCount, {
+        stopOnError: args.stopOnError,
+        onProgress: progressReporter(extra),
+      })),
+    }))
   )
   server.registerTool(
     'get_sections',

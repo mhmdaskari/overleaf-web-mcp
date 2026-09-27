@@ -1,10 +1,10 @@
 # Tool reference
 
-The server registers 24 tools. Names are `snake_case`. Every tool except `auth_status`,
+The server registers 27 tools. Names are `snake_case`. Every tool except `auth_status`,
 `list_projects`, `create_project`, and `import_project_zip` takes a `projectId` from
-`list_projects` or from one of the tools that create a project. Results are JSON; the project
-lifecycle tools and `list_projects` also declare an `outputSchema` and return the same object as
-`structuredContent`. Failures are JSON with `code`, `message`, `retryable`, and optional `details`;
+`list_projects` or from one of the tools that create a project. Results are JSON; `auth_status`,
+`list_projects`, the project lifecycle tools, and the folder sync tools also declare an
+`outputSchema` and return the same object as `structuredContent`. Failures are JSON with `code`, `message`, `retryable`, and optional `details`;
 the codes are listed in the [safety model](safety.md#error-codes). The Overleaf routes behind each
 tool are catalogued in the [private API page](private-api.md).
 
@@ -248,6 +248,162 @@ Neither is limited by file size in practice: `DOC_TOO_LARGE` applies at the adve
 `ol-maxDocLength` (2,097,152 UTF-16 code units by default) and `UPDATE_TOO_LARGE` at 7,340,032
 serialized characters. A 115 KB document uses about 5% of the document limit. The practical
 ceiling on inline `content` is the MCP client's tool-argument budget, which `localPath` avoids.
+
+## Folder sync and bulk delete
+
+`plan_sync` and `sync_directory` compare a local folder with a project folder and make the
+project match it; `delete_entities` removes several entities at once. All three are compositions
+of the tools above, so they inherit their checks: changed text documents are replaced through
+the same revision-checked, verified edit as `write_file`, binaries through the same in-place
+upload as `upload_file`, and deletes through `manage_entity`. They save tool calls and context,
+not time: every step still runs through the project's one queue, one after another. A client that
+sends a progress token receives `notifications/progress` as documents are read and files are
+applied.
+
+The usual sequence is `plan_sync`, a look at the plan with the user, then `sync_directory` with
+the plan's `planToken`. The reference cleanup the roadmap was written from, four changed files
+uploaded, twenty stale entities deleted, and nine identical figures left alone, is those two
+calls.
+
+### How the two sides are compared
+
+| Local | Project | Compared by | Result |
+| --- | --- | --- | --- |
+| file | nothing | | `toUpload`, `reason: "new"` |
+| file | binary `file` | git blob hash against the tree's `hash`, at no cost | `identical`, or `toUpload` with `comparedBy: "hash"` |
+| UTF-8 file | text `doc` | reading the document and comparing LF-normalized text; a leading byte order mark is ignored | `identical`, or `toUpload` with `comparedBy: "content"` |
+| non-UTF-8 file | text `doc` | | `conflicts`, `not_utf8_text` |
+| file | folder | | `conflicts`, `local_file_remote_folder` |
+| folder | `doc` or `file` | | `conflicts`, `local_folder_remote_file`; nothing inside the folder is compared |
+| nothing | anything | | `remoteOnly`, collapsed to the highest folder |
+
+Documents carry no hash, so each document with a local counterpart, and each one only the
+project has, is read once, one document join through the project's queue. That suits tens of
+documents, not thousands. A binary stored without a hash, which only very old projects have,
+is listed as changed without `comparedBy`.
+
+**Ignore rules** are gitignore-style and apply to both sides. The defaults are `.git/`,
+`.DS_Store`, hidden files and folders (`.*`), `__MACOSX/`, and LaTeX build output: `*.aux`,
+`*.log`, `*.bbl`, `*.blg`, `*.out`, `*.toc`, `*.synctex.gz`, `*.fdb_latexmk`, and `*.fls`. A
+`.olignore` file at the top of the local folder, the one `overleaf-sync` uses, is applied next,
+and the `ignore` parameter last, so `"!.latexmkrc"` re-includes a file a default excludes.
+Patterns match case-insensitively, and a folder pattern such as `build/` covers everything
+inside. An ignored path is never uploaded, and a project entity an ignore rule matches is
+never compared or deleted, so mirror mode cannot remove a file the sync was told to leave
+alone. A folder that holds such a protected entity is not deleted as a whole; its other contents
+are listed one by one.
+
+**Local paths.** `localFolderPath` is resolved on the disk of the machine the server runs on.
+Symbolic links are followed only when they resolve inside it; one that leads outside fails the
+call with `PATH_OUTSIDE_ROOT` before anything is compared, unless an ignore pattern excludes
+it. A linked folder that leads back into one of its own parents is refused as a cycle. The
+walk stops with `INVALID_ARGUMENT` above 2,000 files that are not ignored, Overleaf's own limit
+for one project, or 20,000 entries in all. Files are hashed as they are read, streaming those
+larger than 8 MB.
+
+### `plan_sync` <small>read-only</small>
+
+Compare a local folder with a project folder and report what `sync_directory` would do. Nothing
+is changed.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `localFolderPath` | yes | Local folder on the server's disk |
+| `destinationFolderPath` | no | Project folder the local folder corresponds to; default `""`, the project root |
+| `ignore` | no | Extra gitignore-style patterns, applied after the defaults and `.olignore` |
+| `verbose` | no | List every identical path and ignored entry instead of the first 25; default `false` |
+
+Returns:
+
+- `planToken`, to pass to `sync_directory`.
+- `localFolderPath`, resolved to an absolute path, and `destinationFolderPath`.
+- `toUpload`: `{ localPath, destinationPath, reason, comparedBy?, remoteType? }` for every new or
+  changed file. `localPath` is relative to the local folder; `remoteType` says what the project
+  holds today for a changed entry, `doc` (replaced with a revision-checked write) or `file`
+  (replaced by upload).
+- `identical`: `{ count, paths }`, the first 25 paths unless `verbose`.
+- `remoteOnly`: `{ destinationPath, entityId, type, contains? }` for what mirror mode would
+  delete. A folder the local side does not have is one entry, and `contains` says how many
+  entities inside it go with it.
+- `conflicts`: `{ localPath, destinationPath, reason, message }` for what a sync cannot apply
+  on its own. Resolve these by hand, for example with `delete_entities`, then plan again.
+- `ignored`: `{ count, entries }`, each `{ localPath, matchedPattern }`, or `{ localPath, reason }`
+  for a broken symbolic link or something that is neither a file nor a folder. An ignored folder
+  is one entry ending in `/`; nothing inside it is read.
+
+### `sync_directory` <small>destructive</small>
+
+Make a project folder match a local folder.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `localFolderPath` | yes | Local folder on the server's disk |
+| `mode` | yes | `additive` uploads and writes only; `mirror` also deletes what exists only in the project |
+| `destinationFolderPath` | no | As for `plan_sync`; default `""` |
+| `planToken` | no | From `plan_sync`, or from a partial `sync_directory` to resume it |
+| `confirmDeleteCount` | for `mirror` | The number of entries in `plan_sync`'s `remoteOnly`, each folder counting once |
+| `ignore` | no | As for `plan_sync`; must match the plan's when a `planToken` is given |
+| `writeMode` | no | `untracked` (default) or `tracked` |
+| `stopOnError` | no | Stop at the first failure instead of continuing; default `false` |
+
+What happens, in order:
+
+1. The folder and the project are compared again, exactly as `plan_sync` does. With a
+   `planToken`, a sync whose project side or local side differs from the plan fails with
+   `REMOTE_DRIFT` and changes nothing; `details.changed` is `remote`, `local`, or `both`. The
+   token covers every entity in scope, identical ones included, so a collaborator's edit to a
+   file the plan called identical stops the sync instead of being overwritten. A token issued
+   for a different project, folder, destination, or ignore list is `INVALID_ARGUMENT`.
+2. In mirror mode, `confirmDeleteCount` must equal the number of remote-only entries, else
+   `CONFIRMATION_MISMATCH` and nothing changes.
+3. Uploads and writes, in path order. Missing folders are created first, each once; a folder
+   that could not be created is not tried again for the next file inside it. Only folders that
+   hold an uploaded file are created, so an empty local folder is not reproduced. A changed document
+   is replaced with `write_file` semantics against the revision just compared, so a concurrent
+   edit fails that one file with `REVISION_CONFLICT` and is never overwritten. A changed binary
+   and every new file are uploaded, and Overleaf decides whether a new file is a document or a
+   binary. With `writeMode: "tracked"`, changed documents are written as tracked changes, and
+   new files Overleaf treats as text (`.tex`, `.bib`, `.sty`, `.cls`, `.bst`, `.txt`, and
+   similar) are created as documents with tracked content, the way `create_file` does; an
+   upload is never tracked, so binaries are uploaded as usual. Conflicts from the plan are
+   reported as failures.
+4. The tree is read back, and an upload that is not there, or whose hash does not match the
+   local file, is moved to `failed` with `REMOTE_ERROR`.
+5. Deletes, in mirror mode only, and only if nothing so far failed. Just before each delete, the
+   entity's id, and for a folder everything inside it, is checked against the plan; anything
+   that changed is left in place and reported as `REMOTE_DRIFT`.
+
+Nothing is retried automatically. Returns `status` (`complete`, or `partial` when anything failed
+or was not attempted), `mode`, `completed` (`{ destinationPath, action, entityId? }`), `failed`
+(`{ destinationPath, action, errorCode, message }`), `remaining` (`{ destinationPath, action }`,
+what was not attempted), `identicalCount`, and `planToken`. `action` is `create_folder`,
+`upload`, `write`, `create`, or `delete`.
+
+The returned `planToken` describes the state this sync left: what it changed as the project now
+shows it, and everything else as it was planned. Re-running with it resumes a partial sync, and
+still stops with `REMOTE_DRIFT` if someone changed something in between, including a document
+whose write failed with `REVISION_CONFLICT`: that one needs a fresh plan and a look at what the
+collaborator changed. The token is absent when the project could not be read back after the
+changes; plan again before resuming.
+
+### `delete_entities` <small>destructive</small>
+
+Delete several documents, files, or folders in one call.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `paths` | yes | Project paths, 1 to 500 |
+| `confirmCount` | yes | Must equal the number of `paths`, else `CONFIRMATION_MISMATCH` |
+| `stopOnError` | no | Stop at the first failure instead of continuing; default `false` |
+
+Every path is resolved before anything is deleted, so a missing path fails the whole call with
+`NOT_FOUND` and changes nothing. A path listed twice, or one inside a folder that is also listed,
+is `INVALID_ARGUMENT`: deleting a folder removes everything inside it, so list the folder alone.
+Returns `status`, `completed` (`{ path, type, entityId }`), `failed`
+(`{ path, errorCode, message }`), and `remaining` (`{ path }`).
 
 ## LaTeX sections
 

@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/overleaf-web-mcp"><img alt="npm version" src="https://img.shields.io/npm/v/overleaf-web-mcp?color=1F6FEB"></a>
   <img alt="Node.js 20 or newer" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&amp;logoColor=white">
-  <img alt="24 MCP tools" src="https://img.shields.io/badge/MCP-24_tools-1F6FEB">
+  <img alt="27 MCP tools" src="https://img.shields.io/badge/MCP-27_tools-1F6FEB">
   <a href="https://mhmdaskari.github.io/overleaf-web-mcp/"><img alt="Documentation" src="https://img.shields.io/badge/docs-mhmdaskari.github.io-0F766E"></a>
   <img alt="MIT license" src="https://img.shields.io/badge/License-MIT-0F766E">
 </p>
@@ -25,6 +25,7 @@ Once connected, talk to your assistant in plain language. It picks the tools.
 - "Rewrite the introduction of `main.tex` for a general audience, as a tracked change."
 - "Compile the paper and tell me whether it built."
 - "Which figures in `./figures` differ from what's in the project? Upload only those."
+- "Make the project match `~/papers/thesis`, and show me what would be deleted first."
 - "Summarize the open review comments and reply to the one about Table 2."
 
 > [!CAUTION]
@@ -67,6 +68,7 @@ Client-by-client steps, self-hosted Overleaf, and troubleshooting, including the
 
 - **Start and manage projects.** Create a blank or example project, clone one, or import a zip; rename, trash, restore, or archive projects with the name confirmed first; set the root document, TeX engine, and TeX Live image so the web editor's Recompile follows.
 - **Browse and organize.** List and search projects, read the file tree with the configured root document and compiler, create folders and files, rename, move, upload, download, and delete with confirmation.
+- **Sync a folder.** Compare a local folder with the project without changing anything, then upload only what changed, and optionally delete what you removed locally, in one confirmed call. Changed text files go through the same revision-checked edits as a single write, so a collaborator's concurrent edit is never overwritten.
 - **Write safely.** Replace a whole document or a single section. Every edit is checked against the revision you read first, so a collaborator's concurrent change is reported instead of overwritten. Edits can be recorded as Overleaf tracked changes.
 - **Work by section.** Parse `\section` headings in a file, read one section, replace one section.
 - **Compile.** Build the project's configured root document, or any document you name, and stop a running compile.
@@ -75,7 +77,7 @@ Client-by-client steps, self-hosted Overleaf, and troubleshooting, including the
 
 ## Tools
 
-All 24 tools, grouped as in the [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/), which has every parameter and result. Read-only tools change nothing on Overleaf. Destructive tools can replace or remove existing content, and each one confirms by value before it does.
+All 27 tools, grouped as in the [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/), which has every parameter and result. Read-only tools change nothing on Overleaf. Destructive tools can replace or remove existing content, and each one confirms by value before it does.
 
 | Group | Tool | What it does | Annotation |
 | --- | --- | --- | --- |
@@ -93,6 +95,9 @@ All 24 tools, grouped as in the [tool reference](https://mhmdaskari.github.io/ov
 | Files | `manage_entity` | Create a folder, or rename, move, or delete an entity | destructive |
 | Files | `upload_file` | Upload a local file, replacing whatever is at that path | destructive |
 | Files | `download_file` | Save a document or binary file locally | read-only |
+| Folder sync | `plan_sync` | Compare a local folder with the project and show what a sync would do | read-only |
+| Folder sync | `sync_directory` | Upload what changed, and in mirror mode delete what is gone locally | destructive |
+| Folder sync | `delete_entities` | Delete several files or folders in one confirmed call | destructive |
 | Sections | `get_sections` | Parse the section headings of one file | read-only |
 | Sections | `get_section_content` | Read one section's body | read-only |
 | Sections | `write_section` | Replace one section's body, revision-checked | destructive |
@@ -108,8 +113,9 @@ All 24 tools, grouped as in the [tool reference](https://mhmdaskari.github.io/ov
 
 - Text edits require the revision from a prior read and fail with a conflict if the document changed underneath.
 - Tracked changes are opt-in and never silently downgraded to plain edits.
-- Deleting a file requires its path to be confirmed, and trashing or deleting a project requires its name. Projects go to the trash first; permanent deletion only works from there. Downloads never overwrite a local file unless asked.
+- Deleting a file requires its path to be confirmed, deleting several requires their count, and trashing or deleting a project requires its name. Projects go to the trash first; permanent deletion only works from there. Downloads never overwrite a local file unless asked.
 - A write that times out is observed, never resubmitted, so nothing is applied twice.
+- A folder sync runs only against the plan you reviewed: if the project or the folder changed since, it stops before changing anything. It deletes only in mirror mode, only with the delete count confirmed, and never after a failed upload.
 - Your session cookie stays on your machine in a file only you can read, and is never returned by any tool.
 - While a project is open, up to 90 seconds after the last call, you may appear online to collaborators.
 
@@ -120,7 +126,7 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | | **This project** | [OverleafMCP](https://github.com/mjyoo2/OverleafMCP) | [olcli](https://github.com/aloth/olcli) | [overleaf-mcp-server](https://github.com/YounesBensafia/overleaf-mcp-server) | [overleaf-mcp-rt](https://github.com/DanielHou315/overleaf-mcp-rt) | [netique/overleaf-mcp](https://github.com/netique/overleaf-mcp) |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
-| Tools | 24 | 8 | 19 | 4 | 22 | 17 |
+| Tools | 27 | 8 | 19 | 4 | 22 | 17 |
 | Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Self-hosted Overleaf | ✅ | ❌ | ✅ | 🟡¹ | ✅ | 🟡² |
 | List and search your projects | ✅ | 🟡³ | 🟡⁴ | ❌ | 🟡⁵ | ✅ |
@@ -132,13 +138,13 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | Reads and replaces one `\section` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Creates, renames, moves, and deletes files and folders | ✅ | 🟡⁹ | 🟡¹⁰ | 🟡⁹ | ✅ | ❌ |
 | Uploads and downloads binary files | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹¹ |
-| Compares a local folder with the project | 🟡¹² | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Compares a local folder with the project | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Compiles on Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Reads the compile log and errors | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Review comments: list, reply, add, resolve | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹³ |
-| Creates, clones, imports, archives, and deletes projects | ✅ | ❌ | 🟡¹⁴ | ❌ | ❌ | ❌ |
+| Review comments: list, reply, add, resolve | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹² |
+| Creates, clones, imports, archives, and deletes projects | ✅ | ❌ | 🟡¹³ | ❌ | ❌ | ❌ |
 | Saves the root document, compiler, and TeX Live image | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Reads project history | ✅ | ❌ | ❌ | ❌ | 🟡¹⁵ | ❌ |
+| Reads project history | ✅ | ❌ | ❌ | ❌ | 🟡¹⁴ | ❌ |
 | Installs from | npm | npm | npm, Homebrew | source | npm | npm |
 | License | MIT | MIT | MIT | MIT | AGPL-3.0 | AGPL-3.0 |
 
@@ -153,10 +159,9 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 9. Creates files by writing them; no rename, move, or delete.
 10. Creates, renames, and deletes files and folders; no move.
 11. Downloads binary files; no upload.
-12. Binary files only, by comparing `git hash-object` with the hashes in the project tree.
-13. Lists, replies to, resolves, and reopens threads, but cannot add a comment.
-14. Creates and renames projects.
-15. Reports what collaborators changed during the session.
+12. Lists, replies to, resolves, and reopens threads, but cannot add a comment.
+13. Creates and renames projects.
+14. Reports what collaborators changed during the session.
 
 ## Documentation
 
@@ -164,7 +169,7 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | --- | --- |
 | [Install](https://mhmdaskari.github.io/overleaf-web-mcp/install/) | Claude Code, Claude Desktop, Cursor, VS Code, self-hosted Overleaf, troubleshooting |
 | [Using it](https://mhmdaskari.github.io/overleaf-web-mcp/using/) | Example prompts and what happens underneath |
-| [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 24 tools with parameters and results |
+| [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 27 tools with parameters and results |
 | [Safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) | Revisions, tracked changes, confirmations, error codes |
 | [Configuration](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/) | Environment variables, proxies, where the session is stored, and keeping it alive |
 | [Internals](https://mhmdaskari.github.io/overleaf-web-mcp/internals/) | Protocol notes, reliability guarantees, related projects |

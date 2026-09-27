@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { readConfig } from '../../src/config.js'
@@ -157,6 +161,55 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS !== '1
         await expect(runtime.account.findProject(created.projectId)).resolves.toMatchObject({
           trashed: true,
         })
+      }
+    })
+  }
+)
+
+describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_SYNC_TESTS !== '1')(
+  'disposable Overleaf folder sync',
+  () => {
+    let runtime: OverleafRuntime
+
+    beforeAll(async () => {
+      runtime = await OverleafRuntime.create(readConfig())
+    })
+
+    afterAll(async () => {
+      await runtime?.close()
+    })
+
+    test('plans, mirrors, and re-plans a local folder into a throwaway project', async () => {
+      const folder = await mkdtemp(join(tmpdir(), 'overleaf-live-sync-'))
+      await mkdir(join(folder, 'sections'))
+      await writeFile(
+        join(folder, 'main.tex'),
+        '\\documentclass{article}\n\\begin{document}\n\\input{sections/intro}\n\\end{document}\n'
+      )
+      await writeFile(join(folder, 'sections', 'intro.tex'), 'Disposable sync test.\n')
+      await writeFile(join(folder, 'main.aux'), 'ignored build output\n')
+
+      const name = `mcp-sync-${Date.now()}`
+      const created = await runtime.projects.createProject(name, 'blank')
+      try {
+        const plan = await runtime.sync.planSync(created.projectId, folder)
+        expect(plan.ignored.entries.map(entry => entry.localPath)).toContain('main.aux')
+        expect(plan.toUpload.map(entry => entry.destinationPath)).toEqual(['main.tex', 'sections/intro.tex'])
+
+        const result = await runtime.sync.syncDirectory(created.projectId, folder, {
+          mode: 'mirror',
+          planToken: plan.planToken,
+          confirmDeleteCount: plan.remoteOnly.length,
+        })
+        expect(result.status).toBe('complete')
+
+        const again = await runtime.sync.planSync(created.projectId, folder)
+        expect(again.toUpload).toEqual([])
+        expect(again.remoteOnly).toEqual([])
+        expect(again.identical.count).toBe(2)
+      } finally {
+        await runtime.projects.manageProject(created.projectId, { action: 'trash', confirmName: name })
+        await rm(folder, { recursive: true })
       }
     })
   }

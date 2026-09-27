@@ -39,6 +39,7 @@ function fakeRuntime() {
       setCommentStatus: vi.fn(),
     },
     history: { monitorProjectHistory: vi.fn() },
+    sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn() },
   }
 }
 
@@ -366,6 +367,108 @@ describe('MCP tool registration', () => {
     expect(runtime.projects.importProjectZip).toHaveBeenCalledWith('/tmp/x.zip', undefined)
     await registered.get('clone_project')!({ sourceProjectId: 's', name: 'Copy' })
     expect(runtime.projects.cloneProject).toHaveBeenCalledWith('s', 'Copy')
+  })
+
+  test('registers the sync tools with output schemas and the expected annotations', () => {
+    const registered = new Map<string, { config: any }>()
+    registerOverleafTools(
+      {
+        registerTool: (name: string, config: any) => {
+          registered.set(name, { config })
+        },
+      },
+      fakeRuntime()
+    )
+
+    expect(registered.get('plan_sync')?.config.annotations).toEqual({ readOnlyHint: true })
+    expect(registered.get('sync_directory')?.config.annotations).toEqual({
+      destructiveHint: true,
+      idempotentHint: true,
+    })
+    expect(registered.get('delete_entities')?.config.annotations).toEqual({
+      destructiveHint: true,
+      idempotentHint: false,
+    })
+    for (const name of ['plan_sync', 'sync_directory', 'delete_entities']) {
+      expect(registered.get(name)?.config.outputSchema).toBeDefined()
+    }
+    // The safety contract has to be readable from the descriptions alone.
+    const sync = registered.get('sync_directory')?.config.description as string
+    for (const term of ['plan_sync', 'planToken', 'REMOTE_DRIFT', 'REVISION_CONFLICT', 'confirmDeleteCount', 'CONFIRMATION_MISMATCH', 'never after any upload or write failed']) {
+      expect(sync).toContain(term)
+    }
+    expect(registered.get('plan_sync')?.config.description).toMatch(/changing nothing/u)
+    expect(registered.get('plan_sync')?.config.description).toMatch(/PATH_OUTSIDE_ROOT/u)
+    expect(registered.get('delete_entities')?.config.description).toMatch(/confirmCount/u)
+    const mode = registered.get('sync_directory')?.config.inputSchema.mode as {
+      safeParse: (value: unknown) => { success: boolean }
+    }
+    // The mode is always chosen explicitly; there is no default that could delete.
+    expect(mode.safeParse(undefined).success).toBe(false)
+  })
+
+  test('forwards sync arguments and reports progress only when the client asked for it', async () => {
+    const runtime = fakeRuntime()
+    const result = {
+      status: 'complete',
+      mode: 'mirror',
+      completed: [],
+      failed: [],
+      remaining: [],
+      identicalCount: 0,
+    }
+    runtime.sync.syncDirectory.mockImplementation(async (_id: string, _path: string, options: {
+      onProgress?: (progress: number, total: number, message: string) => Promise<void>
+    }) => {
+      await options.onProgress?.(1, 2, 'Uploaded 1 of 2')
+      return result
+    })
+    const registered = new Map<string, (...args: any[]) => any>()
+    registerOverleafTools(
+      {
+        registerTool: (name: string, _config: any, handler: (...args: any[]) => any) => {
+          registered.set(name, handler)
+        },
+      },
+      runtime
+    )
+    const args = {
+      projectId: 'p',
+      localFolderPath: '/work/paper',
+      mode: 'mirror',
+      destinationFolderPath: '',
+      planToken: 'token',
+      confirmDeleteCount: 3,
+      writeMode: 'untracked',
+      stopOnError: false,
+    }
+
+    const sendNotification = vi.fn(async () => undefined)
+    const synced = await registered.get('sync_directory')!(args, {
+      _meta: { progressToken: 7 },
+      sendNotification,
+    })
+    expect(runtime.sync.syncDirectory).toHaveBeenCalledWith('p', '/work/paper', expect.objectContaining({
+      mode: 'mirror',
+      planToken: 'token',
+      confirmDeleteCount: 3,
+      writeMode: 'untracked',
+      stopOnError: false,
+    }))
+    expect(sendNotification).toHaveBeenCalledWith({
+      method: 'notifications/progress',
+      params: { progressToken: 7, progress: 1, total: 2, message: 'Uploaded 1 of 2' },
+    })
+    expect(synced.structuredContent).toEqual(result)
+
+    await registered.get('sync_directory')!(args, { sendNotification })
+    expect(runtime.sync.syncDirectory.mock.calls[1]?.[2].onProgress).toBeUndefined()
+
+    await registered.get('delete_entities')!({ projectId: 'p', paths: ['a.png'], confirmCount: 1, stopOnError: true })
+    expect(runtime.sync.deleteEntities).toHaveBeenCalledWith('p', ['a.png'], 1, {
+      stopOnError: true,
+      onProgress: undefined,
+    })
   })
 
   test('registers a read-only history monitor and forwards its cursor', async () => {

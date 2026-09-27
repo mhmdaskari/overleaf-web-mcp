@@ -39,6 +39,7 @@ function fakeRuntime() {
       setCommentStatus: vi.fn(),
     },
     history: { monitorProjectHistory: vi.fn() },
+    sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn() },
   }
 }
 
@@ -117,13 +118,59 @@ describe('MCP server', () => {
     await server.close()
   })
 
+  test('delivers sync progress notifications and a schema-valid plan over the transport', async () => {
+    const runtime = fakeRuntime()
+    const plan = {
+      planToken: 'token',
+      localFolderPath: '/work/paper',
+      destinationFolderPath: '',
+      toUpload: [{ localPath: 'a.png', destinationPath: 'a.png', reason: 'new' }],
+      identical: { count: 0, paths: [] },
+      remoteOnly: [{ destinationPath: 'old', entityId: 'e', type: 'folder', contains: 2 }],
+      conflicts: [],
+      ignored: { count: 1, entries: [{ localPath: 'main.aux', matchedPattern: '*.aux' }] },
+    }
+    runtime.sync.planSync.mockImplementation(async (_id: string, _path: string, options: {
+      onProgress?: (progress: number, total: number, message: string) => Promise<void>
+    }) => {
+      await options.onProgress?.(1, 2, 'Read 1 of 2 documents')
+      await options.onProgress?.(2, 2, 'Read 2 of 2 documents')
+      return plan
+    })
+    const server = createMcpServer(runtime)
+    const client = new Client({ name: 'smoke-client', version: '1.0.0' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+
+    const progress: Array<{ progress: number; total?: number | undefined }> = []
+    const result = await client.callTool(
+      { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/work/paper' } },
+      undefined,
+      { onprogress: update => progress.push({ progress: update.progress, total: update.total }) }
+    )
+
+    expect(result.isError).toBeFalsy()
+    expect(result.structuredContent).toEqual(plan)
+    expect(progress).toEqual([
+      { progress: 1, total: 2 },
+      { progress: 2, total: 2 },
+    ])
+    expect(runtime.sync.planSync).toHaveBeenCalledWith(
+      'p',
+      '/work/paper',
+      expect.objectContaining({ destinationFolderPath: '', verbose: false })
+    )
+    await client.close()
+    await server.close()
+  })
+
   test('sends bounded usage instructions in the initialize response', async () => {
     const { server, client } = await connectedPair()
     const instructions = client.getInstructions()
 
     expect(instructions).toBe(SERVER_INSTRUCTIONS)
     // The contract an assistant must know without reading the docs.
-    for (const term of ['read_file', 'revision', 'REVISION_CONFLICT', 'upload_file', 'confirmPath', 'confirmName', 'manage_project', 'AUTH_EXPIRED']) {
+    for (const term of ['read_file', 'revision', 'REVISION_CONFLICT', 'upload_file', 'confirmPath', 'confirmName', 'manage_project', 'plan_sync', 'planToken', 'confirmDeleteCount', 'REMOTE_DRIFT', 'AUTH_EXPIRED']) {
       expect(instructions).toContain(term)
     }
     // Instructions ride along on every session; keep them short enough to be read.
