@@ -67,6 +67,10 @@ it, 20 of them single deletes. `plan_sync` and `sync_directory` now do it in two
   new error codes. The usage guide's manual hash comparison is replaced by the two-call workflow.
 - The README lists the three tools, and its comparison table now marks folder comparison as
   supported, where it was binaries only.
+- The tool reference's `auth_status` entry lists `sessionExpiresAt`, added in 0.3.0 but missing
+  from that page until now.
+- `AGENTS.md` records the sync invariants contributors must keep and the new confirm-by-value
+  parameters.
 - The roadmap marks the first v0.4.0 release shipped and records how the design changed on the
   way: a stateless plan token that covers both sides, `destinationFolderPath`, a `conflicts`
   list, and no `onConflict` option. `batch_upload` and `download_project_zip` follow in a point

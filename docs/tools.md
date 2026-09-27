@@ -20,8 +20,10 @@ Verify the saved web session without exposing cookies.
 No parameters.
 
 Returns `authenticated: true`, `baseUrl`, the account's `userId` when known, `projectCount`,
-`permissionsUnchecked` (true on filesystems without POSIX modes), an optional `warning`, and
-`socketPresenceNotice` explaining that an open project connection can show the account as online.
+`sessionExpiresAt` (ISO 8601, when the session lapses unless a request refreshes it first;
+absent when no cookie carries a deadline), `permissionsUnchecked` (true on filesystems without
+POSIX modes), an optional `warning`, and `socketPresenceNotice` explaining that an open project
+connection can show the account as online. The result is also returned as `structuredContent`.
 A missing or expired session fails with `AUTH_EXPIRED`.
 
 ### `list_projects` <small>read-only</small>
@@ -243,6 +245,7 @@ Returns `bytes` and `localPath`. Fails with `INVALID_ARGUMENT` when the local fi
 | Small edit, or collaborators may be editing | `write_file` with `content` | yes | optional | inline |
 | Replace a large text file safely | `write_file` with `localPath` | yes | optional | disk |
 | Replace a binary, or push text when nobody else is editing | `upload_file` | no | never | disk |
+| Bring a whole folder up to date | `plan_sync`, then `sync_directory` | yes, for documents | optional | disk |
 
 Neither is limited by file size in practice: `DOC_TOO_LARGE` applies at the advertised
 `ol-maxDocLength` (2,097,152 UTF-16 code units by default) and `UPDATE_TOO_LARGE` at 7,340,032
@@ -293,7 +296,9 @@ never compared or deleted, so mirror mode cannot remove a file the sync was told
 alone. A folder that holds such a protected entity is not deleted as a whole; its other contents
 are listed one by one.
 
-**Local paths.** `localFolderPath` is resolved on the disk of the machine the server runs on.
+**Local paths.** `localFolderPath` is resolved on the disk of the machine the server runs on, so
+pass an absolute path: a relative one resolves against the server's working directory, which the
+MCP client chooses. `plan_sync` reports the path it resolved.
 Symbolic links are followed only when they resolve inside it; one that leads outside fails the
 call with `PATH_OUTSIDE_ROOT` before anything is compared, unless an ignore pattern excludes
 it. A linked folder that leads back into one of its own parents is refused as a cycle. The

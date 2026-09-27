@@ -27,7 +27,9 @@ changes for review. If tracking is not possible, for example because the session
 authenticated user id, the call fails rather than quietly writing an untracked edit.
 
 **Destructive actions need a second value.** Deleting an entity with `manage_entity` requires
-`confirmPath` to equal `path` exactly. Trashing, archiving, or deleting a project with
+`confirmPath` to equal `path` exactly, deleting several with `delete_entities` requires
+`confirmCount` to equal the number of paths, and a mirror `sync_directory` requires
+`confirmDeleteCount` to equal the number of entries its plan would delete. Trashing, archiving, or deleting a project with
 `manage_project` requires `confirmName` to equal the project's current name exactly, without
 trimming, and the check happens before any request is sent. A wrong value fails with
 `CONFIRMATION_MISMATCH` and changes nothing. Projects follow Overleaf's own model: trash first,

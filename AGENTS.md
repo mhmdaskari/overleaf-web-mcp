@@ -33,8 +33,13 @@ CI runs all of these on Node 20 and 24 for every push and pull request. For the 
   not applied, or conflict. It is never resubmitted.
 - Every OT write is verified against a freshly joined document before a revision is returned.
 - Explicit tracked writes never fall back to untracked writes.
-- Destructive tools take a confirm-by-value parameter (`confirmPath`, `overwrite`, and so on) and
-  are annotated `destructiveHint: true`.
+- Destructive tools take a confirm-by-value parameter (`confirmPath`, `confirmName`,
+  `confirmCount`, `confirmDeleteCount`, `overwrite`, and so on) and are annotated
+  `destructiveHint: true`.
+- Bulk and sync tools are compositions of the existing primitives, never parallel
+  implementations. `sync_directory` runs every upload and write before any delete, never deletes
+  after a failure, replaces documents only through revision-checked writes, and with a
+  `planToken` changes nothing when either side drifted from the plan.
 - Overleaf responses are private API shapes. Error `details` may carry short identifiers from
   them, never response bodies.
 - Tool names, input schemas, result shapes, and error codes are the public contract. Any change
@@ -49,6 +54,8 @@ CI runs all of these on Node 20 and 24 for every push and pull request. For the 
 - `test/mcp/tools.test.ts` asserts the README badge and `docs/tools.md` agree with `TOOL_NAMES`.
   Update both when adding or removing a tool.
 - `test/server.test.ts` asserts the initialize instructions are present and bounded in length.
+- `test/overleaf/sync.test.ts` drives folder sync against an in-memory project. Keep its
+  fault-injection, drift, and mid-sync edit cases passing when changing sync.
 
 ## Documentation
 
