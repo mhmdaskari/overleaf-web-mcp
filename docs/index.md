@@ -3,6 +3,9 @@
 Let Claude, Cursor, or any [Model Context Protocol](https://modelcontextprotocol.io) client read,
 edit, compile, and review your Overleaf projects, signed in as you.
 
+[![npm version](https://img.shields.io/npm/v/overleaf-web-mcp?color=1F6FEB)](https://www.npmjs.com/package/overleaf-web-mcp)
+[![Total npm downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmhmdaskari%2Foverleaf-web-mcp%2Fbadges%2Fnpm-downloads.json)](https://www.npmjs.com/package/overleaf-web-mcp)
+
 ![An MCP client connected through an authenticated web session to an Overleaf workspace](assets/overleaf-web-mcp-workflow.webp)
 
 Overleaf Web MCP is an unofficial server that signs in to Overleaf once through a browser window

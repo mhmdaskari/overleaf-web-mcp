@@ -187,9 +187,9 @@ what you find:
       From v0.5.0 check it with `overwrite: true`, which v0.6.0 requires.
 - [ ] `get_project_tree` `hash` equals `git hash-object <file>` for at least one binary entity.
 - [ ] The gated live tests (`RUN_OVERLEAF_LIVE_TESTS=1`, `test/live/`) and the CI workflows under
-      `.github/workflows` (`ci.yml`, `publish.yml`, `docs.yml`) are as described in
-      `docs/development.md`. From v0.7.0, every command `renderHelp` prints appears in
-      `docs/cli.md`.
+      `.github/workflows` (`ci.yml`, `publish.yml`, `docs.yml`, `download-count.yml`) are as
+      described in `docs/development.md`. From v0.7.0, every command `renderHelp` prints appears
+      in `docs/cli.md`.
 
 ---
 

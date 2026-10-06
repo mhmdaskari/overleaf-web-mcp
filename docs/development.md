@@ -62,6 +62,21 @@ mkdocs build --strict # what CI runs; broken links fail the build
 through snippets, so edit the root files. Use absolute URLs for cross-links inside them so they
 work on GitHub, npm, and the site alike.
 
+## Download badge
+
+The downloads badge in the README and on the site's home page reads `npm-downloads.json` from
+the `badges` branch through a shields.io endpoint badge. The `Download count` workflow
+(`.github/workflows/download-count.yml`) refreshes it every Monday and can be run by hand: it runs
+`scripts/npm-downloads.ts`, which sums the package's all-time downloads from npm's downloads API,
+and replaces the branch's only commit when the number changed. npm cuts any range longer than 18
+months to its last 18 months without saying so, so the script asks for one year at a time from
+the day the package was created and fails, leaving the badge as it was, if an answer covers less
+than it asked for. Never commit to the `badges` branch by hand; the next run replaces it.
+
+```bash
+node scripts/npm-downloads.ts /tmp/npm-downloads.json   # Node 22.18 or newer runs it directly
+```
+
 ## Releasing
 
 1. Update `CHANGELOG.md`. Set the same version in `package.json` and `package-lock.json`, for
