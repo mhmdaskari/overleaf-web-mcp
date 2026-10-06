@@ -29,8 +29,11 @@ and check the assistant's behaviour.
 **Files and figures**
 
 - "Upload `figures/fig3.pdf` into the project's `figures` folder."
+- "Upload `fig1.pdf`, `fig2.pdf`, and `refs.bib` from `~/drafts` to `figures/` and `bib/`, but
+  leave anything that is already there." One call, skipping existing files.
 - "Which figures in `./figures` differ from the ones in the project? Upload only those."
 - "Download `references.bib` to my desktop."
+- "Download the whole project as a zip to `~/backups/thesis.zip`."
 - "Delete `old_draft.tex`." The assistant will confirm the path with you first.
 - "Delete the twenty `old-*.png` figures." One call, with the count confirmed.
 
@@ -39,7 +42,8 @@ and check the assistant's behaviour.
 - "Compare `~/papers/thesis` with the project. What would change?"
 - "Upload everything that changed in `~/papers/thesis`, as tracked changes."
 - "Make the project's `figures` folder match `./figures`, deleting what I removed locally." The
-  assistant will show you what would be deleted and confirm the count first.
+  assistant will show you what would be deleted and confirm the count first, and can save the
+  project as a zip beforehand.
 
 **Compiling**
 
@@ -82,7 +86,9 @@ Everything below happens through MCP tools; no step needs the web UI.
 2. `get_project_tree` returns every file and folder with its path, plus `rootDocPath`,
    `compiler`, `imageName`, and `spellCheckLanguage` for the project.
 3. `create_file` creates a text document; `manage_entity` creates folders and renames, moves, or
-   deletes entities; `upload_file` sends a local file; `download_file` saves one locally.
+   deletes entities; `upload_file` sends a local file and `batch_upload` a list of them, each to
+   its own path, creating missing folders; `download_file` saves one file locally and
+   `download_project_zip` the whole project as one archive.
 
 ### Making a safe edit
 
@@ -125,6 +131,9 @@ Two calls replace a hand-rolled comparison and one call per file.
    content. The plan lists `toUpload`, how many files are `identical`, what exists only in the
    project (`remoteOnly`), `conflicts`, and what the ignore rules skipped.
 2. The assistant shows you the plan, in particular `remoteOnly`, which is what mirror mode deletes.
+   Before a mirror sync it can take a backup with `download_project_zip`, which saves the whole
+   project to a local zip and never replaces an existing file unless asked. Overleaf allows about
+   10 downloads per project a minute.
 3. `sync_directory` with the plan's `planToken` applies it. `mode: "additive"` only uploads and
    writes; `mode: "mirror"` also deletes, and needs `confirmDeleteCount` equal to the number of
    `remoteOnly` entries you agreed to.
@@ -149,6 +158,16 @@ already succeeded.
 
 To remove several entities without a sync, `delete_entities` takes a list of paths and
 `confirmCount` equal to its length.
+
+To upload a list of files to paths you choose, without comparing folders, `batch_upload` takes
+`{ localPath, destinationPath }` pairs, where `destinationPath` includes the file name. It checks
+every entry before sending anything, creates missing folders, and by default replaces what is at
+a path, as `upload_file` does; `onConflict: "skip"` leaves existing files alone. Replacing a text
+document this way has no revision check, so for documents a collaborator may be editing, a sync
+or `write_file` is the safer route. A file that fails does not undo the ones before it; the
+result lists `completed`, `skipped`, `failed`, and `remaining`. Overleaf allows about 500 uploads
+per project in 15 minutes, and the call stops at the first `RATE_LIMITED` rather than send the
+rest.
 
 The hash in `get_project_tree` is still there for a quick manual check of one binary: it equals
 `git hash-object <file>`. Text documents have no hash; compare those with `read_file`.

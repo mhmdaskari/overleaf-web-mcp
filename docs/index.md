@@ -37,8 +37,8 @@ rename, trash, restore, or archive projects with the name confirmed first; set t
 TeX engine, and TeX Live image so the web editor's Recompile follows.
 
 **Browse and organize.** List and search projects, read the file tree with the configured root
-document and compiler, create folders and files, rename, move, upload, download, and delete with
-confirmation.
+document and compiler, create folders and files, rename, move, upload one file or a list of them,
+download a file or the whole project as a zip, and delete with confirmation.
 
 **Sync a folder.** Compare a local folder with the project without changing anything, then
 upload only what changed, and optionally delete what you removed locally, in one confirmed call.
@@ -62,9 +62,10 @@ text, and resolve or reopen threads.
 - Text edits require the revision from a prior read and fail with a conflict if the document
   changed underneath.
 - Tracked changes are opt-in and never silently downgraded to plain edits.
-- Deletes require the path, or the number of entries, to be confirmed; downloads never
-  overwrite a local file unless asked.
-- A folder sync applies only the plan you reviewed and stops if either side changed since.
+- Deletes require the path, or the number of entries, to be confirmed; downloads, including a
+  whole-project zip, never overwrite a local file unless asked.
+- Given the `planToken` from `plan_sync`, a folder sync stops before changing anything if either
+  side changed since the plan.
 - A write that times out is observed, never resubmitted, so nothing is applied twice.
 - Your session cookie stays on your machine in a file only you can read, and is never returned by
   any tool.

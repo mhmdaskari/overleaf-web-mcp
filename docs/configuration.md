@@ -33,6 +33,9 @@ returns `UPDATE_TOO_LARGE` and must be split into smaller, independently revisio
 `compile_project.timeoutMs` accepts 1 second through 15 minutes. It changes only how long the MCP
 call waits, not the account's server-side compile allowance.
 
+`download_project_zip.timeoutMs` (1 second to 15 minutes, default 5 minutes) bounds a whole-project
+download, the whole transfer included, in place of `OVERLEAF_REQUEST_TIMEOUT_MS`.
+
 ## Where the session is stored
 
 The login command uses a separate browser profile and never reads your normal browser profile.
