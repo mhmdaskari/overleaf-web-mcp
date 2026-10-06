@@ -1,65 +1,152 @@
 # Roadmap
 
-The planned path from `0.1.3` to `1.0.0`. Every item below comes from a real end-to-end session
-against `overleaf-web-mcp@0.1.2` (authenticating, listing 127 projects, inspecting a tree,
-overwriting three text documents, uploading a figure, deleting 20 stale entities one at a time,
-compiling, and round-tripping files to verify uploads), cross-checked against Overleaf's
-open-source web service (`overleaf/overleaf`, `services/web/app/src/router.mjs` and its
-controllers), so every endpoint named here is confirmed to exist rather than assumed.
+The planned path from `0.1.3` to `1.0.0`. The stages through v0.4.0, and the compile and
+multi-file stages (v0.6.0 and v0.9.0), come from a real end-to-end session against
+`overleaf-web-mcp@0.1.2` (authenticating, listing 127 projects, inspecting a tree, overwriting
+three text documents, uploading a figure, deleting 20 stale entities one at a time, compiling, and
+round-tripping files to verify uploads), cross-checked against Overleaf's open-source web service
+(`overleaf/overleaf`, `services/web/app/src/router.mjs` and its controllers), so every endpoint they
+name is confirmed to exist rather than assumed. The shared-core, CLI, and tracked-change review
+stages (v0.5.0, v0.7.0, v0.8.0) come from a review of this repository's code against the same
+upstream source; any endpoint, payload, status, or OT form not yet confirmed there is marked
+*(verify in code)*, and confirming it is that stage's first task. MCP stays supported but stops
+being the only interface: through one engine, the operations are reachable from a TypeScript
+library from v0.5.0 and from a command line from v0.7.0 (see **Interfaces beyond MCP**).
 
 > **How to use this file (for coding agents and people).** Work one stage at a time, top to
 > bottom. Each stage has a motivation, the design, a **Tasks** checklist, and **Acceptance**
 > criteria that must be mechanically checkable before the stage counts as done. Before starting
 > any stage, run the **Stage 0** verification below; the code moves on between releases and some
-> items are marked *(verify in code)*. Update this file as tasks land; do not leave it stale.
+> items are marked *(verify in code)*. Before starting v0.5.0 or anything after it, read
+> **Interfaces beyond MCP**: it fixes where new code goes and which behaviour may not differ
+> between the MCP server, the CLI, and the library. A stage that tightens a safety default
+> announces it one minor version ahead and enforces it in the next: v0.5.0 announces, v0.6.0
+> enforces. Update this file as tasks land; do not leave it stale.
 
-Each stage assumes the previous one shipped. Tool names follow the existing snake_case convention.
+Each stage assumes the previous one shipped. Tool names follow the existing snake_case convention;
+from v0.7.0, CLI commands and SDK methods are derived from them.
 
 ## Conventions
 
 - Tool names are snake_case `verb_noun` (`list_projects`, `manage_entity`). Parameters are
-  camelCase.
-- Every tool ships with MCP tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`).
-  From v0.2.0 on, every **new** tool that returns structured data also declares an `outputSchema`
-  and returns `structuredContent`, mirrored as a JSON text block for older clients. Existing tools
-  gain `outputSchema` when their result shape next changes, and v1.0.0 back-fills the rest.
+  camelCase. From v0.7.0 a tool name is also a CLI and SDK name (`call read_file`,
+  `client.readFile`).
+- From v0.5.0 every operation is defined once, in `src/contracts/`: input schema, output schema,
+  and effects. The MCP server, the CLI, and the library are adapters over `src/service/`; an
+  adapter parses, renders, and maps errors, and never shapes arguments, applies policy, or
+  retries.
+- Every tool ships with MCP tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`),
+  declared next to its effects in the contract entry from v0.5.0 on, and checked against them.
+  `readOnlyHint` means the call changes nothing on Overleaf **and** writes nothing locally. From
+  v0.2.0 on, every **new** tool that returns structured data also declares an `outputSchema` and
+  returns `structuredContent`, mirrored as a JSON text block for older clients; v0.7.0 back-fills
+  the rest, because the CLI and SDK return the same validated objects.
 - Bulk and sync tools are **compositions** of existing primitives (`upload_file`, `manage_entity`,
   `read_file` / `write_file`), never parallel reimplementations.
-- Destructive actions use confirm-by-value (`confirmPath`, `confirmName`, `confirmDeleteCount`),
-  and fail with `CONFIRMATION_MISMATCH` when the value is wrong. MCP elicitation is an optional
-  second layer when the client supports it; confirm-by-value stays mandatory as the fallback.
-- Failures are typed error codes on `McpError`, never raw exceptions. New codes are introduced per
-  stage and collected in the v1.0.0 taxonomy table.
-- Ambiguous writes are never retried automatically. Bounded backoff is only for clearly transient
-  transport failures on reads.
+- Destructive actions use confirm-by-value (`confirmPath`, `confirmName`, `confirmCount`,
+  `confirmDeleteCount`, and from v0.5.0 `overwrite` for a replacement), and fail with
+  `CONFIRMATION_MISMATCH` when the value is wrong. A `revision` or a `planToken` counts as
+  expected-state confirmation. A mutation that applies with no expected state at all must be
+  requested by a named parameter (`unplanned`, `uncheckedDocumentReplace`), never by omission. MCP
+  elicitation is an optional second layer when the client supports it; confirm-by-value stays
+  mandatory as the fallback, and no CLI flag supplies a confirm value on the caller's behalf.
+- Failures are typed error codes on `McpError`, never raw exceptions, through every interface. The
+  class keeps its name; a neutral alias may be exported from `overleaf-web-mcp/core`. New codes are
+  introduced per stage, listed in `ERROR_CODES` from v0.5.0, and collected in the v1.0.0 taxonomy
+  table. Error `details` are allowlisted: status codes, short identifiers, counts, and values the
+  caller supplied, never response bodies or upstream free text.
+- Ambiguous writes are never retried automatically, by any interface. Bounded backoff is only for
+  clearly transient transport failures on reads.
+- A tightened safety default is announced one minor version ahead (a CHANGELOG `Deprecated` entry
+  naming the enforcing version, and a `deprecations` entry in the affected result), then enforced
+  in the next minor under `Changed`. New interfaces start strict, with one exception:
+  `overleaf-web-mcp/core` in v0.5.0 exposes the same service as the MCP server during the
+  announce minor, and v0.7.0 documents which parts of it are stable.
 
 ## Stages
 
-| Stage | Theme | New tools | The thing it fixes |
-| --- | --- | :---: | --- |
-| v0.1.3 | Documentation, metadata, small additive fixes | 0 | Behaviour that had to be reverse-engineered |
-| v0.2.0 | Project lifecycle | 5 | No way to create, rename, trash, or configure a project |
-| v0.3.0 | Session keepalive | 0 | A saved session that dies after five idle days and presents as a dead server |
-| v0.4.0 | Bulk and sync | 3, then 2 | 24 one-at-a-time calls to sync one folder |
-| v0.5.0 | Compile and build ergonomics | 2 | Success inferred from counters; no PDF or log access |
-| v0.6.0 | Multi-file documents | 1 | Section tools stop at `\input` boundaries |
-| v1.0.0 | Hardening | 0 | Failure modes that are not yet legible |
+| Stage | Theme | New tools | Effort | The thing it fixes |
+| --- | --- | :---: | :---: | --- |
+| v0.1.3 | Documentation, metadata, small additive fixes | 0 | shipped | Behaviour that had to be reverse-engineered |
+| v0.2.0 | Project lifecycle | 5 | shipped | No way to create, rename, trash, or configure a project |
+| v0.3.0 | Session keepalive | 0 | shipped | A saved session that dies after five idle days and presents as a dead server |
+| v0.4.0 | Bulk and sync | 3, then 2 | S (point release) | 24 one-at-a-time calls to sync one folder |
+| v0.5.0 | Shared core and safety | 0 | L | Operations reachable only through MCP; safety that depends on the caller picking the safe option |
+| v0.6.0 | Compile and build ergonomics | 2 | M | Success inferred from counters; no PDF or log access. Also enforces the safety defaults v0.5.0 announced |
+| v0.7.0 | CLI, SDK, and Skills | 0 | L | Every Overleaf operation needs an MCP client |
+| v0.8.0 | Tracked-change review: accept and reject | 2 | L | Tracked changes can be written but not listed, accepted, or rejected |
+| v0.9.0 | Multi-file documents | 1 | M | Section tools stop at `\input` boundaries |
+| v1.0.0 | Hardening and compatibility | 0 | M | Failure modes that are not yet legible; no way to check an install before relying on it |
+
+Effort is a relative size (S, M, L) of the work still open in a stage, not a date.
 
 **v0.1.3 shipped on 1 September 2026**, followed the same day by **v0.1.4**, a documentation release: a human-first README, the documentation site at <https://mhmdaskari.github.io/overleaf-web-mcp/>, and usage instructions sent to MCP clients at connect time. **v0.2.0 shipped on 10 September 2026** with the five project lifecycle tools, filtered `list_projects`, and the `RATE_LIMITED` and `CONFIRMATION_MISMATCH` error codes, followed the same day by **v0.2.1**, a documentation patch. **v0.3.0 shipped on 14 September 2026** with the `keepalive` command, `sessionExpiresAt` on `auth_status`, and a cookie-jar fix that persists the session deadline, followed on 22 September by **v0.3.1** (proxy support) and **v0.3.2** (documentation). **v0.4.0 shipped on 27 September 2026** with `plan_sync`, `sync_directory`, and `delete_entities`, ignore rules, progress notifications, and the `REMOTE_DRIFT` and `PATH_OUTSIDE_ROOT` error codes; `batch_upload` and `download_project_zip` follow in a point release. See the [changelog](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/CHANGELOG.md) for what landed.
 
-After v1.0.0 the server would register 32 tools (27 today). Every tool description costs the MCP
-client context on every turn, so the lifecycle stage below deliberately reuses the
-`manage_entity` action-enum pattern instead of adding one tool per verb.
+**Unreleased:** the server moved from `@modelcontextprotocol/sdk` 1.29 to `@modelcontextprotocol/server` 2.3, the v2 SDK, and `serve` answers both protocol eras over stdio. Protocol 2026-07-28 removes the `initialize` handshake (each request carries its protocol version and client capabilities in `_meta`) and adds `server/discover`, which servers must implement and clients may call, and whose result carries the server instructions; clients on the 2025-era versions still receive them in the `initialize` result. A 2026-07-28 client that never calls `server/discover` never sees the instructions, so tool descriptions must stay self-sufficient. Tool names, inputs, and result shapes are unchanged.
+
+After v1.0.0 the server would register 34 tools (27 today): two in the v0.4.x point release (`batch_upload`, `download_project_zip`), two in v0.6.0 (`download_compile_output`, `get_compile_log`), two in v0.8.0 (`list_tracked_changes`, `manage_tracked_changes`), and one in v0.9.0 (`get_full_document`). Every tool description costs the MCP client context on every turn, so the lifecycle and tracked-change review stages deliberately reuse the `manage_entity` action-enum pattern instead of adding one tool per verb, and checks that need no agent (`doctor`, `capabilities`) are CLI commands, not tools.
 
 ## What already works well (keep these patterns)
 
 - **`manage_entity`'s `confirmPath === path` requirement on delete.** It caught nothing dangerous in the session, but it is the right shape for a destructive action, and later stages reuse it (`confirmName` on project trash/delete, a delete-count confirmation on mirror sync).
-- **`upload_file` overwrites in place by path**, keeping the same `entity_id` across re-uploads. This is what made replacing `main.tex` wholesale possible without a `read_file` → revision → `write_file` round trip.
-- **`get_sections` is honest about its own limits.** Its description states outright that it never follows `\input`/`\include`. Keep this practice when multi-file support lands in v0.6.0.
+- **`upload_file` overwrites in place by path**, keeping the same `entity_id` across re-uploads. This is what made replacing `main.tex` wholesale possible without a `read_file` → revision → `write_file` round trip. From v0.6.0 (announced in v0.5.0) a replacement must be asked for (`overwrite`, or `uncheckedDocumentReplace` for a document); the stable `entity_id` stays.
+- **`get_sections` is honest about its own limits.** Its description states outright that it never follows `\input`/`\include`. Keep this practice when multi-file support lands in v0.9.0.
 - **`write_file` requiring a `revision` from a prior `read_file`** is the right default against blind clobbers of text a human might be editing concurrently.
-- **the error model already exists.** `McpError` carries a typed `code`, a `retryable` flag, and structured `details`. v1.0.0 should extend this, not replace it.
-- **writes are never retried automatically.** The README documents that a timed-out write is observed, never re-submitted. Every bulk tool below must inherit that invariant.
-- **all project mutations run through one per-project FIFO.** Bulk tools are compositions over that queue; they reduce tool calls and context, not wall-clock time. Say so in their descriptions.
+- **the error model already exists.** `McpError` carries a typed `code`, a `retryable` flag, and structured `details`. v1.0.0 should extend this, not replace it. The CLI and SDK (v0.7.0) report failures with the same class and codes.
+- **writes are never retried automatically.** The README documents that a timed-out write is observed, never re-submitted. Every bulk tool below must inherit that invariant, and the CLI and SDK add no retry of their own.
+- **all project mutations run through one per-project FIFO.** Bulk tools are compositions over that queue; they reduce tool calls and context, not wall-clock time. Say so in their descriptions. The queue is per process: two CLI processes working on one project are not serialized against each other, and revision checks and plan tokens are what protect them.
+- **the adapter already sits on one runtime interface.** `src/mcp/tools.ts` reaches Overleaf only through the `OverleafToolRuntime` interface it declares; outcome classification lives below it, and the adapter has no retry. v0.5.0 moves that interface out of the MCP folder rather than adding a layer.
+- **tokens are self-contained.** Revision tokens (`createRevision` in `src/core/revision.ts`) and plan tokens carry everything a later call needs, so read-then-write and plan-then-apply work across processes with no daemon or state file; v0.6.0's `buildRef` follows suit.
+
+## Interfaces beyond MCP
+
+**Decision: keep MCP, with one engine behind several interfaces.** What this project offers is Overleaf operations that stay correct under concurrent editing: revision-checked writes verified against a fresh join, tracked writes that never fall back, timed-out writes observed and never replayed, and syncs that stop when either side drifted from the plan. None of that depends on MCP; access does. `parseCliCommand` (`src/cli-command.ts`) accepts only `serve`, `login`, `keepalive`, and `help`, and the package's one entry loads the MCP SDK and exposes the engine only as the undocumented `OverleafRuntime`, whose domain classes skip the tool handlers' argument shaping. A CI step or a shell-driven coding agent needs an MCP client to reach anything, and a TypeScript program has no supported API. MCP itself is still developing (protocol 2026-07-28 changed how clients connect), so the plan adds interfaces rather than swapping one.
+
+**Two boundaries.** The caller-facing one (MCP, the CLI, the library, Skills, perhaps HTTP) decides how an operation is invoked, confirmed, and rendered, and is replaceable. The Overleaf-facing one, private REST routes and Socket.IO 0.9 OT through a saved web session (the [private API catalogue](https://mhmdaskari.github.io/overleaf-web-mcp/private-api/)), carries the maintenance risk, which only boundary validation, sanitized fixtures, `doctor` (v1.0.0), and a future official-API backend reduce.
+
+**Architecture.** Each layer calls only the one below it.
+
+- **Adapters.** `src/mcp/`; `src/cli/` (v0.7.0); `src/sdk.ts`, published as `overleaf-web-mcp/core` from v0.5.0 with a client facade from v0.7.0; Skills (v0.7.0), which call only the public CLI; HTTP only if a trigger below fires.
+- **Contracts and service (v0.5.0).** `src/contracts/` holds operation schemas, effects, error codes, and capability types. `src/service/` holds one function per operation with its argument shaping, and checks effects against the access policy in `src/core/policy.ts` before any work starts.
+- **Domain engine.** `src/overleaf/`, `src/protocol/`, `src/http/`, `src/auth/`. The domain APIs check every effect they perform against the same policy, so a direct call through the exported runtime is covered. Plan and apply stay in `SyncApi` (`src/overleaf/sync.ts`), with the per-project queue and every verification rule.
+- **Backends.** One today, the web session. An official-API or Git backend would advertise its own capabilities (v1.0.0) and never be substituted silently; a Git backend cannot make tracked changes or revision-checked live edits, and Overleaf's Git integration is paid.
+
+**Rules the shared layer keeps for every interface.**
+
+- Operation ids are the tool names; schemas are versioned with the package.
+- Effects come from one enum: `overleaf-read`, `overleaf-write`, `overleaf-delete`, `project-lifecycle`, `compile`, `local-read`, `local-write`, `unchecked-replace`. Comment writes and, from v0.8.0, tracked-change decisions are `overleaf-write`.
+- Outcomes use the existing `details.outcome` values `not_applied` and `unknown`; a write that applied resolves, with `recoveredAfterTimeout` when observed after a timeout. New failure kinds go in `details.kind`.
+- Progress, cancellation, and diagnostics go through a neutral `OperationContext { onProgress?, signal?, onDiagnostic? }`; cancelling never aborts a submitted write.
+- Large outputs (logs, PDFs, zips) go to caller-named local paths under the local-write policy; a remote service would return scoped artifact references.
+- One policy path for every public mutation, exported runtime methods included.
+- No promise of cross-process serialization; revision checks and plan tokens protect separate processes.
+- No code-execution surface: nothing runs caller-supplied code with access to the saved session.
+
+**Packaging.** One package. `overleaf-web-mcp/core` is a subpath export from v0.5.0; the root stays the MCP entry with every current export, so no `./mcp` subpath is needed. Split packages only on demand. The binary stays `overleaf-web-mcp`; a neutral alias is a later, separate decision, and no name for it has been checked.
+
+**What would change the plan.** Conditions, not stages.
+
+| If | Then | Not before |
+| --- | --- | --- |
+| MCP stays in wide use by the clients served | Keep the adapter first-class; follow protocol revisions and the v1.0.0 compatibility matrix | now |
+| Coding agents favour shell commands and Skills | Make the CLI their first install path; keep MCP | v0.7.0 |
+| Applications call the library directly | Freeze its contract under SemVer; consider a separate `core` package | v0.7.0 |
+| A remote integration needs HTTP | A scoped HTTP service with an OpenAPI description generated from `src/contracts/`, its own authentication, artifact references, and the session never exposed | a named consumer |
+| Browser-native tool interfaces (WebMCP) become practical on Overleaf's pages | An adapter experiment outside the stages | its status re-checked |
+| Another tool protocol gains adoption | A thin adapter over `src/service/` | a named client |
+| Overleaf changes a private endpoint | Repair the web-session backend, its validation, and fixtures | any time |
+| An official Overleaf API covers these operations | A new backend; the web session stays until it covers revision checks and tracked edits | it exists |
+| Someone needs Git-based sync | An optional backend with its own capabilities, chosen explicitly | a recorded need |
+| The product becomes an agent other agents delegate to | Consider an agent-to-agent (A2A) interface | not planned |
+
+**How the change is judged.** v0.7.0 adds an opt-in comparison on disposable projects that runs four tasks through MCP, the CLI, and the library, and records per task:
+
+- **revise one section:** success, bytes an agent reads, round trips, conflict outcome;
+- **sync figures and sources:** skips, upstream requests and bytes, drift, partial failure;
+- **diagnose a failed build:** errors located by file and line, output size, artifacts, unneeded recompiles;
+- **resolve a review task:** anchoring, action scope, accidental mutations (expected zero); tracked changes join in v0.8.0.
+
+Start-up and Overleaf time are reported separately, cold and warm, never asserted; when an agent runs the tasks, model latency is reported apart from both. Through every interface, tests keep proving that a stale revision fails without overwriting, a timed-out write is never replayed, a tracked write never falls back, a required plan is enforced in the service, preflight drift changes nothing, a mid-sync failure reports what completed, a failed upload prevents every delete, one policy refuses the same call everywhere, local-root checks cover every file operation, and logs never contain cookies, document content, review message bodies, or raw upstream responses.
 
 ---
 
@@ -76,17 +163,33 @@ what you find:
       `manage_entity`, `upload_file`, `download_file`, `plan_sync`, `sync_directory`,
       `delete_entities`, `get_sections`, `get_section_content`,
       `write_section`, `compile_project`, `stop_compile`, `list_comments`, `reply_to_comment`,
-      `add_comment`, `set_comment_status`, `monitor_project_history`. The README badge and
-      `docs/tools.md` must agree (`test/mcp/tools.test.ts` enforces it).
+      `add_comment`, `set_comment_status`, `monitor_project_history` (29 once the v0.4.x point
+      release adds `batch_upload` and `download_project_zip`). The README badge and
+      `docs/tools.md` must agree (`test/mcp/tools.test.ts` enforces it). From v0.5.0, every name
+      also has an entry in the operation registry under `src/contracts/`.
+- [ ] The MCP SDK is v2: `@modelcontextprotocol/server` 2.x in `dependencies`,
+      `@modelcontextprotocol/client` 2.x in `devDependencies` (tests only),
+      `npm ls @modelcontextprotocol/sdk` prints `(empty)`, and
+      `npm ls zod @modelcontextprotocol/core` shows one copy of each. Record the protocol
+      versions answered (when this was written, 2024-10-07 through 2025-11-25 with an
+      `initialize` handshake, each covered by the protocol-era tests, and 2026-07-28 without
+      one) and that `describe('protocol eras')` in
+      `test/server.test.ts` still finds `SERVER_INSTRUCTIONS` in the `initialize` and
+      `server/discover` results.
+- [ ] `SERVER_INSTRUCTIONS` stays under the 450-word bound in `test/server.test.ts` (444 words at
+      0.4.0). v0.5.0 brings it to at most 400 words once, so v0.6.0 and v0.8.0 can spend the
+      headroom; after that, a stage that adds guidance trims elsewhere.
 - [ ] The limits and their environment variables still hold: `OVERLEAF_MAX_DOC_LENGTH` (fallback
       2,097,152 UTF-16 code units → `DOC_TOO_LARGE`) and `OVERLEAF_MAX_UPDATE_CHARS` (7,340,032
       serialized characters → `UPDATE_TOO_LARGE`).
 - [ ] *(verify live)* `upload_file` to an existing path replaces content **in place and keeps the
       `entity_id`**. Session evidence says yes; the `replaced` flag in its result depends on it.
+      From v0.5.0 check it with `overwrite: true`, which v0.6.0 requires.
 - [ ] `get_project_tree` `hash` equals `git hash-object <file>` for at least one binary entity.
 - [ ] The gated live tests (`RUN_OVERLEAF_LIVE_TESTS=1`, `test/live/`) and the CI workflows under
       `.github/workflows` (`ci.yml`, `publish.yml`, `docs.yml`) are as described in
-      `docs/development.md`.
+      `docs/development.md`. From v0.7.0, every command `renderHelp` prints appears in
+      `docs/cli.md`.
 
 ---
 
@@ -211,7 +314,7 @@ update_project_settings({ projectId: string, rootFilePath?: string,
 
 - **`manage_project` instead of `rename_project` + `delete_project`.** Mirrors `manage_entity`'s action enum so six verbs cost one tool description. The first draft proposed `delete_project({ mode: "trash" | "delete" })` as the destructive primitive. Overleaf's own model is trash first, permanent delete only from the trash. Follow it: `delete` succeeds only when the project is already trashed, and the description points callers at `trash` as the normal path. Trash is recoverable, which matters when the caller is an agent, and it is what makes v1.0.0's automated smoke test safe to run.
 - **`update_project_settings` instead of `set_root_document`.** `rootFilePath` is resolved through the tree and must be a `doc`; the change persists in the project's own settings. `compiler` and the TeX Live `imageName` are exactly the two settings an agent needs when a compile fails on a font or engine mismatch; they ride on the same endpoint for free.
-- **filter `list_projects` instead of adding `search_projects`.** Switch to `POST /api/project`, add `query` (case-insensitive substring on name), `includeArchived` and `includeTrashed` (default `false`), `limit` (default 50, max 200) and `sort: "lastUpdated" | "name"` (default `lastUpdated`, newest first), and return `{ projects, totalMatched, totalProjects }` with `lastUpdated`, `archived`, and `trashed` per project. Fewer tools, and it matches what `@netique/overleaf-mcp`, `overleaf-sync`, and `olcli` already do. `auth_status` counts projects through the same endpoint's `totalSize`.
+- **filter `list_projects` instead of adding `search_projects`.** Switch to `POST /api/project`, add `query` (case-insensitive substring on name), `includeArchived` and `includeTrashed` (default `false`), `limit` (default 50, max 200) and `sort: "lastUpdated" | "name"` (default `lastUpdated`, newest first), and return `{ projects, totalMatched, totalProjects }` with `lastUpdated`, `archived`, and `trashed` per project. Fewer tools, and it matches what `@netique/overleaf-mcp` and `overleaf-sync` already do (`olcli` lists without search). `auth_status` counts projects through the same endpoint's `totalSize`.
 - **`CONFIRMATION_MISMATCH`** is a new error code for every confirm-by-value failure, including `manage_entity`'s `confirmPath`, which previously returned `INVALID_ARGUMENT`. The first draft's `ENTITY_NOT_FOUND` and `NOT_A_DOC` are covered by the existing `NOT_FOUND` and `INVALID_ARGUMENT` that `resolveProjectPath` already throws; no duplicate codes.
 - **`RATE_LIMITED`** was pulled forward from v1.0.0 because zip import and project creation are the first endpoints Overleaf throttles in practice.
 
@@ -388,64 +491,151 @@ The first release of this stage ships `plan_sync`, `sync_directory`, and `delete
 
 ---
 
-## v0.5.0 — Compile and build ergonomics
+## v0.5.0 — Shared core and safety
 
-**Motivation:** `compile_project` returns a large JSON blob of build-artifact URLs plus a `stats` object. The session concluded success from `stats["latexmk-errors"] === 0`, never fetched `output.log`, and had no tool to do so. There is also no way to pull the compiled PDF to a local path; `download_file` is for project source entities only.
+**Motivation:** two problems with one root. First, every operation, as a tool defines it, is reachable only through the MCP adapter: `OverleafToolRuntime` is declared in `src/mcp/tools.ts`, the argument shaping for `manage_project`, `write_file`, `manage_entity`, and `list_comments` lives in its handlers, and the exported `OverleafRuntime` reaches the domain classes but not that shaping. A CLI or library built on that would copy the shaping, and copies are where safety rules drift apart. Second, safety holds only when the caller picks the safe option, and error details carry what AGENTS.md forbids:
 
-**what the code does today, and why the failure path matters more than the success path.** `src/overleaf/compile.ts` throws `COMPILE_FAILED` for **every** non-`success` status and buries the whole response, including the `output.log` URL, under `details.result`. So on the most common failure, a LaTeX error, the caller receives an error object with the evidence hidden inside it. Overleaf's web client distinguishes these non-success statuses: `failure`, `timedout`, `terminated`, `too-recently-compiled`, `rate-limited`, `autocompile-backoff`, `compile-in-progress`, `project-too-large`, `validation-problems`, `clsi-maintenance`, `clsi-unavailable`. Output files are fetched from the `url` each `outputFiles` entry already carries (`/project/:id/build/:buildId/output/:file`), adding `clsiserverid` as a query parameter when the response includes one.
+- `sync_directory` checks drift only when given a `planToken`; without one, mirror mode counts `confirmDeleteCount` against a delete set nobody reviewed, while the README, `docs/index.md`, and the `docs/safety.md` heading state the guarantee unconditionally.
+- `upload_file` replaces whatever is at the path, documents included, with no revision check and no confirm value.
+- Local paths are read and written wherever the process can reach, and `download_file` writes locally while annotated `readOnlyHint: true`.
+- Ids reach request paths unencoded, and `new URL(path, base)` in `OverleafHttpClient.request` honours `..` and `?`, so a crafted `projectId` or `threadId` can retarget a POST that carries the CSRF token.
+- `COMPILE_FAILED` carries the whole compile response in `details.result`, the protocol layer stringifies upstream socket payloads into messages, and a non-JSON 200 body is quoted in a `REMOTE_ERROR`.
+
+This stage fixes both before any new interface exists, and adds no MCP tool.
+
+**What changes for existing callers, and when.** These change an agent's usual call, so they follow the one-minor rule even before 1.0; this table changes the shipped behaviour the v0.4.0 section records.
+
+| Behaviour | v0.5.0 (announce) | v0.6.0 (enforce) |
+| --- | --- | --- |
+| `sync_directory` without `planToken` | Runs; result has `planned: false` and a `deprecations` entry | `CONFIRMATION_MISMATCH`, `details.missing: "planToken"`; additive may pass `unplanned: true` instead |
+| `upload_file` onto an existing binary, `overwrite` omitted | Replaces, with a `deprecations` entry; an explicit `overwrite: false` refuses now | `CONFIRMATION_MISMATCH`, nothing sent |
+| `upload_file` onto an existing document | Replaces, with a `deprecations` entry | `INVALID_ARGUMENT` naming `write_file` with `localPath`, unless `uncheckedDocumentReplace: true` |
+| `COMPILE_FAILED` `details.result` | Reduced to `{ status }`, deprecated | Removed |
+
+There is no compatibility switch: `overleaf-web-mcp/core` follows the table, and the SDK facade arrives in v0.7.0, after enforcement, so it starts strict.
+
+**Design decisions:**
+
+- **Move first, with no public change.** `src/contracts/` takes the schemas verbatim from `src/mcp/tools.ts`, plus effects, each entry's annotations (checked against its effects), `ERROR_CODES`, `OperationContext`, and `OverleafService` (today's `OverleafToolRuntime`); `createOverleafService(runtime)` in `src/service/operations.ts` takes the shaping, so each MCP handler becomes one call.
+- **`overleaf-web-mcp/core`** is a subpath of this package with entry `src/sdk.ts` (`src/core/` stays the internal utilities folder). It never imports `@modelcontextprotocol/*`, does not export `ProjectConnection`, and keeps `connectionFactory` a test seam.
+- **Expected state by default.** Single-entity writes use a revision, an `expectedHash`, or entity ids, and a mutation with none must be asked for by name. A `planToken` records what `plan_sync` observed, not that a person reviewed it; confirm-by-value and elicitation (v1.0.0) are the approval layer.
+- **`uncheckedDocumentReplace` keeps a recorded workflow.** The v0.1.3 decision table recommends `upload_file` to "push text when nobody else is editing", and the checked route through `read_file` costs the whole document in the model's context.
+- **`overwrite` has no default until v0.6.0**, so an omitted value (deprecated) differs from an explicit `false` (refused). `download_file`'s `INVALID_ARGUMENT` for the same case stays, as the one recorded exception. **`expectedHash` is a preflight, not a compare-and-swap**: the upload route takes only `qqfile` and `name`, so a replacement landing between check and upload is lost, and the docs say so.
+- **The access policy is not a sandbox.** `src/core/policy.ts` decides allowed projects, local read and write roots, and allowed effects. With every new variable unset, only three refusals are new: local writes to the cookie jar or browser profile, a `.olignore` that resolves outside its folder, and ids that are not path-safe. It cannot close the gap between the realpath check and the open or contain a malicious local process; it stops an agent, possibly steered by text it read in a project, from reaching outside what it was given. Projects created in a process join its allowlist in memory, so a later CLI process (v0.7.0) does not see them.
+
+```ts
+sync_directory({ ...existing, unplanned?: boolean })
+  → { ...existing, planned: boolean,
+      deprecations?: [{ parameter: string, message: string, enforcedIn: string }] }
+  // unplanned: additive only, never deletes; INVALID_ARGUMENT with a planToken or mode "mirror"
+
+upload_file({ ...existing, overwrite?: boolean,        // no default until v0.6.0, then false
+              expectedHash?: string,                   // 40 hex characters, from get_project_tree
+              uncheckedDocumentReplace?: boolean })    // blind and never tracked; effect-gated
+  → { ...existing, deprecations?: [...] }              // gains an outputSchema; still destructiveHint true
+
+download_file  // annotations become { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
+```
+
+New error code `POLICY_DENIED`; new variables `OVERLEAF_ALLOWED_PROJECTS`, `OVERLEAF_LOCAL_READ_ROOTS`, `OVERLEAF_LOCAL_WRITE_ROOTS`, `OVERLEAF_ALLOWED_EFFECTS`.
+
+### Tasks
+
+- [ ] **Documentation corrections** (may ship earlier, in a 0.4.x patch). Make the sync guarantee conditional on a `planToken` in the README, `docs/index.md`, and `docs/safety.md`, and qualify the README's "each one confirms by value", false for `upload_file`, `stop_compile`, and additive `sync_directory`. `docs/safety.md` says a `planToken` is not human approval and that a per-item `failed[]` entry leaves earlier `completed[]` items applied.
+- [ ] **AGENTS.md.** Add the one-minor rule. Amend the confirm-by-value rule: `stop_compile` is the one destructive tool without a confirm value, a `revision` or `planToken` counts as expected-state confirmation, and `unplanned` and `uncheckedDocumentReplace` are the only named unchecked opt-ins. Rescope "stdout is reserved for MCP protocol frames" to `serve`, since `help`, `login`, and `keepalive` already print to stdout.
+- [ ] **Contracts and service** as designed, with the `listTools()` golden snapshot in `test/server.test.ts`; `McpErrorCode` is derived from `ERROR_CODES`; no write path receives a request's abort signal.
+- [ ] **Lint boundary.** `no-restricted-imports` forbidding `**/mcp/**`, `**/server.js`, and `@modelcontextprotocol/*`, type imports included, outside `src/mcp/`, `src/server.ts`, `src/cli.ts`, and `src/index.ts`; `no-console`; and no `process.stdout` or `process.stderr` outside `src/cli.ts` and `src/server.ts` (whose `runStdioServer` defaults the stdio transport to `process.stdin` and `process.stdout`). Only `src/cli.ts` writes `OperationContext.onDiagnostic` notices (`{ tool, code }`) to stderr.
+- [ ] **`./core` export.** `src/sdk.ts` exports `OverleafRuntime`, `readConfig`, `McpError`, `ERROR_CODES`, `createOverleafService`, and the contract types; `package.json` `exports` gains `"./core"`; a CI step after Build imports it by package self-reference.
+- [ ] **Announce phase.** The new fields, with upload checks inside the queue job before `postForm`. Sync's `#applyUpload` passes `overwrite: false` for new paths and `overwrite: true` with `expectedHash` for changed binaries, so a refusal becomes a per-item `REMOTE_DRIFT`, which already withholds deletes. A `batch_upload` defaulting to `onConflict: "overwrite"` joins the transition.
+- [ ] **Tests.** Every operation with a destructive effect has one of `confirmPath`, `confirmName`, `confirmCount`, `confirmDeleteCount`, `overwrite`, `revision`, or `planToken`, with an allowlist of exactly `['stop_compile']`. In `test/overleaf/sync.test.ts`, tokenless call sites plan first or pass `unplanned`, and `FakeProject` counts reads and mutations.
+- [ ] **Access policy.** `assertProject`, `resolveLocalRead`, `resolveLocalWrite`, and `assertEffect`, with roots resolved by `realpath` in `OverleafRuntime.create`. Reads: `resolveTextContent`, `EntitiesApi.uploadFile`, `ProjectsApi.importProjectZip`, the `scanLocalFolder` root, and `.olignore` (refused outside the folder, since its patterns are echoed back). Writes: `EntitiesApi.downloadFile`, later `download_project_zip` and `download_compile_output`. Refusals are `PATH_OUTSIDE_ROOT` with `details.kind`. Projects are checked in `ProjectConnectionCache.withConnection` and every HTTP-only path, and `list_projects` shows only allowed ones.
+- [ ] **Path-safe ids.** Reject `/`, `\`, `.`, `?`, `#`, and `%` in `projectId`, `sourceProjectId`, and `threadId` (check Community Edition id formats before narrowing to 24 hex); `encodeURIComponent` at every interpolation in `src/overleaf/`; `OverleafHttpClient.request` asserts the resolved origin equals `baseUrl`'s, and mutating requests use `redirect: "manual"` if a cross-origin redirect would keep `x-csrf-token`.
+- [ ] **Allowlisted error details.** `COMPILE_FAILED` details become `{ status, rootFilePath, result: { status } }`, with `status` echoed only when it matches `^[a-z][a-z0-9-]{0,63}$`, else `"unrecognized"`; known upstream socket messages, which contain spaces, map to identifiers, and a raw socket `Error` in `openProjectConnection` no longer supplies the message; the upload body's `error` must pass the short-code check; `create_folder`'s `created` becomes `{ _id, name }`; JSON parse failures become `PROTOCOL_UNSUPPORTED` with `{ path, contentType }`.
+- [x] Instructions are delivered on both protocol eras (`initialize` and `server/discover`), tested in memory (done with the SDK move).
+- [ ] **Instructions, counts, docs.** `SERVER_INSTRUCTIONS` to at most 400 words once; `test/mcp/tools.test.ts` also checks every "All N tools" in the README (the tool-list sentence and the Documentation table row) and the comparison "Tools" cell; a "Local effect" column in the tool tables, a policy section in `docs/configuration.md`, and "The access policy is not a sandbox" in `docs/safety.md`, which with the `upload_file` description also says `expectedHash` is a preflight, not a compare-and-swap.
+- [ ] **CHANGELOG 0.5.0:** `Added`, `Deprecated` (each announced default, naming 0.6.0), and `Changed` (annotations, path-safe ids, `.olignore` refusal, sanitized details, the `create_folder` result).
+
+### Acceptance
+
+- After the move the committed `listTools()` snapshot is unchanged, and `test/mcp/tools.test.ts` and `test/server.test.ts` pass with only import-path changes.
+- `grep -rnE "from '(\.\./)*\.?/?mcp/|@modelcontextprotocol" src` matches only `src/mcp/`, `src/server.ts`, and `src/cli.ts`, and a lint fixture importing `./mcp/tools.js` from `src/runtime.ts` fails.
+- With every `@modelcontextprotocol/*` module and `src/mcp/tools.js` mocked to throw on load, `src/sdk.js` performs `read_file` through injected fakes. The built `overleaf-web-mcp/core` exposes `createOverleafService` and a `McpError` strictly equal to the root's, not `ProjectConnection`, and the root still exports every 0.4.0 name.
+- Tokenless `sync_directory` resolves with `planned === false` and a `deprecations` entry `{ parameter: "planToken", enforcedIn: "0.6.0" }`; `unplanned: true` with a `planToken` or `mode: "mirror"` rejects with `INVALID_ARGUMENT` before any read.
+- `upload_file` onto an existing binary: `overwrite: false` gives `CONFIRMATION_MISMATCH` and a wrong `expectedHash` gives `REMOTE_DRIFT`, each with 0 `postForm` calls; the matching hash gives `replaced: true`; an omitted `overwrite` resolves with a `deprecations` entry.
+- `download_file` annotations equal the block above; no `readOnlyHint: true` operation has an effect other than `overleaf-read` or `local-read`; the destructive-tools test passes; `grep -n "one minor" AGENTS.md` matches; `grep -nE "plan you reviewed|what you reviewed" README.md docs/*.md | grep -v planToken` prints nothing.
+- Policy refusals make zero fetches: `write_file` with `localPath`, `upload_file`, `import_project_zip`, and `plan_sync` outside `OVERLEAF_LOCAL_READ_ROOTS`, or through a symbolic link that leaves it, reject with `PATH_OUTSIDE_ROOT` with 0 fetcher and connection-factory calls after `OverleafRuntime.create()`; `download_file` onto the cookie jar is refused with no roots set.
+- With `OVERLEAF_ALLOWED_PROJECTS=a`, every operation taking `projectId` or `sourceProjectId` rejects `b` with `POLICY_DENIED` and 0 fetches, a project created in the same process is accepted, and `list_projects` hides everything else. With `OVERLEAF_ALLOWED_EFFECTS` excluding `overleaf-write`, a direct `runtime.documents.writeFile` rejects with `POLICY_DENIED` and 0 `submitUpdate` calls.
+- `stop_compile` with `projectId: "../x?"` and `reply_to_comment` with `threadId: "../x?"` reject with `INVALID_ARGUMENT` before any fetch; `OverleafHttpClient.request("POST", "https://other.example/x")` throws before fetching.
+- No serialized error or result contains the sentinel or `<!DOCTYPE` for an `otUpdateError` quoting document text, `connectionRejected` `{ message: "SENTINEL" }`, an upload body `{ success: false, error: "Free <b>SENTINEL</b> text" }`, an HTML 200 body on `getJson`, or a compile status `"SENTINEL free text"` (which yields `details.status === "unrecognized"`).
+- The protocol-era tests pass after the trim, a one-time check finds `SERVER_INSTRUCTIONS` at 400 words or fewer, and the tool-count test fails when any README count disagrees with `TOOL_NAMES.length`.
+
+---
+
+## v0.6.0 — Compile and build ergonomics
+
+**Motivation:** `compile_project` returns a large JSON blob of build-artifact URLs plus a `stats` object. The session concluded success from `stats["latexmk-errors"] === 0`, never fetched `output.log`, and had no tool to do so. There is also no way to pull the compiled PDF to a local path; `download_file` is for project source entities only. This closes the README comparison gap "Reads the compile log and errors". It was v0.5.0 in earlier versions of this file; it now goes through the v0.5.0 contracts, so the CLI and SDK get both tools for free, and it enforces the safety defaults v0.5.0 announced.
+
+**what the code does today, and why the failure path matters more than the success path.** `src/overleaf/compile.ts` throws `COMPILE_FAILED` for **every** non-`success` status and, until v0.5.0, buried the whole response, including the `output.log` URL, under `details.result`. So on the most common failure, a LaTeX error, the caller receives an error object with the evidence hidden inside it. On success it spreads the raw, unvalidated response into the result. Overleaf's web client distinguishes these non-success statuses: `failure`, `timedout`, `terminated`, `too-recently-compiled`, `rate-limited`, `autocompile-backoff`, `compile-in-progress`, `project-too-large`, `validation-problems`, `clsi-maintenance`, `clsi-unavailable`. It may also handle `stopped-on-first-error`, `exited`, and `unavailable` (`clsi-unavailable` being only a UI key), put the build id only on `outputFiles[].build`, and keep output for `timedout` and `terminated` builds *(verify in code: `local-compile-context.tsx`, `CompileController.mjs`)*. Output files are served at `/project/:id/build/:buildId/output/:file`, adding `clsiserverid` as a query parameter when the response includes one; the server builds that path from the build id and a validated file name and never follows a `url` from the response.
 
 ### Changes to `compile_project`
 
 ```ts
 compile_project(...)  // existing params, plus stopOnFirstError?: boolean, draft?: boolean
   → {
-      ...existing fields (outputFiles, stats, buildId, clsiServerId, rootFilePath),
+      ...existing fields (outputFiles, stats, buildId, clsiServerId, rootFilePath), validated,
+      buildRef?: string,         // opaque; pass to get_compile_log / download_compile_output
       summary: {
-        status: "success" | "failure" | "timedout" | "terminated",   // Overleaf's own status
+        status: "success" | "failure" | "stopped-on-first-error",   // Overleaf's own status
         builtCleanly: boolean,   // === pdfProduced && errorCount === 0
-        errorCount: number,
+        errorCount: number,      // total; the lists below hold the first 20
         errors:   [{ file?: string, line?: number, message: string }],
         warnings: [{ file?: string, line?: number, message: string }],
-        undefinedReferences: string[],
-        undefinedCitations: string[],
-        missingFiles: string[],
-        pageCount?: number,
-        pdfSizeBytes?: number
+        undefinedReferences: string[], undefinedCitations: string[], missingFiles: string[],
+        pageCount?: number, pdfSizeBytes?: number
       }
     }
-  // outputSchema-typed; structuredContent + text mirror.
   // IMPORTANT: Overleaf reports status "success" under nonstopmode even when LaTeX errors
   // occurred. builtCleanly is the field callers should assert on.
 ```
 
-- **Return a parsed summary on success and on `failure` alike.** Throw only when there is no build output, and map the statuses: `too-recently-compiled`, `rate-limited`, `autocompile-backoff`, `compile-in-progress` → `COMPILE_RATE_LIMITED` (retryable, with `retryAfterMs`); `timedout` → `COMPILE_TIMEOUT`; `validation-problems` → `COMPILE_FAILED` carrying `validationProblems`; the rest → `COMPILE_FAILED` with the status.
-- **licence constraint on the log parser.** Overleaf's own `latex-log-parser.ts` and `bib-log-parser.ts` are AGPL-3.0; this package is MIT. Do not vendor them. Write an independent parser for the handful of patterns that matter (`! ` error lines with `l.<n>`, `LaTeX Warning: Reference … undefined`, `Citation … undefined`, `File … not found`, `Output written on output.pdf (N pages, M bytes)`, and the `.blg` "I didn't find a database entry" lines), keep it pure, and unit-test it against fixture logs (clean, errors under nonstopmode, missing bib) in the same style as `test/fixtures`.
-- **expose `stopOnFirstError` and `draft`.** Both are accepted by Overleaf's compile endpoint today alongside the `check` and `incrementalCompilesEnabled` fields the server already sends. `stopOnFirstError` gives agents a short log with the one error that matters; `draft` speeds up text-only iteration.
+- **Return a parsed summary on success and on `failure` alike.** Throw only when there is no build output: `too-recently-compiled`, `rate-limited`, `autocompile-backoff`, `compile-in-progress`, and HTTP 429 → `COMPILE_RATE_LIMITED` (retryable, with `retryAfterMs`); `clsi-maintenance` and `unavailable` → `COMPILE_UNAVAILABLE` (retryable); `timedout` → `COMPILE_TIMEOUT`; the rest, `validation-problems` included, → `COMPILE_FAILED`.
+- **Error details are exactly `{ status, rootFilePath, buildId?, buildRef? }`**; `details.result` is gone. A build id is recorded before the throw, so a timed-out build's log stays reachable. A `TIMEOUT` on the compile POST is `retryable: false`, because the compile may still be running.
+- **Validate the response at the boundary**: `status` required, `outputFiles` defaulting to `[]` with each entry reduced to `{ path, type, build? }` (no `url`), `stats` reduced to finite numbers. Anything else malformed is `PROTOCOL_UNSUPPORTED` with `{ endpoint: "compile", expectedKeys, receivedKeys }`.
+- **A stateless `buildRef`**, base64url like `planToken`, carries the project id, build id, and routing values, so a CLI call in a new process can fetch an earlier compile's output; within one process the tools default to the latest build.
+- **licence constraint on the log parser.** Overleaf's `latex-log-parser.ts` and `bib-log-parser.ts` are AGPL-3.0 and this package is MIT, so write an independent, pure parser for the patterns that matter (`! ` errors with `l.<n>`, undefined references and citations, missing files, `Output written on output.pdf (N pages, M bytes)`, `.blg` "I didn't find a database entry"), tested against fixture logs. A message is the `!` or warning line cut to 240 characters, without the source excerpt after `l.<n>`, which quotes the document.
+- **expose `stopOnFirstError` and `draft`**, which Overleaf's compile endpoint already accepts: the first gives a short log with the one error that matters, the second speeds up text-only iteration.
 
 ### New tools
 
 ```ts
-download_compile_output({ projectId: string, localPath: string, file?: string, buildId?: string, overwrite?: boolean })
+download_compile_output({ projectId: string, localPath: string, file?: string, buildRef?: string, overwrite?: boolean })
   → { localPath, file, sizeBytes, buildId }
-  // file defaults to "output.pdf" and accepts any path in outputFiles (output.log, output.blg,
-  // output.synctex.gz), so a PDF-only tool is unnecessary. Uses buildId + clsiServerId from the
-  // compile response; without buildId, the latest build known to this session, else NO_BUILD.
-  // A stale or evicted build returns BUILD_NOT_FOUND.
+  // file defaults to "output.pdf" and accepts any output path (output.log, output.blg,
+  // output.synctex.gz). Without buildRef, the latest build known to this process, else NO_BUILD;
+  // an evicted build is BUILD_NOT_FOUND. Writes through the local-write policy; an existing
+  // localPath without overwrite: true is CONFIRMATION_MISMATCH, nothing written.
+  // annotations: as download_file (readOnlyHint false, destructiveHint true, idempotentHint false)
 
-get_compile_log({ projectId: string, buildId?: string, kind?: "latex" | "bibtex",
+get_compile_log({ projectId: string, buildRef?: string, kind?: "latex" | "bibtex",
                   format?: "raw" | "errors-only", tail?: number })
-  → { buildId, log: string, errorLines: [{ line: number, text: string }] }
-  // Logs run to hundreds of KB; default to a bounded tail and document the bound.
-  // annotations: readOnlyHint true
+  → { buildId, log: string, truncated: boolean, errorLines: [{ line: number, text: string }] }
+  // Reads at most 1 MB and returns a bounded tail. annotations: readOnlyHint true
 ```
 
 ### Tasks
 
-- [ ] Log parser with fixture tests (clean, errors under nonstopmode, missing bib).
-- [ ] Wire the parser into `compile_project`; add `outputSchema`; map the non-success statuses.
-- [ ] `download_compile_output` and `get_compile_log` with CLSI routing.
-- [ ] Expose `overleaf://project/{id}/output/output.log` and `.../output.pdf` as read-only MCP **resources**.
-- [ ] Update the live test: assert `summary.builtCleanly === true` and PDF magic bytes `%PDF-`.
+- [ ] Log parser with fixture tests under `test/fixtures/compile/` (clean, errors under nonstopmode, missing bib, 500 errors).
+- [ ] Response schema, status mapping, error details, `buildRef`, a bounded body reader, and the parser wired into `compile_project`, all as contract entries with `outputSchema`.
+- [ ] Both new tools; `TOOL_NAMES`, the README counts, the tool table, the comparison row, `docs/tools.md`, and `docs/private-api.md` (output route, `stopOnFirstError` and `draft`, "passed through" removed).
+- [ ] The five new codes in `ERROR_CODES` and `docs/safety.md`; the Compiling paragraph of `src/mcp/instructions.ts`.
+- [ ] Read-only MCP **resources** `overleaf://project/{id}/output/output.log` and `.../output.pdf`; the live test asserts `summary.builtCleanly === true` and PDF magic bytes `%PDF-`.
+- [ ] **CHANGELOG 0.6.0:** `Added` (both tools, `summary`, `buildRef`, `stopOnFirstError`, `draft`, the output resources, the five codes); `Changed` (`failure` returns a summary, compile error details reduced to four keys, `outputFiles` entries without `url`, a compile-POST `TIMEOUT` not retryable).
+
+**Safety defaults flip (announced in v0.5.0)**
+
+- [ ] `sync_directory`: a `planToken` presence check before any read; mirror without a token, or additive with neither a token nor `unplanned: true`, fails with `CONFIRMATION_MISMATCH` and `details.missing: "planToken"`.
+- [ ] `upload_file`: `overwrite` defaults to `false`; an existing document without `uncheckedDocumentReplace` fails with `INVALID_ARGUMENT` naming `write_file` with `localPath`; `batch_upload` flips too if it joined.
+- [ ] Wording in `src/mcp/instructions.ts`, the `sync_directory` description ("required in mirror mode"), `docs/tools.md`, AGENTS.md, and `docs/safety.md`; CHANGELOG 0.6.0 `Changed` names each flipped default.
 
 ### Acceptance
 
@@ -453,12 +643,188 @@ get_compile_log({ projectId: string, buildId?: string, kind?: "latex" | "bibtex"
 - A clean project yields `builtCleanly: true`, `errorCount: 0`, correct `pageCount`.
 - `download_compile_output` writes a file starting with `%PDF-` in one call, no separate log fetch needed.
 - A failed compile returns structured `{ file, line, message }` errors instead of an opaque `COMPILE_FAILED`.
+- A table-driven test maps every listed status to its code and `retryable`; HTTP 429 gives `COMPILE_RATE_LIMITED`; an empty 200 body gives `PROTOCOL_UNSUPPORTED`.
+- Sentinels in `timings`, `outputFiles[].url`, `pdfDownloadDomain`, an unknown key, and a non-numeric `stats` value never reach the serialized error or result, and error details have no keys beyond the four above.
+- A `timedout` response with build `B` rejects with `COMPILE_TIMEOUT`, `details.buildId === "B"`, and a `buildRef` with which a second runtime instance requests build B's log.
+- The 500-error fixture gives 20 `errors` and `errorCount === 500`, with no message over 240 characters or matching `/^l\.\d+ /`.
+- `download_compile_output` requests only paths under `/project/<projectId>/`, never a fixture URL on another origin, and `file: "../x"` is `INVALID_ARGUMENT` with zero requests.
+- `TOOL_NAMES` grows by exactly two, and `grep -n "details.result" docs/safety.md docs/tools.md src/mcp/instructions.ts` prints nothing.
+- Tokenless mirror rejects with `details.missing: "planToken"` and no read or mutation; `unplanned: true` resolves with `planned === false` and no delete; `upload_file` onto an existing document without `uncheckedDocumentReplace`, or onto an existing binary without `overwrite`, fails with 0 `postForm` calls.
 
 ---
 
-## v0.6.0 — Multi-file document support
+## v0.7.0 — CLI, SDK, and Skills
+
+**Motivation:** the first complete Overleaf workflow that needs no MCP client. The command line reaches no operation today, and a TypeScript program has only the `./core` runtime. Since v0.5.0 every operation is one service function with one contract, so a CLI and an SDK are thin adapters, and multi-process use needs no new state, because revision tokens, plan tokens, and `buildRef` are self-contained. `keepalive` already shows the output convention (`main` in `src/cli.ts`). One gap remains: 17 tools at 0.4.0 return only a JSON text block (`handler()` in `src/mcp/tools.ts`); `upload_file` and `compile_project` gain an `outputSchema` in v0.5.0 and v0.6.0, and the other 15 gain one here.
+
+**Design decisions:**
+
+- **One generic command, plus aliases.** `call <tool_name>` reaches every operation; aliases only build its input. Input is validated with the operation's contract, so defaults equal MCP's. An unknown key is refused (`INVALID_ARGUMENT`), because a misspelled `writeMode` would otherwise write untracked; whether MCP strips unknown keys depends on the SDK *(verify against the v2 SDK)*, and `docs/cli.md` states any difference.
+- **Output framing.** An operation command prints exactly one JSON value on stdout, the tool's `structuredContent`. On failure stdout stays empty and stderr gets one line of `{ code, message, retryable, details? }`, which may contain local paths the caller supplied. Progress goes to stderr as JSON lines only with `--progress`. `serve`, `login`, `keepalive`, and an unknown command keep their output and exit 1 on any failure.
+- **Exit codes say what is safe to do next.** The HTTP client marks every timeout `retryable: true`, uploads and deletes included, so the code depends on whether the operation is read-only and on `details.outcome`; a wrapper that re-runs on "retry later" must never resubmit a write that may have applied.
+- **Noninteractive and strict.** No browser, no terminal input, no confirm value supplied, no `--yes` or `--force`, no retry, and the defaults v0.6.0 enforced.
+- **Each invocation is a session.** Every run bootstraps `GET /project` and may open a project socket, so the account can appear online and a shell loop multiplies requests; neither the per-project queue nor the in-memory allowlist reaches across processes. `docs/cli.md` points loops at `sync_directory` and `delete_entities`.
+- **Build references cross processes explicitly.** `compile log` and `compile download` require `--build-ref`, since a new process has no latest build; `compile run --download` does both in one process.
+- **No document text in argv**, which process listings and shell history show: content goes through `--content-file`, `--stdin`, or `--request <file>`.
+- **The SDK is a client facade over the same service.** `createOverleafClient(options?)` returns one camelCase method per operation plus `close()`, generated from the registry; each returns the contract output as a plain object and throws `McpError` with the same codes.
+- **Output contracts for every tool.** Private pass-through fields (`list_comments` threads, the `thread` of `reply_to_comment` and `add_comment`) stay loose. Read-only operations validate their result at run time; mutating ones are only typed, because an error after a write applied invites a resubmission.
+- **Skills come after the CLI**: revise a manuscript, handle reviewer comments, sync figures and sources, each a folder with a `SKILL.md` *(verify the current Agent Skills format)*. They call only public CLI commands, duplicate no authentication or OT logic, and treat manuscript text and reviewer comments as data, never instructions.
+
+### Commands
+
+```text
+overleaf-web-mcp call <tool_name> (--request <file> | --request - | --json '<object>') [--progress]
+overleaf-web-mcp schema <tool_name> (--input | --output)
+overleaf-web-mcp capabilities [projectId]
+
+overleaf-web-mcp projects list [--query <q>] [--limit <n>]
+overleaf-web-mcp tree <projectId>
+overleaf-web-mcp files read <projectId> <path>
+overleaf-web-mcp files write <projectId> <path> --revision <r> (--content-file <f> | --stdin) [--tracked]
+overleaf-web-mcp files download <projectId> <path> <localPath> [--overwrite]
+overleaf-web-mcp sync plan <projectId> <localFolder> [--destination <path>] [--ignore <glob>]... [--verbose]
+overleaf-web-mcp sync apply <projectId> <localFolder> --mode additive|mirror (--plan-token <t> | --unplanned)
+                 [--confirm-delete-count <n>] [--tracked] [--stop-on-error] [--progress]
+overleaf-web-mcp compile run <projectId> [--root <path>] [--download <localPath>] [--overwrite]
+overleaf-web-mcp compile log <projectId> --build-ref <r> [--tail <n>]
+overleaf-web-mcp compile download <projectId> <localPath> --build-ref <r> [--file <f>] [--overwrite]
+overleaf-web-mcp comments list <projectId> [--status open|resolved|all] [--file <path>]
+```
+
+Every other operation is reached through `call`. Exit codes apply to operation commands only:
+
+| Exit | Meaning | Codes |
+| :---: | --- | --- |
+| 0 | Complete | |
+| 1 | Anything else | |
+| 2 | Fix the call | usage errors, `INVALID_ARGUMENT`, `CONFIRMATION_MISMATCH`, `PATH_OUTSIDE_ROOT` |
+| 3 | Not allowed or not available; do not retry | `AUTH_EXPIRED`, `PERMISSION_DENIED`, `POLICY_DENIED` |
+| 4 | Read or plan again, then decide | `REVISION_CONFLICT`, `REMOTE_DRIFT`, unless `details.outcome` is `unknown`; `TIMEOUT` with `details.outcome: "not_applied"` from an operation that is not read-only |
+| 5 | Outcome unknown; read before acting, never re-run blindly | `OUTCOME_UNKNOWN`; any error with `details.outcome: "unknown"`; `TIMEOUT` from an operation that is not read-only, unless `details.outcome` is `not_applied` (exit 4) |
+| 6 | `status: "partial"`; the result is still on stdout | |
+| 7 | Safe to retry later | `RATE_LIMITED`, `COMPILE_RATE_LIMITED`, `COMPILE_UNAVAILABLE`, `TIMEOUT` from a read-only operation |
+
+### Tasks
+
+- [ ] **Output contracts** for the 15 remaining tools, with golden snapshots of their results taken first through the real domain classes over an injected fetcher and connection factory. Every tool registers through `structured()` with a byte-identical text block, and `handler()` goes. `errorCodeSchema` becomes `z.enum(ERROR_CODES)`; the narrower `createMcpServer` parameter type is listed under `Changed`.
+- [ ] **CLI.** `src/cli/parse.ts` on `node:util` `parseArgs`, delegating anything else to the untouched `parseCliCommand`; `call`, `schema`, `capabilities` (effects and annotations from the contract entry, error and exit codes; with a `projectId`, project-level fields, else `unknown`), the aliases, `src/cli/exit-codes.ts`, and `runtime.close()` in `finally`.
+- [ ] **Docs.** AGENTS.md and `docs/safety.md`: every command but `serve` and `help` prints exactly one JSON result. `docs/cli.md` in the `mkdocs.yml` nav: commands, request format, exit codes (never re-run on 5), no cross-process serialization or allowlist, presence and request volume, and the Skills. README: a "Without an MCP client" section and a lead sentence naming MCP, the CLI, and the SDK; `docs/install.md`: a CLI-only path.
+- [ ] **SDK.** `createOverleafClient` in `src/sdk.ts`; `docs/sdk.md` in the nav names the stable surface (`createOverleafClient`, `createOverleafService`, the contract types, `McpError`, `ERROR_CODES`, `readConfig`, `OverleafRuntime.create` and `close`), marks runtime fields and `connectionFactory` internal, and shows a minimal program.
+- [ ] **Skills** under `skills/`, using only commands `renderHelp` lists, and `skills` in `package.json` `files`; a test parses every command line in them and rejects any mention of `@modelcontextprotocol`, `src/`, or the cookie jar.
+- [ ] **Comparison.** `test/live/compare-interfaces.test.ts`, gated by `RUN_OVERLEAF_LIVE_TESTS=1` and `RUN_OVERLEAF_LIVE_COMPARE_TESTS=1` on a throwaway project it creates and trashes, runs the four tasks in **Interfaces beyond MCP** (review on comment threads) through a spawned `serve`, `node dist/cli.js`, and the SDK, and writes a JSON report of those metrics plus round trips, upstream requests and bytes, bytes an agent would read, and start-up versus Overleaf time, for a cold and a warm run of each task.
+- [ ] **Live CLI test** (`RUN_OVERLEAF_LIVE_TESTS=1` and `RUN_OVERLEAF_LIVE_CLI_TESTS=1`): `node dist/cli.js` alone, from `call create_project` through `files write`, `sync apply --plan-token`, and `compile run` to a trash of that throwaway project.
+- [ ] **CHANGELOG 0.7.0:** `Added` (commands, exit codes, `createOverleafClient`, Skills, 15 output schemas); `Changed` (`errorCode` enum, `createMcpServer` parameter type).
+
+### Acceptance
+
+- `test/cli-command.test.ts` is unchanged and passes; `overleaf-web-mcp unknown` exits 1; the keepalive dead-session test still passes.
+- For every `TOOL_NAMES` entry, `schema <name> --input` prints a JSON Schema with `"type": "object"`, and `call <name> --request <fixture>` reaches the fake service with arguments deep-equal to those the MCP handler passes.
+- A table-driven test over every error code: success writes one JSON value to stdout and exits 0; an injected `McpError` leaves stdout empty, writes exactly one stderr line parsing to `{ code, message, retryable, details? }`, and exits with the table's code.
+- `TIMEOUT` from `write_file`, `upload_file`, or `create_project` exits 5; `TIMEOUT` from `read_file` exits 7; `TIMEOUT` with `details.outcome: "not_applied"` from `write_file` exits 4; `REVISION_CONFLICT` with `details.outcome: "unknown"` exits 5; `status: "partial"` exits 6 with the result on stdout.
+- `files write` with a stale revision against the real `DocumentsApi` exits 4 with zero `submitUpdate` calls; `manage_entity` delete without `confirmPath` and mirror `sync apply` without `--confirm-delete-count` exit 2 with zero DELETE requests; an unknown request key exits 2 and never calls the service.
+- `captureBrowserSession` is never called by an operation command; stderr is empty after a successful `sync apply` without `--progress`; and across every CLI test stderr never contains a seeded cookie-jar value or a comment-body sentinel.
+- Parity: for every tool, MCP `structuredContent`, the MCP text block, CLI stdout, and the SDK return value are deep-equal, and an injected `McpError` gives an identical `{ code, message, retryable, details }` through all three. A real `PATH_OUTSIDE_ROOT` (`download_file` outside `OVERLEAF_LOCAL_WRITE_ROOTS`) and a real `POLICY_DENIED` (`OVERLEAF_ALLOWED_PROJECTS`) give the same error through all three with 0 fetches.
+- Every tool has an `outputSchema` its `structuredContent` validates against over the in-memory transport, `grep -n "handler(async" src/mcp/tools.ts` prints nothing, and the 15 golden result snapshots are unchanged.
+- `createOverleafClient` over injected fakes has a method per `TOOL_NAMES` entry, performs `readFile`, `writeFile` with the returned revision, and `close()`, and throws `McpError` with `REVISION_CONFLICT` on a stale revision.
+- `capabilities` lists every tool, reports `download_file` with a `local-write` effect, and without a `projectId` reports project-level fields as `unknown`; every `renderHelp` command appears in `docs/cli.md`.
+- `npm pack --dry-run` lists the three `SKILL.md` files, and the comparison, with its flags set, reports every task and interface with the same outcome through all three.
+
+---
+
+## v0.8.0 — Tracked-change review: accept and reject
+
+**Motivation:** tracked changes can be written (`writeMode: "tracked"`) but not listed, accepted, or rejected, the second gap in the README comparison ("Accepts or rejects tracked changes"), which a web-session peer already covers. history-ot `trackedChanges` are read only to strip tracked deletions from visible content (`historyVisibleContent` in `src/protocol/ot.ts`), and ShareJS `ranges.changes` is never read. The same blind spot weakens tracked writes: `DocumentsApi.writeFile` verifies only the visible content hash, so a tracked insert that Overleaf recorded untracked passes verification. The range parsers this stage needs close that gap too.
+
+**Verify first.** No captured frame here holds a non-empty change (the fixtures under `test/fixtures/protocol` show `"changes":[]` and `"trackedChanges":[]`), and no accept or reject route is in `docs/private-api.md`. Confirm each item in `overleaf/overleaf` at the commit the release targets, record it in `docs/private-api.md`, and gate anything unconfirmed with `REVIEW_UNSUPPORTED` rather than guessing (`details.kind: "document_protocol"` for a document protocol with no confirmed mechanism). All ten are *(verify in code)*:
+
+1. The accept route, believed to be `POST /project/:project_id/doc/:doc_id/changes/accept` with `{ change_ids }`: authorization, version bump, and history-ot support.
+2. How the editor rejects: a reject route, or an untracked inverse OT operation (for ShareJS, an insert with an undo flag that cancels a delete change).
+3. The ShareJS change shape `{ id, op: { p, i } | { p, d }, metadata: { user_id, ts } }`.
+4. Whether `joinDoc` with `encodeRanges: true` encodes range text as it encodes lines.
+5. The raw history-ot `trackedChanges` form (see `HistorySnapshot` in `src/protocol/ot.ts`): no ids, adjacent-range merging, and the `TextOperation` forms that clear tracking or delete.
+6. Whether `GET /project/:id/ranges` returns `changes`, history-ot documents included.
+7. `project.features.trackChanges` in `joinProject`, and the privilege levels `owner`, `readAndWrite`, `review`, `readOnly`.
+8. Whether `meta.tc` on a tracked ShareJS update is the author or an id seed; this server's tracked writes set it to the user id.
+9. Whether `applyOtUpdate` forces tracking for the `review` privilege.
+10. The real-time service's `otUpdateError` messages (the too-large case in particular) and which clients receive the event.
+
+### Tools
+
+```ts
+list_tracked_changes({ projectId: string, filePath?: string, type?: "insert" | "delete",
+                       authorId?: string, excerptChars?: number /* 0..500, default 120 */,
+                       limit?: number /* 1..500, default 100 */ })
+  → { documents: [{ filePath, revision, protocol: "sharejs" | "history-ot", totalChanges,
+                    changes: [{ changeId, type, start: { line, column }, end: { line, column },
+                                length, excerpt?, excerptTruncated, authorId, timestamp }] }],
+      totalMatched, truncated, trackChangesActive, indexUnavailable?: true }
+  // positions 1-based in UTF-16 units. annotations: readOnlyHint true
+
+manage_tracked_changes({ projectId: string, filePath: string, revision: string,
+                         action: "accept" | "reject",
+                         changeIds: string[],                    // 1..500, unique, all in this document
+                         confirmCount?: number })                // must equal changeIds.length
+  → { action, filePath, changeIds, revision, protocol, remainingChangeCount,
+      trackChangesActive, recoveredAfterTimeout?: true }
+  // accept insert keeps the text; accept delete removes it; reject insert removes the text;
+  // reject delete restores it. A tracked replacement is a delete plus an insert; pass both ids.
+  // annotations: destructiveHint true, idempotentHint true (a repeat fails and changes nothing)
+```
+
+CLI: `tracked-changes list <projectId> [--file <path>]` and `tracked-changes accept|reject <projectId> <path> --revision <r> --change <id>... [--confirm-count <n>]`; the SDK methods come from the registry.
+
+**Design decisions:**
+
+- **Two tools.** Listing is read-only and cannot share a tool with a destructive action; decisions reuse the `manage_` action-enum pattern, one document per call, because revisions, the accept route, and OT are per document.
+- **`confirmCount` is optional in the schema and checked by `TrackedChangesApi`**, as `sync_directory` checks `confirmDeleteCount`, so a missing value is `CONFIRMATION_MISMATCH`, not a schema error.
+- **Listing never scans every document.** Without `filePath` it reads the `/ranges` index `list_comments` already uses and joins only documents with changes, or returns `indexUnavailable: true`. `filePath` is authoritative, since the index may omit history-ot documents (item 6).
+- **Checks before anything is sent:** `confirmCount`; access level (`owner` or `readAndWrite`, else `PERMISSION_DENIED`); `features.trackChanges === false` (`REVIEW_UNSUPPORTED`, `details.kind: "feature_disabled"`); revision; every id live (`NOT_FOUND`); no overlap with a change left out (`INVALID_ARGUMENT`). Then submit once and verify against a fresh join.
+- **Mechanisms**, all *(verify in code)* per the list above. The expected state is computed locally and canonicalized before comparing; size limits are checked first. Reject operations carry no tracking metadata, so they are not tracked writes that fell back.
+
+  | Document | accept insert | accept delete | reject insert | reject delete |
+  | --- | --- | --- | --- | --- |
+  | ShareJS | REST accept (1) | REST accept (1) | untracked OT delete of the text | untracked OT insert with undo (2) |
+  | history-ot | OT retain with `tracking: { type: "none" }` (5) | OT delete (5) | OT delete | OT retain with `tracking: { type: "none" }` |
+
+- **History-ot ids are synthesized** (`ht_` plus 22 base64url characters of a SHA-256 over document, type, position, length, user, and timestamp), valid only with the listed revision.
+- **Timeouts are observed, never resent**, through one recovery helper extracted from `DocumentsApi.writeFile` and the comment writes: target state seen, `recoveredAfterTimeout: true`; original state live through the window, `TIMEOUT` with `"not_applied"`; a third state, `REVISION_CONFLICT` with `"unknown"`; nothing seen, `OUTCOME_UNKNOWN`.
+- **The same parsers check tracked writes.** Every inserted span must sit in a new tracked insert by the current user, every deleted span in a new tracked delete. Otherwise the write fails with `PROTOCOL_UNSUPPORTED`, `retryable: false`, and `details.kind: "applied_untracked"`, with no `details.outcome`, because it applied; it is never reverted, since a revert is another write.
+- **`otUpdateError` is classified, not echoed**: `update is too large` is `UPDATE_TOO_LARGE` with `"not_applied"`; anything else goes through observation, since Overleaf broadcasts it to every client on the document *(verify in code: item 10)*.
+- **Independent code**: the upstream range libraries and the peer server are AGPL-3.0, this package MIT.
+- **Plan and edition.** Review may need a paid plan on `www.overleaf.com` *(verify live)* and Server Pro when self-hosted *(verify against the current Community Edition)*; the free-plan positioning does not extend to it.
+- **Known limits**, stated in the descriptions: the revision ignores ranges, so per-id checks catch a concurrent accept; after a history-ot decision removes text, re-list; a decision landing after the recovery window is reported `not_applied`, as with `write_file`.
+
+### Tasks
+
+- [ ] Confirm items 1–10 into `docs/private-api.md`, and capture sanitized fixtures `test/fixtures/protocol/sharejs-tracked-changes.json` and `history-ot-tracked-changes.json` from a disposable project (an insert, a delete, a replacement pair, non-ASCII text; placeholder ids, users, and timestamps), plus a hygiene test over `test/fixtures/protocol` that fails on 24-hex ids, email addresses, and session cookie names.
+- [ ] `src/protocol/tracked-changes.ts` (pure parsers, ids, locations, excerpts, overlap detection, decision planner) with exact-operation tests; the shared recovery helper, with documents and comments moved onto it.
+- [ ] `TrackedChangesApi` in `src/overleaf/tracked-changes.ts`, inside the per-project queue, reading `features.trackChanges` and `permissionsLevel` from `ProjectConnection`; contract entries (`overleaf-read`, `overleaf-write`) registered after `set_comment_status`; `REVIEW_UNSUPPORTED` in `ERROR_CODES`.
+- [ ] CLI aliases and `docs/cli.md`; `src/cli/exit-codes.ts` maps `REVIEW_UNSUPPORTED` to 3 and `applied_untracked` to 4.
+- [ ] The fidelity check in `DocumentsApi.writeFile`, skipping no-op writes, with an optional `kind` on `SyncFailure` (`src/overleaf/sync.ts`); the `otUpdateError` mapping in `ProjectConnection.submitUpdate`.
+- [ ] Tracked-change decisions join the review task in `test/live/compare-interfaces.test.ts`.
+- [ ] A "Tracked changes" paragraph in `src/mcp/instructions.ts` within the 450-word bound: list first, confirm with the user, pass revision, ids, and a matching `confirmCount`, re-list after `REVISION_CONFLICT` or `NOT_FOUND`.
+- [ ] README (the counts, two Review rows, the comparison row, the plan caveat), `docs/tools.md`, `docs/safety.md`, `docs/internals.md`, `docs/using.md`; an opt-in live test behind `RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`; CHANGELOG 0.8.0 `Added` and `Changed`.
+
+### Acceptance
+
+- `list_tracked_changes` is annotated exactly `{ readOnlyHint: true }` and `manage_tracked_changes` exactly `{ destructiveHint: true, idempotentHint: true }`, both have an `outputSchema`, and `TOOL_NAMES` grows by exactly two over the stage base (33 if earlier stages shipped as planned).
+- `confirmCount` missing or not equal to `changeIds.length` gives `CONFIRMATION_MISMATCH` with zero `joinDocument`, `submitUpdate`, and `postJson` calls; a stale revision, an absent id (`details.missingChangeIds`), a `review` or `readOnly` access level, and `features.trackChanges === false` each return their code before `submitUpdate` or `postJson`.
+- A ShareJS accept posts once to the confirmed route with exactly the given ids, and a 404 gives `REVIEW_UNSUPPORTED` with `details.kind: "route_unavailable"`; other decisions submit exactly the fixture-derived operation with no tracking metadata; a fresh join that misses the expected state gives `REVISION_CONFLICT` with `"unknown"`.
+- After a timeout, with one submission, each of the four recovery outcomes above is produced for both the REST and OT mechanisms.
+- Without `filePath`, a `/ranges` 404 returns `indexUnavailable: true` with no join; excerpts never exceed `excerptChars` or split a surrogate pair; no key named `email` appears.
+- Both new fixtures parse, and a hygiene test finds no 24-hex string, no `@`, and no cookie name under `test/fixtures/protocol`. The confirmed too-large `otUpdateError` message gives `UPDATE_TOO_LARGE` with `"not_applied"` after one `submitUpdate`.
+- A tracked write whose rejoin shows the text but no new tracked ranges for the user rejects with `details.kind: "applied_untracked"` after one `submitUpdate`, and a tracked `sync_directory` step reports that `kind`; `test/overleaf/documents.test.ts` and `comments.test.ts` pass unmodified after the helper extraction.
+- `tracked-changes accept` without `--confirm-count` exits 2 with `CONFIRMATION_MISMATCH`; `REVIEW_UNSUPPORTED` exits 3; `applied_untracked` exits 4.
+- Live, on a disposable project: a tracked insert is listed with `authorId` equal to `auth_status`'s `userId`; reject restores the original text; accept on a second file keeps it and empties the listing.
+- Every route and OT form the code submits is listed in `docs/private-api.md` without a *(verify in code)* mark.
+
+---
+
+## v0.9.0 — Multi-file document support
 
 **Motivation:** `get_sections` / `get_section_content` / `write_section` are explicitly single-file. The project in the session was, until recently, split across `0_main.tex` plus eight `sec: *.tex` files stitched together with `\input`. Plenty of real Overleaf projects stay organised this way permanently, and section tools that stop at `\input` boundaries can only partially help with them.
+
+This was v0.6.0 in earlier versions of this file. The design is unchanged, except that `get_full_document` and the `followIncludes` parameters are contract entries (v0.5.0), so the CLI and SDK (v0.7.0) expose them without adapter code.
 
 **resolution rules to decide up front (document them).** `\input{x}` tries `x` then `x.tex`; `\include{x}` always means `x.tex`, implies a page break, and interacts with `\includeonly` (respect it, or at least flag it in the result). Cover `\subfile{}` and `\import{dir}{file}` / `\subimport`, which many multi-file projects use instead. Paths resolve relative to the project root (Overleaf semantics), then relative to the including file. Skip directives inside `%` comments (the section parser already does this; reuse it). Detect cycles (`INCLUDE_CYCLE`, listing the chain) and cap depth (`INCLUDE_DEPTH_EXCEEDED`). A missing target is reported under `unresolved`, not thrown. A target that is a binary `file` rather than a `doc` is skipped and reported.
 
@@ -488,92 +854,118 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 - [ ] Source-map builder and a `flatRange → (file, fileRange)` lookup helper.
 - [ ] `followIncludes` plumbing in the three section tools; write-back via `read_file` → `write_file` per touched file.
 - [ ] Keep `get_sections`' "does not follow `\input` by default" wording; it is still true by default.
+- [ ] Contract entries for `get_full_document` (`overleaf-read`) and `followIncludes` on the three section operations; `INCLUDE_CYCLE` and `INCLUDE_DEPTH_EXCEEDED` in `ERROR_CODES`; `TOOL_NAMES`, the README counts, the tool table, and `docs/tools.md` updated.
 
 ### Acceptance
 
 - A project split across `\input`s is section-browsed and section-edited with `followIncludes: true` exactly like a single-file project.
 - An edit chosen in the flattened view lands in the correct `(file, lineRange)` and goes through a revision check (test: concurrently bump the target file's revision → `REVISION_CONFLICT`, nothing written).
 - A deliberate `\input` cycle returns `INCLUDE_CYCLE`; a missing target appears in `unresolved`, not as an exception.
+- `overleaf-web-mcp schema get_full_document --output` prints a JSON Schema whose properties include `sourceMap`, and `overleaf-web-mcp call get_full_document` prints the same object the tool returns as `structuredContent`.
 
 ---
 
-## v1.0.0 — Hardening and MCP-native ergonomics
+## v1.0.0 — Hardening and compatibility
 
-**Motivation:** this wraps undocumented private endpoints, as the README says. At 1.0 the highest-leverage investment is making failure modes legible and the protocol surface complete, not adding tools.
+**Motivation:** this wraps undocumented private endpoints, as the README says. At 1.0 the highest-leverage investment is making failure modes legible and the protocol surface complete, not adding tools. A SemVer commitment also needs a read-only check of an install and an Overleaf instance (`doctor`, backend capabilities) and evidence from real clients on each protocol version answered (a compatibility matrix). And `openProjectConnection` turns every `connectionRejected` into `AUTH_EXPIRED`, which agents are told to stop on, even for rejections that do not mean an invalid session *(verify in code)*.
 
-### Error taxonomy (complete list; each is a typed `code` on the tool error)
+### Error taxonomy (complete list; each is a typed `code` on the error, through every interface)
 
 | Code | Introduced | Meaning |
 | --- | --- | --- |
 | `AUTH_EXPIRED` | 0.1.0 | No saved session, or Overleaf no longer accepts it |
-| `PERMISSION_DENIED` | 0.1.0 | HTTP 403 |
-| `NOT_FOUND` | 0.1.0 | Project, path, or resource does not exist (covers the first draft's `ENTITY_NOT_FOUND`) |
-| `REVISION_CONFLICT` | 0.1.0 | `write_file` / `write_section` revision no longer matches |
-| `PROTOCOL_UNSUPPORTED` | 0.1.0 | Collaboration protocol or response shape this release does not understand |
+| `PERMISSION_DENIED` | 0.1.0 | HTTP 403; from v0.8.0 also an access level that cannot decide tracked changes |
+| `NOT_FOUND` | 0.1.0 | Project, path, resource, or (v0.8.0) tracked change does not exist (covers the first draft's `ENTITY_NOT_FOUND`) |
+| `REVISION_CONFLICT` | 0.1.0 | `write_file` / `write_section` revision no longer matches, or a verified result differs from the intent (`details.outcome: "unknown"`) |
+| `PROTOCOL_UNSUPPORTED` | 0.1.0 | Collaboration protocol or response shape this release does not understand; from v0.5.0 a body that is not JSON; from v0.8.0 a tracked write that landed untracked (`details.kind: "applied_untracked"`) |
 | `DOC_TOO_LARGE` | 0.1.0 | Document would exceed `OVERLEAF_MAX_DOC_LENGTH` |
-| `UPDATE_TOO_LARGE` | 0.1.0 | Single update exceeds `OVERLEAF_MAX_UPDATE_CHARS`, or HTTP 413 |
+| `UPDATE_TOO_LARGE` | 0.1.0 | Single update exceeds `OVERLEAF_MAX_UPDATE_CHARS`, or HTTP 413, or (v0.8.0) the matching socket error |
 | `TIMEOUT`, `OUTCOME_UNKNOWN` | 0.1.0 | Timed-out request; timed-out write whose outcome could not be observed |
-| `COMPILE_FAILED` | 0.1.0 | Compile finished with a non-success status |
+| `COMPILE_FAILED` | 0.1.0 | Compile finished without a usable build; from v0.6.0 `failure` returns a summary instead, and details are `{ status, rootFilePath, buildId?, buildRef? }` only |
 | `PARTIAL_CLEANUP` | 0.1.0 | A multi-step operation could not undo every step |
-| `INVALID_ARGUMENT` | 0.1.0 | Malformed call, wrong entity type (covers the first draft's `NOT_A_DOC`), rejected name |
+| `INVALID_ARGUMENT` | 0.1.0 | Malformed call, wrong entity type (covers the first draft's `NOT_A_DOC`), rejected name; from v0.5.0 an id that is not path-safe |
 | `REMOTE_ERROR` | 0.1.0 | Anything else |
-| `CONFIRMATION_MISMATCH` | v0.2.0 | `confirmPath` / `confirmName` / `confirmDeleteCount` wrong |
+| `CONFIRMATION_MISMATCH` | v0.2.0 | `confirmPath` / `confirmName` / `confirmCount` / `confirmDeleteCount` wrong; from v0.5.0 an explicit `overwrite: false` on an existing binary; from v0.6.0 an omitted `overwrite` there, a missing required `planToken` (`details.missing`), or an existing `localPath` without `overwrite: true` on `download_compile_output`; from v0.8.0 a missing `confirmCount` on `manage_tracked_changes` |
 | `RATE_LIMITED` | v0.2.0 | HTTP 429; `details.retryAfterMs` when Overleaf said how long |
-| `REMOTE_DRIFT` | v0.4.0 | The project or the local folder differs from the `planToken` snapshot, or an entity changed just before its delete |
-| `PATH_OUTSIDE_ROOT` | v0.4.0 | A symbolic link in `localFolderPath` resolves outside it |
-| `COMPILE_RATE_LIMITED`, `COMPILE_TIMEOUT` | v0.5.0 | Compile throttled by Overleaf; compile timed out |
-| `NO_BUILD`, `BUILD_NOT_FOUND` | v0.5.0 | No compile yet / CLSI output evicted |
-| `INCLUDE_CYCLE`, `INCLUDE_DEPTH_EXCEEDED` | v0.6.0 | `\input` graph problems |
-| `API_SHAPE_CHANGED` | v1.0.0 | Response no longer matches the `docs/private-api.md` schema (the first draft called this `UNSUPPORTED_API_CHANGE`) |
-| `TRANSIENT_FAILURE` | v1.0.0 | Network or 5xx after bounded backoff on a read was exhausted |
+| `REMOTE_DRIFT` | v0.4.0 | The project or the local folder differs from the `planToken` snapshot, or an entity changed just before its delete or, from v0.5.0, its replacement (`expectedHash`) |
+| `PATH_OUTSIDE_ROOT` | v0.4.0 | A symbolic link in `localFolderPath` resolves outside it; from v0.5.0 any local path outside the allowed roots (`details.kind`) |
+| `POLICY_DENIED` | v0.5.0 | The access policy does not allow this project or effect; nothing was sent |
+| `COMPILE_RATE_LIMITED`, `COMPILE_TIMEOUT` | v0.6.0 | Compile throttled by Overleaf; compile timed out |
+| `COMPILE_UNAVAILABLE` | v0.6.0 | Overleaf's compile service is unavailable or in maintenance; retryable |
+| `NO_BUILD`, `BUILD_NOT_FOUND` | v0.6.0 | No compile known to this process / CLSI output evicted |
+| `REVIEW_UNSUPPORTED` | v0.8.0 | Tracked-change review is not available (`details.kind`: `feature_disabled`, `route_unavailable`, `document_protocol`); nothing changed |
+| `INCLUDE_CYCLE`, `INCLUDE_DEPTH_EXCEEDED` | v0.9.0 | `\input` graph problems |
+| `API_SHAPE_CHANGED` | v1.0.0 | Response no longer matches the `docs/private-api.md` schema (the first draft called this `UNSUPPORTED_API_CHANGE`); subject to the decision task below |
+| `TRANSIENT_FAILURE` | v1.0.0 | Network or 5xx after bounded backoff on a read was exhausted, or Overleaf asked the socket to retry |
 
 ### Tasks
 
-- [ ] **`API_SHAPE_CHANGED` instead of a raw parse exception.** Validate responses at the boundary with zod, already a dependency, for every endpoint in `docs/private-api.md`: the project list, the `joinProject` payload, the upload response, the compile response, and the lifecycle routes. On mismatch, return `API_SHAPE_CHANGED` with `{ endpoint, expectedKeys, receivedKeys }` and nothing else, honouring the rule against logging response bodies.
-- [ ] **retry with backoff for reads only.** Bounded exponential backoff (max 3 attempts, jitter) on `retryable: true` failures of GET requests and document joins, never on OT submissions, uploads, or deletes, so the "never re-submitted automatically" guarantee survives and the bulk tools inherit it. Centralise request pacing (configurable minimum interval) to stay conservative on `www.overleaf.com`. Exhausted backoff → `TRANSIENT_FAILURE`.
-- [ ] **do not add cursor pagination to `list_projects`.** Overleaf has no server-side pagination; `/api/project` returns every project and the dashboard paginates in the browser. A cursor would be theatre. v0.2.0's `query`, `limit`, `sort`, and `totalMatched` are the right fix; keep them. (The first draft asked for `cursor` / `nextCursor`; this is the reasoned answer.)
-- [ ] **MCP elicitation** for `manage_project` trash/delete and mirror `sync_directory` when the client advertises the capability; confirm-by-value remains mandatory as the fallback.
-- [ ] **Resources:** `overleaf://project/{id}/tree`, `overleaf://project/{id}/file/{path}`, plus the v0.5.0 output resources.
-- [ ] **Progress notifications** for `compile_project` and `get_full_document`; the sync tools send them since v0.4.0.
-- [ ] **Back-fill `outputSchema`** on every tool that returns structured data.
-- [ ] **automated smoke test against Community Edition, not `www.overleaf.com`.** A CI job that logs into the public service conflicts with the README's own Terms-of-Service caution and needs a long-lived session cookie stored as a CI secret. Instead run `create_project → update_project_settings → sync_directory → compile_project → download_compile_output → manage_project(trash)` against Overleaf Community Edition in a Docker service container on a pinned image tag. That also pins the private-API version the suite is tested against. Comments and tracked changes are Server Pro features, so the existing env-gated live tests for those stay manual and opt-in.
-- [ ] **README:** security model (cookie-jar permissions, stdout reserved for protocol, no content logging), ToS posture, and a "what breaks when Overleaf changes" section pointing at `API_SHAPE_CHANGED`.
-- [ ] **schema stability commitment.** 1.0 means tool names, input schemas, result shapes, and error codes are governed by SemVer, deprecations are announced one minor version ahead with both names registered during the overlap, and `CHANGELOG.md` records every change to any of them. MCP clients cannot discover this on their own; write it down.
-- [ ] **release checks.** The publish workflow checks that the tag equals the package version and, since 0.4.0, that `CHANGELOG.md` has a section for it, and its test run already fails when the README's tool count disagrees with `TOOL_NAMES`. Since 0.4.0 it can also be run by hand on `main`, creating the tag and the GitHub Release from the changelog. Still to add: the `npm pack --dry-run` file-list check from v0.1.3.
+- [ ] **Validate every private response at the boundary** with zod (compile since v0.6.0, tracked-change ranges since v0.8.0, the rest here), returning the shape-error code with details limited to `{ kind, endpoint, expectedKeys, receivedKeys }`. One route table, `src/overleaf/routes.ts`, is tested to equal `docs/private-api.md` and to send no body key a route does not accept.
+- [ ] **Decide the shape-error code.** Prefer `PROTOCOL_UNSUPPORTED` with `details.kind` (`response_shape`, `socket_protocol`, `protocol_version`, `applied_untracked`) and drop `API_SHAPE_CHANGED`: `docs/private-api.md` already promises `PROTOCOL_UNSUPPORTED` for an unexpected shape, and no caller breaks. A separate code is announced one minor ahead.
+- [ ] **Classify socket rejections** in `openProjectConnection` by upstream `code`, then message: invalid session → `AUTH_EXPIRED`; retry → `TRANSIENT_FAILURE`; not authorized → `PERMISSION_DENIED`; project not found → `NOT_FOUND`; too many requests → `RATE_LIMITED`; else `REMOTE_ERROR`, retryable for a disconnect before `joinProjectResponse` *(verify in code: the real-time service's codes and messages)*. In `OverleafRuntime.create`, a page with `ol-user_id` but no `ol-csrfToken` is `PROTOCOL_UNSUPPORTED`, not `AUTH_EXPIRED`.
+- [ ] **retry with backoff for reads only.** Bounded exponential backoff (max 3 attempts, jitter) on `retryable: true` failures of GET requests and document joins, never on OT submissions, uploads, deletes, or state-changing POSTs, so the "never re-submitted automatically" guarantee survives. Centralise request pacing (configurable minimum interval). Exhausted backoff → `TRANSIENT_FAILURE`, exit 7 in `src/cli/exit-codes.ts` and `docs/cli.md` (`API_SHAPE_CHANGED`, if kept, exit 1).
+- [ ] **Sanitized fixtures** under `test/fixtures/protocol` (`connectionRejected` and `otUpdateError` variants, a nested `joinProject`) and `test/fixtures/rest` (compile responses per status, the project list, uploads), fed through the real parsers; the v0.8.0 hygiene test and the AGENTS.md fixture rule extend to all of `test/fixtures`.
+- [ ] **`overleaf-web-mcp doctor [projectId]`** (CLI only): read-only checks of the bootstrap meta and `/api/project`, plus, with a `projectId`, the handshake, `joinProject` and its `protocolVersion`, and a `joinDoc`/`leaveDoc` of the root document. It prints `{ checks: [{ id, status, code? }] }` without names or paths, exits 1 on any `unsupported`, never mutates, and its docs say a project check shows the account online.
+- [ ] **Backend capabilities** as a `backend` key on the v0.7.0 `capabilities` report (`kind: "web-session"`, `liveRevisions`, `trackedWrites`, `review: { list, decide }`, `comments`, `compile`, `history`); an operation the backend cannot perform fails before any request.
+- [ ] **MCP compatibility matrix.** In-memory tests cover both protocol eras, and `describe('stdio lifecycle')` in `test/server.test.ts` already drives `runStdioServer` over piped streams with a fake runtime, checking that stdout carries only JSON-RPC and that the server exits once stdin closes, for a 2025-11-25 client only. Extend it so a 2025-11-25 `initialize` and a 2026-07-28 `server/discover` each return `SERVER_INSTRUCTIONS` over those streams, and list in `docs/install.md` each MCP client checked by hand, with version, negotiated protocol, and date.
+- [ ] **do not add cursor pagination to `list_projects`.** `/api/project` returns every project; v0.2.0's `query`, `limit`, `sort`, and `totalMatched` are the reasoned answer to the first draft's `cursor`.
+- [ ] **MCP elicitation** for `manage_project` trash/delete, mirror `sync_directory`, and `manage_tracked_changes` when supported; confirm-by-value stays mandatory. On 2026-07-28, read `_meta["io.modelcontextprotocol/clientCapabilities"]` per request *(verify the v2 SDK accessor)*.
+- [ ] **Resources** (`overleaf://project/{id}/tree`, `overleaf://project/{id}/file/{path}`, plus the v0.6.0 output resources) and **progress** for `compile_project` and `get_full_document`.
+- [x] **Back-fill `outputSchema`** on every tool: moved to v0.7.0, where the CLI and SDK need it; the acceptance below still checks it.
+- [ ] **automated smoke test against Community Edition**, never `www.overleaf.com` (the README's Terms-of-Service caution): on a pinned Docker image, `doctor <projectId>`, then `create_project → update_project_settings → plan_sync → sync_directory (with its planToken) → compile_project → download_compile_output → manage_project(trash)` through the MCP server and through `node dist/cli.js` (`sync plan`, then `sync apply --plan-token`), with equal results. Comments and tracked changes may be Server Pro features *(verify against the current Community Edition)*; their live tests stay manual.
+- [ ] **README:** security model (cookie-jar permissions, stdout framing, no content logging, the limits of the access policy), ToS posture, and "what breaks when Overleaf changes".
+- [ ] **schema stability commitment.** SemVer covers tool names, input schemas, result shapes, and error codes, plus the CLI's commands, flags, request format, output framing, and exit codes, the documented `overleaf-web-mcp/core` surface, and the capability report. Deprecations are announced one minor ahead with both names registered, and `CHANGELOG.md` records every change.
+- [ ] **release checks.** Still to add to the publish workflow: the `npm pack --dry-run` file-list check from v0.1.3.
 
 ### Acceptance
 
-- Every error surfaced to a client carries one of the codes above; a fuzzed or mutated API fixture produces `API_SHAPE_CHANGED`, not a stack trace.
+- Every error surfaced through any interface carries one of the codes above; a mutated fixture (dropped key, wrong type, HTML or empty body) for `joinProject` and every REST route produces the decided shape-error code, never a stack trace.
 - `list_projects` over a 127-project account answers "the ten most recently updated" and "anything containing Thesis" in one call each; no uncapped arrays remain.
 - CI runs the full smoke path green against Community Edition on every pull request.
-- `tools/list` shows annotations on every tool and `outputSchema` on every tool that returns structured data.
+- `tools/list` shows annotations and an `outputSchema` on every tool.
+- Socket rejections map as listed (a retry is retryable, never `AUTH_EXPIRED`; an early disconnect is never `OUTCOME_UNKNOWN`); a bootstrap page with `ol-user_id` and no `ol-csrfToken` yields `PROTOCOL_UNSUPPORTED`, and a redirect to `/login` still yields `AUTH_EXPIRED`.
+- `doctor` with fakes exits 0 when all checks pass and 1 with check `joinProject.protocolVersion` `unsupported` for `protocolVersion` 3, sends no `applyOtUpdate`, and skips socket checks without a `projectId`.
+- The sanitization and route-table tests pass, and every file under `test/fixtures` is referenced by a test.
+- The stdio lifecycle test also serves a 2026-07-28 client, both eras receive `SERVER_INSTRUCTIONS` over stdio, and `docs/install.md` lists at least one client checked by hand, with its version and date.
+- With a fake connection whose `features.trackChanges` is `false`, `capabilities` reports `review.decide: false`, and `manage_tracked_changes` fails with `REVIEW_UNSUPPORTED` before any request.
+- An injected `TRANSIENT_FAILURE` exits 7 from an operation command.
 
 ---
 
 ## Explicitly out of scope (for now)
 
-- A dedicated review of the comment and history tools (`add_comment`, `list_comments`, `reply_to_comment`, `set_comment_status`, `monitor_project_history`): not exercised in the reference session; worth its own pass from someone who has used the review workflow end to end.
-- Collaborator and sharing management, git-bridge parity, version diff and restore, billing, chat, background history watching, backward history pagination, label mutation, and editing or deleting individual comment messages. The README's "Current exclusions" list stands.
+- A dedicated review of the comment and history tools (`add_comment`, `list_comments`, `reply_to_comment`, `set_comment_status`, `monitor_project_history`): not exercised in the reference session; worth its own pass from someone who has used the review workflow end to end. Listing, accepting, and rejecting tracked changes is not part of this exclusion; it is v0.8.0.
+- Collaborator and sharing management, git-bridge parity, version diff and restore, billing, chat, background history watching, backward history pagination, label mutation, and editing or deleting individual comment messages. The "Current exclusions" list in `docs/development.md` stands.
+- An HTTP service with an OpenAPI description, a Git backend, a WebMCP adapter, and an agent-to-agent (A2A) interface: triggers in **Interfaces beyond MCP**, not stages.
+- Any surface that runs caller-supplied code with access to the saved session; serializing CLI invocations across processes; renaming the package, the repository, or the binary.
 
 ## Sequencing rationale
 
 - **v0.1.3 first** because it was zero-risk and unblocked correct use of everything that existed. Two of its items were one-line changes with the best payoff-to-effort ratio in this document: surfacing `rootDocPath` in `get_project_tree` and correcting `upload_file`'s `destructiveHint`.
 - **v0.2.0 before v0.4.0** even though sync produced more individual tool calls: the lifecycle gap was a **hard stop** that pulled a human into the loop mid-task, while the sync friction was merely tedious. Fix what blocks autonomous use before what is merely inefficient. The trash-first design is not only safer for agents; it is what lets v1.0.0's smoke test create and dispose of projects without a permanent delete anywhere in the automated path.
 - **Session keepalive shipped alone as v0.3.0**, ahead of sync rather than with it or after hardening: it is a CLI-only change with no tool surface, it removes the one failure that presents as a dead server instead of a typed error, and bulk sync driven by a scheduler or a long-running agent is exactly the workload that outlives a five-day session.
-- **v0.5.0 before v0.6.0:** compile ergonomics close a known competitor gap cheaply; `\input` flattening is the most novel but also the most complex item, and can slip without hurting the core zero-to-PDF story.
-- **Annotations and `outputSchema` are not deferred to 1.0.** Add them to every new tool as it ships; v1.0.0 only back-fills and adds the protocol features (elicitation, resources, pagination decisions, progress) that need cross-cutting work.
+- **v0.5.0, shared core and safety (L: contracts M, policy M), before any new interface.** A CLI or library built on today's MCP handlers would copy their shaping and inherit the optional-plan and blind-upload defaults. Moving first means every new interface starts strict, and the registry exists before v0.6.0 writes `compile_project`'s output schema into it.
+- **v0.6.0, compile (M), before the CLI.** It closes a comparison gap cheaply, v0.7.0 exposes its tools for free, and it enforces the v0.5.0 defaults exactly one minor later.
+- **v0.7.0, CLI, SDK, and Skills (L: CLI M, SDK S to M, Skills S).** The first workflow with no MCP client needs both the contracts and the strict defaults; Skills only call the CLI's public commands.
+- **v0.8.0, tracked-change review (L), after the CLI.** Its operations are defined once in the contracts, its upstream verification can take time without blocking anything, and it lands before v1.0.0 so `REVIEW_UNSUPPORTED` and the range shapes join the taxonomy and boundary validation.
+- **v0.9.0, multi-file (M), last before 1.0.** `\input` flattening is the most novel item and is self-contained, so it can slip without hurting the core zero-to-PDF story.
+- **v1.0.0, hardening and compatibility (M), last**, because `doctor`, backend capabilities, and the compatibility matrix describe every interface.
+- **Conditional interfaces are not stages.** An HTTP service (L), a Git backend, WebMCP, or A2A each needs a real consumer first; built speculatively, it adds a surface to keep safe without reducing the upstream risk.
+- **Annotations and `outputSchema` are not deferred to 1.0.** Every new tool ships with them, v0.7.0 back-fills the rest, and v1.0.0 adds only the cross-cutting protocol features (elicitation, resources, progress).
 
 ## Competitive position this roadmap targets
 
-| Capability | v0.4.0 (today) | After roadmap | `@netique/overleaf-mcp` | Git-bridge MCPs |
-| --- | :---: | :---: | :---: | :---: |
-| Works on a free plan | ✅ | ✅ | ✅ | ❌ (paid) |
-| Create / clone / import / rename / trash project, set root | ✅ | ✅ | ❌ | partial |
-| Filtered `list_projects` | ✅ | ✅ | ✅ | ❌ |
-| Dry-run diff + safe mirror sync + ignore rules | ✅ | ✅ | ❌ | via git |
-| Typed compile summary + PDF/log download | stats only | ✅ | summary + log, no PDF | varies |
-| `\input`/`\include` flattening with source map | ❌ | ✅ | ❌ | ❌ |
-| Tracked changes as suggestions | ✅ | ✅ | ✅ | ❌ (bypassed) |
-| Comments + version history | ✅ | ✅ | comments only | git log |
+| Capability | v0.4.0 (today) | After roadmap | `olcli` | `@netique/overleaf-mcp` | Git-bridge MCPs |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| Works on a free plan | ✅ | ✅ | ✅ | ✅ | ❌ (paid) |
+| Create / clone / import / rename / trash project, set root | ✅ | ✅ | create and rename only | ❌ | partial |
+| Filtered `list_projects` | ✅ | ✅ | ❌ (lists, no search) | ✅ | ❌ |
+| Dry-run diff + safe mirror sync + ignore rules | ✅ | ✅ (plan required from v0.6.0) | folder diff; rest re-check | ❌ | via git |
+| Typed compile summary + PDF/log download | stats only | ✅ v0.6.0 | compiles, no log; PDF re-check | summary + log, no PDF | varies |
+| Full workflow without an MCP client | ❌ | ✅ v0.7.0 (CLI and library) | ✅ (CLI) | re-check | via git |
+| Tracked changes as suggestions | ✅ | ✅ | ❌ | ✅ | ❌ (bypassed) |
+| Accept or reject tracked changes | ❌ | ✅ v0.8.0 | ❌ | ✅ | ❌ |
+| `\input`/`\include` flattening with source map | ❌ | ✅ v0.9.0 | re-check | ❌ | ❌ |
+| Comments + version history | ✅ | ✅ | comments only | comments only | git log |
 
-The differentiator: **autonomous zero-to-compiled-PDF on a free account, tracked-change- and revision-safe, with safe bulk sync and multi-file awareness.** No existing server covers that combination. Re-check competitors before each release; if a peer ships sync or PDF download first, lean harder on sync safety and `\input` flattening.
+The differentiator: **autonomous zero-to-compiled-PDF on a free account, tracked-change- and revision-safe, with safe bulk sync, review decisions, and multi-file awareness, from an MCP client, a shell, or a TypeScript program.** No existing tool covers that combination. A command line alone is not the difference, since `olcli` already has one; the same revision, plan, and policy checks behind every interface are. Review decisions may need a paid plan on `www.overleaf.com` *(verify live)*; the zero-to-PDF workflow does not. Re-check competitors before each release; if a peer ships sync or PDF download first, lean harder on sync safety and `\input` flattening.

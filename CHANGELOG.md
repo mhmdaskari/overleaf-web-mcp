@@ -31,6 +31,16 @@ result shapes may change in a minor or patch release; each such change is listed
   only; the new `serveOverStdio(runtime, transport?)` serves both eras, as `serve` does, and
   returns a connection with `close()` and `whenIdle(timeoutMs)`.
 
+### Documentation
+
+- The roadmap gains an "Interfaces beyond MCP" section (one engine behind MCP, a command line,
+  and a TypeScript library, with HTTP, Git, WebMCP, and A2A as conditional triggers rather than
+  stages) and three new stages: v0.5.0 shared core and safety, v0.7.0 CLI, SDK, and Skills, and
+  v0.8.0 tracked-change review (accept and reject). Compile and build ergonomics moves from
+  v0.5.0 to v0.6.0 and multi-file documents from v0.6.0 to v0.9.0. v1.0.0 becomes "Hardening and
+  compatibility" (a `doctor` command, backend capabilities, and an MCP protocol compatibility
+  matrix), and Stage 0 checks the v2 SDK packages.
+
 ## [0.4.0] - 2026-09-27
 
 Bulk and sync operations. Bringing one folder up to date used to take a hand-rolled hash
