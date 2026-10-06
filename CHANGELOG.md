@@ -4,6 +4,43 @@ All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
 result shapes may change in a minor or patch release; each such change is listed below.
 
+## [Unreleased]
+
+### Changed
+
+- **Built on the v2 MCP SDK.** The server now depends on `@modelcontextprotocol/server` 2.3 in
+  place of `@modelcontextprotocol/sdk` 1.x, and `serve` answers both protocol eras over stdio.
+  Clients on the 2025-era protocol versions (2024-10-07 through 2025-11-25) connect with
+  `initialize` exactly as before; clients on MCP 2026-07-28 are served through `server/discover`,
+  whose result carries the same usage instructions. Tool names, input fields, annotations, and
+  result shapes are unchanged. An install no longer pulls in the v1 SDK's HTTP server stack
+  (Express, Hono, and their dependencies), and `npm audit --omit=dev` reports no advisories.
+- The `inputSchema` and `outputSchema` of each tool in `tools/list` now declare JSON Schema draft
+  2020-12, the default dialect since MCP 2025-11-25, instead of draft-07. The schemas themselves
+  are unchanged. Tools no longer carry `execution: { taskSupport: "forbidden" }`, which is the
+  default when the field is absent.
+- Calling a tool name the server does not register now fails with JSON-RPC error `-32602` instead
+  of returning an `isError` result.
+- `serve` now exits when its client closes stdin, releasing the Overleaf session and sockets,
+  instead of waiting for a signal. Tool calls still running at that moment are not answered, as
+  the MCP stdio transport specifies, but get up to 1.5 seconds to finish against Overleaf before
+  the sockets close, so a multi-step operation such as `create_file` with content is not cut off
+  between its steps.
+- Library use: `createMcpServer()` returns the `McpServer` class from
+  `@modelcontextprotocol/server`. Connecting it by hand with `connect()` serves 2025-era clients
+  only; the new `serveOverStdio(runtime, transport?)` serves both eras, as `serve` does, and
+  returns a connection with `close()` and `whenIdle(timeoutMs)`.
+
+### Documentation
+
+- The roadmap gains an "Interfaces beyond MCP" section (one engine behind MCP, a command line,
+  and a TypeScript library, with HTTP, Git, WebMCP, and A2A as conditional triggers rather than
+  stages) and three new stages: v0.5.0 shared core and safety, v0.7.0 CLI, SDK, and Skills, and
+  v0.8.0 tracked-change review (accept and reject). Compile and build ergonomics moves from
+  v0.5.0 to v0.6.0 and multi-file documents from v0.6.0 to v0.9.0. v1.0.0 becomes "Hardening and
+  compatibility" (a `doctor` command, backend capabilities, and an MCP protocol compatibility
+  matrix), and Stage 0 checks the v2 SDK packages.
+
 ## [0.4.0] - 2026-09-27
 
 Bulk and sync operations. Bringing one folder up to date used to take a hand-rolled hash

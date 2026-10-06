@@ -87,8 +87,10 @@ The Git-bridge servers need Overleaf's Git integration, a paid feature on `www.o
 work on the repository rather than the live document, so their edits bypass tracked changes and
 revision checks entirely. Web-session peers such as `@netique/overleaf-mcp` share this project's
 connection model and also offer tracked changes; what sets this project apart is the project
-lifecycle tools, the verified-write guarantees described above, and the roadmap's sync and
-multi-file plans.
+lifecycle tools, the verified-write guarantees described above, and folder sync that, given the
+`planToken` from `plan_sync`, stops when either side drifted from the plan. The
+[roadmap](roadmap.md) plans compile-log and PDF access, a command line and TypeScript library over
+the same engine, tracked-change review, and multi-file documents.
 
 Review-range investigation was informed by
 [Overleaf Comment Exporter](https://github.com/salokr/overleaf-comment-exporter). Real-time

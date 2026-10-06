@@ -80,13 +80,20 @@ export interface OverleafToolRuntime {
   sync: Pick<SyncApi, 'planSync' | 'syncDirectory' | 'deleteEntities'>
 }
 
-/** The part of the SDK's per-request context a tool uses: the progress token and a notifier. */
+/**
+ * The part of the SDK's per-request context (`ServerContext.mcpReq`) a tool uses: the progress
+ * token the client sent in `_meta` and the notifier bound to this request.
+ */
 export interface ToolCallExtra {
-  _meta?: { progressToken?: string | number | undefined } | undefined
-  sendNotification?: (notification: {
-    method: 'notifications/progress'
-    params: { progressToken: string | number; progress: number; total?: number; message?: string }
-  }) => Promise<void>
+  mcpReq?:
+    | {
+        _meta?: { progressToken?: string | number | undefined } | undefined
+        notify?: (notification: {
+          method: 'notifications/progress'
+          params: { progressToken: string | number; progress: number; total?: number; message?: string }
+        }) => Promise<void>
+      }
+    | undefined
 }
 
 interface ToolRegistrar {
@@ -95,6 +102,59 @@ interface ToolRegistrar {
     config: Record<string, unknown>,
     handler: (args: any, extra?: any) => Promise<Record<string, unknown>>
   ): unknown
+}
+
+/**
+ * Counts tool calls whose operation has started and not yet settled, so the stdio server can let
+ * them finish against Overleaf after the client closes stdin instead of closing their sockets
+ * mid-operation. The SDK has already dropped their replies by then; this protects the project,
+ * not the answer.
+ */
+export class ToolActivity {
+  #running = 0
+  #idle = new Set<() => void>()
+
+  get running(): number {
+    return this.#running
+  }
+
+  async track<T>(work: () => Promise<T>): Promise<T> {
+    this.#running += 1
+    try {
+      return await work()
+    } finally {
+      this.#running -= 1
+      if (this.#running === 0) {
+        for (const resolve of this.#idle) resolve()
+        this.#idle.clear()
+      }
+    }
+  }
+
+  /** Resolves true once no call is running, or false when timeoutMs passes first. */
+  whenIdle(timeoutMs: number): Promise<boolean> {
+    if (this.#running === 0) return Promise.resolve(true)
+    return new Promise(resolve => {
+      const done = (): void => {
+        clearTimeout(timer)
+        resolve(true)
+      }
+      const timer = setTimeout(() => {
+        this.#idle.delete(done)
+        resolve(false)
+      }, timeoutMs)
+      this.#idle.add(done)
+    })
+  }
+}
+
+function trackedRegistrar(registrar: ToolRegistrar, activity: ToolActivity): ToolRegistrar {
+  return {
+    registerTool: (name, config, handler) =>
+      registrar.registerTool(name, config, (args, extra) =>
+        activity.track(() => handler(args, extra))
+      ),
+  }
 }
 
 const projectId = z.string().min(1).describe('Overleaf project ID')
@@ -154,8 +214,8 @@ function structured<T>(
  * Progress is advisory, so a notification that cannot be delivered never fails the call.
  */
 function progressReporter(extra: ToolCallExtra | undefined): ProgressReporter | undefined {
-  const progressToken = extra?._meta?.progressToken
-  const send = extra?.sendNotification
+  const progressToken = extra?.mcpReq?._meta?.progressToken
+  const send = extra?.mcpReq?.notify
   if (progressToken === undefined || send === undefined) return undefined
   return async (progress, total, message) => {
     try {
@@ -203,19 +263,24 @@ const projectName = z
   .max(150)
   .describe('Project name, 1 to 150 characters without slashes')
 
-const createdProjectSchema = {
+const createdProjectSchema = z.object({
   projectId: z.string(),
   name: z.string(),
   url: z.string(),
-}
+})
 
-export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafToolRuntime): void {
+export function registerOverleafTools(
+  registrar: ToolRegistrar,
+  runtime: OverleafToolRuntime,
+  activity?: ToolActivity
+): void {
+  const server = activity === undefined ? registrar : trackedRegistrar(registrar, activity)
   server.registerTool(
     'auth_status',
     {
       description:
         'Verify the saved Overleaf web session without exposing cookies. sessionExpiresAt is when the session lapses unless a request refreshes it first; Overleaf sessions last five days from their last use, and the CLI command `overleaf-web-mcp keepalive` can be scheduled to refresh them.',
-      outputSchema: {
+      outputSchema: z.object({
         authenticated: z.literal(true),
         baseUrl: z.string(),
         userId: z.string().optional(),
@@ -224,7 +289,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
         permissionsUnchecked: z.boolean(),
         warning: z.string().optional(),
         socketPresenceNotice: z.string(),
-      },
+      }),
       annotations: { readOnlyHint: true },
     },
     structured(async () => await runtime.authStatus())
@@ -234,7 +299,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'List the projects the account can access, newest first by default. Archived and trashed projects are hidden unless includeArchived or includeTrashed is set. Returns projects with id, name, accessLevel, lastUpdated, archived, and trashed, plus totalMatched (before limit) and totalProjects (everything the account can access).',
-      inputSchema: {
+      inputSchema: z.object({
         query: z
           .string()
           .min(1)
@@ -253,12 +318,12 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
           .enum(['lastUpdated', 'name'])
           .default('lastUpdated')
           .describe('lastUpdated is newest first; name is alphabetical'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         projects: z.array(projectSummarySchema),
         totalMatched: z.number().int(),
         totalProjects: z.number().int(),
-      },
+      }),
       annotations: { readOnlyHint: true },
     },
     structured(async (args: ListProjectsOptions) => ({
@@ -270,11 +335,11 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Create a new Overleaf project and return its projectId, url, and rootDocPath. A "blank" project still contains Overleaf\'s stub main.tex as its root document; after importing your own manuscript, point the project at it with update_project_settings or delete the stub with manage_entity. "example" seeds Overleaf\'s example paper.',
-      inputSchema: {
+      inputSchema: z.object({
         name: projectName,
         template: z.enum(['blank', 'example']).default('blank'),
-      },
-      outputSchema: { ...createdProjectSchema, rootDocPath: z.string().optional() },
+      }),
+      outputSchema: createdProjectSchema.extend({ rootDocPath: z.string().optional() }),
       annotations: { destructiveHint: false, idempotentHint: false },
     },
     structured(async (args: { name: string; template: ProjectTemplate }) => ({
@@ -286,7 +351,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Copy an existing project, including its files and settings, into a new project with the given name. Use it to start from a lab or journal template project.',
-      inputSchema: { sourceProjectId: projectId.describe('Project to copy'), name: projectName },
+      inputSchema: z.object({ sourceProjectId: projectId.describe('Project to copy'), name: projectName }),
       outputSchema: createdProjectSchema,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
@@ -299,10 +364,10 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Create a new project from a local .zip archive of LaTeX sources. name defaults to the archive file name. Overleaf caps archives at about 50 MB and rate-limits this route: RATE_LIMITED means wait details.retryAfterMs before trying again, and nothing was created. Set the root document afterwards with update_project_settings if the archive has more than one .tex file at the top level.',
-      inputSchema: {
+      inputSchema: z.object({
         localZipPath: z.string().min(1).describe('Local path of a .zip archive'),
         name: projectName.optional(),
-      },
+      }),
       outputSchema: createdProjectSchema,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
@@ -315,7 +380,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Rename, trash, restore, archive, unarchive, or permanently delete a project. trash, archive, and delete require confirmName to equal the current project name exactly, else CONFIRMATION_MISMATCH and nothing changes. trash is the normal way to remove a project and is reversible with restore or in the web UI. delete is permanent and only succeeds on a project that is already trashed. Confirm with the user before trashing or deleting.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         action: z.enum(['rename', 'trash', 'restore', 'archive', 'unarchive', 'delete']),
         newName: projectName.optional().describe('New name, for rename'),
@@ -323,12 +388,12 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
           .string()
           .optional()
           .describe('Current project name, repeated exactly, for trash, archive, and delete'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         action: z.enum(['rename', 'trash', 'restore', 'archive', 'unarchive', 'delete']),
         projectId: z.string(),
         name: z.string(),
-      },
+      }),
       annotations: { destructiveHint: true, idempotentHint: false },
     },
     structured(async (args: {
@@ -358,7 +423,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         "Persist the project's root document, TeX engine, TeX Live image, or spell-check language in Overleaf's own project settings, so the web UI's Recompile follows the change. rootFilePath must name an existing text document. Returns the settings as re-read from the project. Provide at least one field.",
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         rootFilePath: filePath.optional().describe('Document Overleaf should compile by default'),
         compiler: z.enum(COMPILERS).optional(),
@@ -367,14 +432,14 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
           .string()
           .optional()
           .describe('Overleaf language code such as en or de; an empty string turns spell checking off'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         projectId: z.string(),
         rootDocPath: z.string().optional(),
         compiler: z.string().optional(),
         imageName: z.string().optional(),
         spellCheckLanguage: z.string().optional(),
-      },
+      }),
       annotations: { destructiveHint: false, idempotentHint: true },
     },
     structured(async (args: {
@@ -397,7 +462,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Return the project file/folder tree with entity IDs and paths, plus the root document, compiler, TeX Live image, and spell-check language Overleaf uses. Each binary file entity carries hash, a git blob hash equal to `git hash-object <file>`; text documents have no hash and must be compared by reading their content.',
-      inputSchema: { projectId },
+      inputSchema: z.object({ projectId }),
       annotations: { readOnlyHint: true },
     },
     handler(async ({ projectId }: { projectId: string }) =>
@@ -408,7 +473,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     'read_file',
     {
       description: 'Read a text document as LF-normalized content and return its opaque revision.',
-      inputSchema: { projectId, filePath },
+      inputSchema: z.object({ projectId, filePath }),
       annotations: { readOnlyHint: true },
     },
     handler(async (args: { projectId: string; filePath: string }) =>
@@ -420,7 +485,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Replace a text document using a minimal verified OT edit, optionally recorded as tracked changes. Supply the new text either inline through content or from disk through localPath, never both; localPath keeps a whole-file replacement revision-checked without sending the file through the tool call.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         filePath,
         revision,
@@ -431,7 +496,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
           .optional()
           .describe('Local UTF-8 text file holding the complete replacement, mutually exclusive with content'),
         writeMode,
-      },
+      }),
       annotations: { destructiveHint: true, idempotentHint: false },
     },
     handler(async (args: {
@@ -456,7 +521,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Create a text document and optionally record non-empty initial content as tracked changes.',
-      inputSchema: { projectId, filePath, content: z.string().optional(), writeMode },
+      inputSchema: z.object({ projectId, filePath, content: z.string().optional(), writeMode }),
       annotations: { destructiveHint: false, idempotentHint: false },
     },
     handler(async (args: {
@@ -473,14 +538,14 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Create a folder, rename, move, or delete an entity. Deletion requires confirmPath to exactly equal path.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         action: z.enum(['create_folder', 'rename', 'move', 'delete']),
         path: filePath,
         newName: z.string().min(1).optional(),
         destinationFolderPath: z.string().optional(),
         confirmPath: z.string().optional(),
-      },
+      }),
       annotations: { destructiveHint: true, idempotentHint: false },
     },
     handler(async (args: {
@@ -514,7 +579,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Upload a local file into a project folder, replacing any entity already at that path in place and keeping its entity ID. Works for text documents as well as binaries; Overleaf decides which by extension and UTF-8 validity. Replacing a document this way is a blind write with no revision check that is never tracked, so prefer write_file when a collaborator may be editing.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         localPath: z.string().min(1),
         destinationFolderPath: z.string().default(''),
@@ -523,7 +588,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
           .min(1)
           .optional()
           .describe('Name to store the file under; defaults to the local file name'),
-      },
+      }),
       annotations: { destructiveHint: true, idempotentHint: false },
     },
     handler(async (args: {
@@ -545,12 +610,12 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Download one Overleaf document or binary file to an explicit local path. Refuses to replace an existing local file unless overwrite is set.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         filePath,
         localPath: z.string().min(1),
         overwrite: z.boolean().default(false).describe('Replace localPath if it already exists'),
-      },
+      }),
       annotations: { readOnlyHint: true },
     },
     handler(async (args: {
@@ -572,7 +637,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         "Compare a local folder with a project folder and report what sync_directory would do, changing nothing. Binary files compare by git blob hash at no cost; each text document with a local counterpart, or present only in the project, is read once through the project's queue, so this suits tens of documents, not thousands. Returns toUpload (new or changed), identical (a count and the first 25 paths unless verbose), remoteOnly (what mirror mode would delete, each folder collapsed to one entry that includes its contents), conflicts (a file where the other side has a folder, or non-UTF-8 text where the project has a document; sync_directory cannot apply these), ignored, and planToken. Show the plan to the user before syncing. localFolderPath is on the server's disk; a symbolic link that leads outside it fails with PATH_OUTSIDE_ROOT.",
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         localFolderPath,
         destinationFolderPath,
@@ -581,8 +646,8 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
           .boolean()
           .default(false)
           .describe('List every identical path and ignored entry instead of the first 25'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         planToken: z.string(),
         localFolderPath: z.string(),
         destinationFolderPath: z.string(),
@@ -622,7 +687,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
             })
           ),
         }),
-      },
+      }),
       annotations: { readOnlyHint: true },
     },
     structured(async (args: {
@@ -645,7 +710,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         "Make a project folder match a local folder: upload new and changed files, and in mirror mode also delete what exists only in the project. Call plan_sync first, confirm the plan with the user, and pass its planToken; if the project or the folder changed since, REMOTE_DRIFT is returned and nothing changes. Changed text documents are replaced through revision-checked write_file edits, recorded as tracked changes when writeMode is tracked, so a concurrent edit fails that file with REVISION_CONFLICT rather than being overwritten. Binaries and new files are uploaded; with writeMode tracked, new .tex, .bib, and similar text files are created with tracked content instead. Missing folders are created. Uploads and writes run first. Deletes run only in mirror mode, only when confirmDeleteCount equals the number of remoteOnly entries, else CONFIRMATION_MISMATCH, and never after any upload or write failed. Failures are per file and nothing is retried: the call continues unless stopOnError, then returns status, completed, failed, remaining, and a planToken to resume with. It saves tool calls, not time.",
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         localFolderPath,
         mode: z
@@ -666,8 +731,8 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
         ignore: ignorePatterns,
         writeMode,
         stopOnError: z.boolean().default(false).describe('Stop at the first failure instead of continuing'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         status: z.enum(['complete', 'partial']),
         mode: z.enum(['additive', 'mirror']),
         completed: z.array(
@@ -684,7 +749,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
         remaining: z.array(z.object({ destinationPath: z.string(), action: syncActionSchema })),
         identicalCount: z.number().int(),
         planToken: z.string().optional(),
-      },
+      }),
       annotations: { destructiveHint: true, idempotentHint: true },
     },
     structured(async (args: {
@@ -715,7 +780,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Delete several documents, files, or folders in one call. confirmCount must equal the number of paths, else CONFIRMATION_MISMATCH. Every path is resolved before anything is deleted, so a missing one fails the call with NOT_FOUND and changes nothing. Deleting a folder removes everything inside it, so list the folder alone, not its contents too. Continues past a failed delete unless stopOnError, and returns status, completed, failed, and remaining. Confirm the list with the user first.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         paths: z.array(filePath).min(1).max(500).describe('Project paths to delete'),
         confirmCount: z
@@ -724,13 +789,13 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
           .positive()
           .describe('The number of paths, repeated after confirming the list with the user'),
         stopOnError: z.boolean().default(false).describe('Stop at the first failure instead of continuing'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         status: z.enum(['complete', 'partial']),
         completed: z.array(z.object({ path: z.string(), type: entityTypeSchema, entityId: z.string() })),
         failed: z.array(z.object({ path: z.string(), errorCode: errorCodeSchema, message: z.string() })),
         remaining: z.array(z.object({ path: z.string() })),
-      },
+      }),
       annotations: { destructiveHint: true, idempotentHint: false },
     },
     structured(async (args: {
@@ -750,7 +815,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Parse LaTeX section headings in one file only; this never follows input/include directives.',
-      inputSchema: { projectId, filePath },
+      inputSchema: z.object({ projectId, filePath }),
       annotations: { readOnlyHint: true },
     },
     handler(async (args: { projectId: string; filePath: string }) =>
@@ -761,7 +826,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     'get_section_content',
     {
       description: 'Read one parsed section body from a single file.',
-      inputSchema: { projectId, filePath, sectionId: z.string().min(1) },
+      inputSchema: z.object({ projectId, filePath, sectionId: z.string().min(1) }),
       annotations: { readOnlyHint: true },
     },
     handler(async (args: { projectId: string; filePath: string; sectionId: string }) =>
@@ -773,14 +838,14 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Replace one section body in a single file using a revision-checked write, optionally recorded as tracked changes. Included files are not traversed.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         filePath,
         revision,
         sectionId: z.string().min(1),
         content: z.string(),
         writeMode,
-      },
+      }),
       annotations: { destructiveHint: true, idempotentHint: false },
     },
     handler(async (args: {
@@ -806,11 +871,11 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         "Compile a project. Omit rootFilePath to build the root document configured in Overleaf, which is what the web UI's Recompile button uses; pass it to build a different document for this call only.",
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         rootFilePath: filePath.optional(),
         timeoutMs: z.number().int().min(1_000).max(15 * 60_000).optional(),
-      },
+      }),
       annotations: { destructiveHint: false, idempotentHint: false },
     },
     handler(async (args: { projectId: string; rootFilePath?: string; timeoutMs?: number }) =>
@@ -821,7 +886,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     'stop_compile',
     {
       description: 'Stop the active Overleaf compile for a project.',
-      inputSchema: { projectId },
+      inputSchema: z.object({ projectId }),
       annotations: { destructiveHint: true, idempotentHint: true },
     },
     handler(async ({ projectId }: { projectId: string }) =>
@@ -833,12 +898,12 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'List reviewer-thread messages and lazily resolve document ranges. Defaults to open threads.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         filePath: z.string().min(1).optional(),
         status: z.enum(['open', 'resolved', 'all']).default('open'),
         author: z.string().min(1).optional(),
-      },
+      }),
       annotations: { readOnlyHint: true },
     },
     handler(async (args: {
@@ -858,7 +923,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     'reply_to_comment',
     {
       description: 'Reply to an existing Overleaf review thread with timeout deduplication.',
-      inputSchema: { projectId, threadId: z.string().min(1), content: z.string().min(1) },
+      inputSchema: z.object({ projectId, threadId: z.string().min(1), content: z.string().min(1) }),
       annotations: { destructiveHint: false, idempotentHint: false },
     },
     handler(async (args: { projectId: string; threadId: string; content: string }) =>
@@ -870,7 +935,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Add and verify an anchored review comment using UTF-16 positions and expectedText.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         filePath,
         revision,
@@ -878,7 +943,7 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
         end: position,
         expectedText: z.string().min(1),
         content: z.string().min(1),
-      },
+      }),
       annotations: { destructiveHint: false, idempotentHint: false },
     },
     handler(async (args: AddCommentInput) => await runtime.comments.addComment(args))
@@ -887,13 +952,13 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     'set_comment_status',
     {
       description: 'Resolve or reopen a review thread and verify its resulting document revision.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         filePath,
         revision,
         threadId: z.string().min(1),
         status: z.enum(['open', 'resolved']),
-      },
+      }),
       annotations: { destructiveHint: true, idempotentHint: true },
     },
     handler(async (args: {
@@ -909,10 +974,10 @@ export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafTo
     {
       description:
         'Poll one recent project-history window and return updates newer than an optional version cursor.',
-      inputSchema: {
+      inputSchema: z.object({
         projectId,
         sinceVersion: z.number().int().nonnegative().optional(),
-      },
+      }),
       annotations: { readOnlyHint: true },
     },
     handler(async (args: { projectId: string; sinceVersion?: number }) =>

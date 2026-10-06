@@ -1,32 +1,21 @@
 #!/usr/bin/env node
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-
 import { runKeepaliveCommand } from './auth/keepalive-command.js'
 import { runLoginCommand } from './auth/login-command.js'
 import { parseCliCommand, renderHelp } from './cli-command.js'
 import { readConfig } from './config.js'
 import { asMcpError } from './core/errors.js'
 import { OverleafRuntime } from './runtime.js'
-import { createMcpServer } from './server.js'
+import { runStdioServer } from './server.js'
 
 async function serve(): Promise<void> {
   const runtime = await OverleafRuntime.create(readConfig())
-  const server = createMcpServer(runtime)
-  let closing = false
-  const close = async (): Promise<void> => {
-    if (closing) return
-    closing = true
-    await server.close().catch(() => undefined)
-    await runtime.close()
+  const server = runStdioServer(runtime)
+  const shutdown = (): void => {
+    void server.shutdown()
   }
-  process.once('SIGINT', () => {
-    void close().finally(() => process.exit(0))
-  })
-  process.once('SIGTERM', () => {
-    void close().finally(() => process.exit(0))
-  })
-  await server.connect(new StdioServerTransport())
+  process.once('SIGINT', shutdown)
+  process.once('SIGTERM', shutdown)
 }
 
 async function main(): Promise<void> {

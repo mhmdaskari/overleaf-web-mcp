@@ -1,11 +1,12 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { PassThrough } from 'node:stream'
+
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client'
+import { McpServer, type ServerContext } from '@modelcontextprotocol/server'
 import { describe, expect, test, vi } from 'vitest'
 
 import { SERVER_INSTRUCTIONS } from '../src/mcp/instructions.js'
-import { TOOL_NAMES } from '../src/mcp/tools.js'
-import { createMcpServer } from '../src/server.js'
+import { ToolActivity, TOOL_NAMES, type ToolCallExtra } from '../src/mcp/tools.js'
+import { createMcpServer, runStdioServer, SERVER_NAME, serveOverStdio } from '../src/server.js'
 
 function fakeRuntime() {
   return {
@@ -43,6 +44,29 @@ function fakeRuntime() {
   }
 }
 
+/** A runtime whose plan_sync reports two progress steps before returning a schema-valid plan. */
+function runtimeWithPlanProgress() {
+  const runtime = fakeRuntime()
+  const plan = {
+    planToken: 'token',
+    localFolderPath: '/work/paper',
+    destinationFolderPath: '',
+    toUpload: [{ localPath: 'a.png', destinationPath: 'a.png', reason: 'new' }],
+    identical: { count: 0, paths: [] },
+    remoteOnly: [{ destinationPath: 'old', entityId: 'e', type: 'folder', contains: 2 }],
+    conflicts: [],
+    ignored: { count: 1, entries: [{ localPath: 'main.aux', matchedPattern: '*.aux' }] },
+  }
+  runtime.sync.planSync.mockImplementation(async (_id: string, _path: string, options: {
+    onProgress?: (progress: number, total: number, message: string) => Promise<void>
+  }) => {
+    await options.onProgress?.(1, 2, 'Read 1 of 2 documents')
+    await options.onProgress?.(2, 2, 'Read 2 of 2 documents')
+    return plan
+  })
+  return { runtime, plan }
+}
+
 async function connectedPair() {
   const server = createMcpServer(fakeRuntime())
   const client = new Client({ name: 'smoke-client', version: '1.0.0' })
@@ -53,12 +77,15 @@ async function connectedPair() {
 
 describe('MCP server', () => {
   test('constructs the SDK server with the full tool surface', () => {
-    const server = createMcpServer(fakeRuntime())
+    const registerTool = vi.spyOn(McpServer.prototype, 'registerTool')
+    try {
+      const server = createMcpServer(fakeRuntime())
 
-    expect(server).toBeInstanceOf(McpServer)
-    const registered = (server as unknown as { _registeredTools: Record<string, unknown> })
-      ._registeredTools
-    expect(Object.keys(registered)).toEqual(TOOL_NAMES)
+      expect(server).toBeInstanceOf(McpServer)
+      expect(registerTool.mock.calls.map(call => call[0])).toEqual(TOOL_NAMES)
+    } finally {
+      registerTool.mockRestore()
+    }
   })
 
   test('lists all tools over an MCP transport handshake', async () => {
@@ -66,6 +93,9 @@ describe('MCP server', () => {
     const result = await client.listTools()
 
     expect(result.tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    // Parameter descriptions survive the schema conversion the SDK performs.
+    expect(result.tools.find(tool => tool.name === 'list_projects')?.inputSchema.properties?.query)
+      .toMatchObject({ description: 'Case-insensitive substring of the project name' })
     await client.close()
     await server.close()
   })
@@ -119,24 +149,7 @@ describe('MCP server', () => {
   })
 
   test('delivers sync progress notifications and a schema-valid plan over the transport', async () => {
-    const runtime = fakeRuntime()
-    const plan = {
-      planToken: 'token',
-      localFolderPath: '/work/paper',
-      destinationFolderPath: '',
-      toUpload: [{ localPath: 'a.png', destinationPath: 'a.png', reason: 'new' }],
-      identical: { count: 0, paths: [] },
-      remoteOnly: [{ destinationPath: 'old', entityId: 'e', type: 'folder', contains: 2 }],
-      conflicts: [],
-      ignored: { count: 1, entries: [{ localPath: 'main.aux', matchedPattern: '*.aux' }] },
-    }
-    runtime.sync.planSync.mockImplementation(async (_id: string, _path: string, options: {
-      onProgress?: (progress: number, total: number, message: string) => Promise<void>
-    }) => {
-      await options.onProgress?.(1, 2, 'Read 1 of 2 documents')
-      await options.onProgress?.(2, 2, 'Read 2 of 2 documents')
-      return plan
-    })
+    const { runtime, plan } = runtimeWithPlanProgress()
     const server = createMcpServer(runtime)
     const client = new Client({ name: 'smoke-client', version: '1.0.0' })
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -145,7 +158,6 @@ describe('MCP server', () => {
     const progress: Array<{ progress: number; total?: number | undefined }> = []
     const result = await client.callTool(
       { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/work/paper' } },
-      undefined,
       { onprogress: update => progress.push({ progress: update.progress, total: update.total }) }
     )
 
@@ -164,7 +176,7 @@ describe('MCP server', () => {
     await server.close()
   })
 
-  test('sends bounded usage instructions in the initialize response', async () => {
+  test('sends bounded usage instructions to a connecting client', async () => {
     const { server, client } = await connectedPair()
     const instructions = client.getInstructions()
 
@@ -177,5 +189,248 @@ describe('MCP server', () => {
     expect(instructions!.split(/\s+/u).length).toBeLessThan(450)
     await client.close()
     await server.close()
+  })
+})
+
+// serveOverStdio is what `overleaf-web-mcp serve` runs. The client's opening message decides the
+// protocol era, and both eras must receive the same tools and the same usage instructions.
+describe('protocol eras', () => {
+  function served(runtime: ReturnType<typeof fakeRuntime> = fakeRuntime()) {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    const connection = serveOverStdio(runtime, serverTransport)
+    return { clientTransport, connection }
+  }
+
+  test.each(['2024-10-07', '2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'])(
+    'serves a client on protocol %s through initialize',
+    async version => {
+      const { clientTransport, connection } = served()
+      const client = new Client(
+        { name: 'legacy-client', version: '1.0.0' },
+        { supportedProtocolVersions: [version] }
+      )
+      await client.connect(clientTransport)
+
+      expect(client.getProtocolEra()).toBe('legacy')
+      expect(client.getNegotiatedProtocolVersion()).toBe(version)
+      expect(client.getDiscoverResult()).toBeUndefined()
+      expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS)
+      expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+      await client.close()
+      await connection.close()
+    }
+  )
+
+  test('answers a bare initialize from a client without the v2 SDK', async () => {
+    const { clientTransport: peer, connection } = served()
+    const waiting = new Map<number, (message: { result?: Record<string, unknown> }) => void>()
+    peer.onmessage = (message: unknown) => {
+      const response = message as { id?: unknown; result?: Record<string, unknown> }
+      if (typeof response.id === 'number') waiting.get(response.id)?.(response)
+    }
+    await peer.start()
+    const request = (id: number, method: string, params: Record<string, unknown>) =>
+      new Promise<{ result?: Record<string, unknown> }>(resolve => {
+        waiting.set(id, resolve)
+        void peer.send({ jsonrpc: '2.0', id, method, params })
+      })
+
+    const initialized = await request(1, 'initialize', {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'bare', version: '0' },
+    })
+    expect(initialized.result).toMatchObject({
+      protocolVersion: '2024-11-05',
+      serverInfo: { name: SERVER_NAME },
+      capabilities: { tools: {} },
+      instructions: SERVER_INSTRUCTIONS,
+    })
+    await peer.send({ jsonrpc: '2.0', method: 'notifications/initialized' })
+    const listed = await request(2, 'tools/list', {})
+    const tools = listed.result?.tools as Array<{ name: string }>
+    expect(tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    await peer.close()
+    await connection.close()
+  })
+
+  test('serves a 2026-07-28 client through server/discover with the same instructions', async () => {
+    const { clientTransport, connection } = served()
+    const client = new Client(
+      { name: 'modern-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } }
+    )
+    await client.connect(clientTransport)
+
+    expect(client.getProtocolEra()).toBe('modern')
+    expect(client.getNegotiatedProtocolVersion()).toBe('2026-07-28')
+    expect(client.getDiscoverResult()?.instructions).toBe(SERVER_INSTRUCTIONS)
+    expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS)
+    expect((await client.discover()).instructions).toBe(SERVER_INSTRUCTIONS)
+    expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    await client.close()
+    await connection.close()
+  })
+
+  test('delivers sync progress to a 2026-07-28 client', async () => {
+    const { runtime, plan } = runtimeWithPlanProgress()
+    const { clientTransport, connection } = served(runtime)
+    const client = new Client(
+      { name: 'modern-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } }
+    )
+    await client.connect(clientTransport)
+
+    const progress: number[] = []
+    const result = await client.callTool(
+      { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/work/paper' } },
+      { onprogress: update => progress.push(update.progress) }
+    )
+
+    expect(result.isError).toBeFalsy()
+    expect(result.structuredContent).toEqual(plan)
+    expect(progress).toEqual([1, 2])
+    await client.close()
+    await connection.close()
+  })
+
+  test('rejects a tool name the server does not register', async () => {
+    const { clientTransport, connection } = served()
+    const client = new Client({ name: 'legacy-client', version: '1.0.0' })
+    await client.connect(clientTransport)
+
+    await expect(client.callTool({ name: 'no_such_tool', arguments: {} })).rejects.toMatchObject({
+      code: -32602,
+    })
+    await client.close()
+    await connection.close()
+  })
+
+  test('tools read the progress token and notifier where the SDK puts them', () => {
+    // Compile-time guard: npm run check fails if ServerContext.mcpReq loses `_meta` or `notify`, or
+    // either stops matching what ToolCallExtra reads. The progress tests cover it at run time.
+    type Provided = Pick<ServerContext['mcpReq'], '_meta' | 'notify'>
+    const read = (fields: Provided): NonNullable<ToolCallExtra['mcpReq']> => fields
+    expect(read).toBeTypeOf('function')
+  })
+})
+
+describe('tool activity', () => {
+  test('counts running calls and reports when they settle', async () => {
+    const activity = new ToolActivity()
+    expect(await activity.whenIdle(10)).toBe(true)
+
+    let finish!: () => void
+    const call = activity.track(() => new Promise<void>(resolve => (finish = resolve)))
+    expect(activity.running).toBe(1)
+    expect(await activity.whenIdle(10)).toBe(false)
+
+    const idle = activity.whenIdle(1000)
+    finish()
+    await call
+    expect(await idle).toBe(true)
+    expect(activity.running).toBe(0)
+  })
+
+  test('settles a failed call too', async () => {
+    const activity = new ToolActivity()
+    await expect(activity.track(async () => Promise.reject(new Error('boom')))).rejects.toThrow('boom')
+    expect(activity.running).toBe(0)
+  })
+})
+
+// runStdioServer is the whole `overleaf-web-mcp serve` lifecycle after the runtime is created.
+describe('stdio lifecycle', () => {
+  function stdio(runtime: ReturnType<typeof fakeRuntime>, stdinCloseGraceMs = 1000) {
+    const input = new PassThrough()
+    const output = new PassThrough()
+    const lines: string[] = []
+    let buffered = ''
+    output.on('data', (chunk: Buffer) => {
+      buffered += chunk.toString('utf8')
+      const parts = buffered.split('\n')
+      buffered = parts.pop() ?? ''
+      lines.push(...parts.filter(Boolean))
+    })
+    const close = vi.fn(async () => undefined)
+    const exit = vi.fn()
+    const server = runStdioServer({ ...runtime, close }, { input, output, exit, stdinCloseGraceMs })
+    const send = (message: Record<string, unknown>) => input.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
+    const reply = async (id: number) => {
+      await vi.waitFor(() => expect(lines.some(line => (JSON.parse(line) as { id?: unknown }).id === id)).toBe(true))
+      return JSON.parse(lines.find(line => (JSON.parse(line) as { id?: unknown }).id === id)!) as Record<string, unknown>
+    }
+    const initialize = async () => {
+      send({ id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'pipe', version: '0' } } })
+      await reply(1)
+      send({ method: 'notifications/initialized' })
+    }
+    return { input, lines, close, exit, server, send, reply, initialize }
+  }
+
+  /** A runtime whose plan_sync stays running until release() is called. */
+  function runtimeWithSlowPlan() {
+    const runtime = fakeRuntime()
+    let release!: () => void
+    let started!: () => void
+    const running = new Promise<void>(resolve => (started = resolve))
+    runtime.sync.planSync.mockImplementation(async () => {
+      started()
+      await new Promise<void>(resolve => (release = resolve))
+      return {}
+    })
+    return { runtime, running, release: () => release() }
+  }
+
+  test('writes only JSON-RPC to stdout and exits once when the client closes stdin', async () => {
+    const { input, lines, close, exit, initialize } = stdio(fakeRuntime())
+    await initialize()
+    input.end()
+
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledTimes(1))
+    expect(exit).toHaveBeenCalledWith(0)
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) expect((JSON.parse(line) as { jsonrpc?: unknown }).jsonrpc).toBe('2.0')
+  })
+
+  test('lets a running tool call finish before closing the runtime when stdin closes', async () => {
+    const { runtime, running, release } = runtimeWithSlowPlan()
+    const { input, close, exit, send, initialize } = stdio(runtime)
+    await initialize()
+    send({ id: 2, method: 'tools/call', params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } } })
+    await running
+    input.end()
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(close).not.toHaveBeenCalled()
+    release()
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  test('closes after the grace period even if a call is still running', async () => {
+    const { runtime, running } = runtimeWithSlowPlan()
+    const { input, close, exit, send, initialize } = stdio(runtime, 30)
+    await initialize()
+    send({ id: 2, method: 'tools/call', params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } } })
+    await running
+    input.end()
+
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  test('shutdown closes at once, for signals', async () => {
+    const { runtime, running } = runtimeWithSlowPlan()
+    const { close, exit, send, server, initialize } = stdio(runtime)
+    await initialize()
+    send({ id: 2, method: 'tools/call', params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } } })
+    await running
+
+    await server.shutdown()
+    await server.shutdown()
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(exit).toHaveBeenCalledTimes(1)
   })
 })
