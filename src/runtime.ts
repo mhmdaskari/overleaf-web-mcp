@@ -185,8 +185,8 @@ export class OverleafRuntime implements OverleafToolRuntime {
         await documents.writeFile(projectId, filePath, revision, content, writeMode),
       createFile: async (projectId, filePath, content, writeMode) =>
         await created.runtime!.createFile(projectId, filePath, content, writeMode),
-      uploadFile: async (projectId, localPath, destinationFolderPath, destinationName) =>
-        await entities.uploadFile(projectId, localPath, destinationFolderPath, destinationName),
+      uploadFile: async (projectId, localPath, destinationFolderPath, destinationName, options) =>
+        await entities.uploadFile(projectId, localPath, destinationFolderPath, destinationName, options),
       manageEntity: async (projectId, action) => await entities.manageEntity(projectId, action),
       currentUserId: bootstrap.userId,
     })

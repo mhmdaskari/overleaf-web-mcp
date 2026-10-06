@@ -48,6 +48,14 @@ No Overleaf Git integration is involved.
   file's blob hash and folder. Nothing is stored on the server between calls, so a token survives
   a restart; after a sync, the digest covers what it changed as re-read from the tree and
   everything else as planned.
+- `batch_upload` is the same kind of composition: one tree read, the folder creation and upload
+  that `sync_directory` uses, and one read-back that confirms each upload and classifies a
+  timed-out one without sending it again. It stops at the first `RATE_LIMITED`, since Overleaf
+  counts uploads per project and would refuse the rest. `download_project_zip` streams the
+  archive to a temporary file beside the target and moves it into place, never holding the whole
+  archive in memory. It keeps the last 64 KB as it goes, the most a zip end record and its
+  comment can span, and checks for that record there, because Overleaf builds the archive while
+  sending it and a transfer cut short still ends with HTTP 200.
 - History monitoring reads one 25-group update window, strips email fields, and keeps no cursor or
   background state on the server.
 

@@ -1,10 +1,11 @@
 # Tool reference
 
-The server registers 27 tools. Names are `snake_case`. Every tool except `auth_status`,
+The server registers 29 tools. Names are `snake_case`. Every tool except `auth_status`,
 `list_projects`, `create_project`, and `import_project_zip` takes a `projectId` from
 `list_projects` or from one of the tools that create a project. Results are JSON; `auth_status`,
-`list_projects`, the project lifecycle tools, and the folder sync tools also declare an
-`outputSchema` and return the same object as `structuredContent`. Failures are JSON with `code`, `message`, `retryable`, and optional `details`;
+`list_projects`, the project lifecycle tools, `batch_upload`, `download_project_zip`, and the
+folder sync tools also declare an `outputSchema` and return the same object as
+`structuredContent`. Failures are JSON with `code`, `message`, `retryable`, and optional `details`;
 the codes are listed in the [safety model](safety.md#error-codes). The Overleaf routes behind each
 tool are catalogued in the [private API page](private-api.md).
 
@@ -214,15 +215,95 @@ Upload a local file into a project folder.
 | `destinationFolderPath` | no | Target folder; default `""`, the project root |
 | `destinationName` | no | Name to store the file under; defaults to the local file name |
 
-If an entity already exists at the destination path, Overleaf replaces its content in place and
-keeps its entity id; otherwise a new entity is created. Overleaf, not the caller, decides whether
-the result is a text `doc` or a binary `file`, by extension and UTF-8 validity, so this is a valid
-way to replace `.tex`, `.bib`, and `.bst` documents from disk. Replacing a document this way is a
-blind write: no revision check, never tracked. Uploading text where a binary of the same name
-exists, or the reverse, fails with `INVALID_ARGUMENT` rather than replacing it.
+If an entity already exists at the destination path, Overleaf replaces it; otherwise a new entity
+is created. A text document replaced by a text document keeps its entity id. A replaced binary
+file may get a new one, as may a document replaced by a binary or the reverse (Overleaf's source
+creates a new entity in those cases), so look the id up again in `get_project_tree` rather than
+reusing the old one. Overleaf, not the caller, decides whether the result is a text `doc` or a
+binary `file`, by extension and UTF-8 validity, so this is a valid way to replace `.tex`, `.bib`,
+and `.bst` documents from disk.
+
+Replacing a document this way is a blind write with no revision check. Overleaf compares the new
+text with the old and applies the difference, and records it as tracked changes when track
+changes is already on for this account; otherwise it is untracked. The caller cannot choose
+either way. A new file created by upload is never tracked content. A folder of the same name in
+the destination folder fails the upload with `INVALID_ARGUMENT` (`details.overleafError:
+"duplicate_file_name"`).
 
 Returns `entityId`, `entityType`, `path`, `replaced` (whether something existed at that path), and
 for binary files `hash`, computed locally so it can be checked against `get_project_tree` later.
+The result's `writeMode` always reads `untracked`, even when Overleaf recorded a document
+replacement as tracked changes; v0.5.0 resolves this.
+
+### `batch_upload` <small>destructive</small>
+
+Upload a list of local files, each to its own project path, in one call.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `files` | yes | 1 to 500 entries `{ localPath, destinationPath }`. `destinationPath` is the full project path, file name included, such as `figures/fig1.pdf` |
+| `onConflict` | no | `overwrite` (default) replaces what is at a path, as `upload_file` does; `skip` leaves it alone and lists it under `skipped` |
+| `stopOnError` | no | Stop at the first failure instead of continuing; default `false` |
+
+It is a composition of `upload_file` and `manage_entity`'s `create_folder`, like the
+[folder sync tools](#folder-sync-and-bulk-delete), and saves tool calls, not time. What happens,
+in order:
+
+1. Every entry is checked before anything is sent. The project root, a path ending in `/` or `.`,
+   one with a `..` segment, a `destinationPath` listed twice, and one that is the parent folder of another
+   listed path are `INVALID_ARGUMENT`; a `localPath` that does not exist is `NOT_FOUND`, and one
+   that is a folder is `INVALID_ARGUMENT`. Any of these fails the whole call with nothing changed.
+2. The project tree is read once. A file whose path runs through a document or binary file, or
+   whose path is a folder, fails with `INVALID_ARGUMENT` in either mode. A file whose path holds a
+   document or binary file is skipped with `onConflict: "skip"`, and otherwise replaced, as by
+   `upload_file`: a replaced document keeps its entity id, a replaced binary may get a new one.
+3. Files are handled in the order given, one at a time through the project's queue. Just before a
+   file is uploaded, its missing parent folders are created, parents first, each once, and listed
+   in `completed` as `create_folder`. A folder that could not be created is not tried again, and
+   every file under it fails with the folder's error code. With
+   `onConflict: "skip"` the path is checked again just before each upload, so a file someone added
+   in the meantime is skipped rather than replaced. Failures are per file; the rest continue unless
+   `stopOnError`, after which every file not attempted is in `remaining`. The call also stops at
+   the first `RATE_LIMITED`, with or without `stopOnError`, since Overleaf would refuse the rest
+   too: that file is in `failed`, the rest in `remaining`, and nothing more is sent. Overleaf
+   allows about 500 uploads per project in 15 minutes, as many as one call can list, so a second
+   large batch soon after the first can hit it. A `RATE_LIMITED` folder creation stops the call
+   the same way.
+4. The tree is read back once. An upload that is not there, or a binary whose hash differs from
+   the local file, moves to `failed` with `REMOTE_ERROR`. An upload that timed out is classified,
+   never sent again: a binary now in the tree with the local file's hash moves to `completed`
+   with `recoveredAfterTimeout: true`, since the path holds what was asked for whether or not
+   this upload put it there. A path that was empty before and after, or holds the same binary
+   with the same hash as before, stays failed with `TIMEOUT`: it had not landed when the tree was
+   read, though it could still land late. Anything else, a document for example, since documents
+   have no hash, stays failed with `OUTCOME_UNKNOWN`. Check `get_project_tree` before uploading
+   that file again.
+
+Overleaf decides whether each file becomes a text `doc` or a binary `file`, as for `upload_file`.
+Replacing a document this way is a blind write with no revision check, so a collaborator's
+concurrent edit is lost; Overleaf records the replacement as tracked changes only when track
+changes is already on for this account. For documents someone may be editing, use `write_file`
+with `localPath`, or `plan_sync` and `sync_directory`.
+
+Returns:
+
+- `status`: `complete`, or `partial` when anything failed or was not attempted. Skipped files do
+  not make it partial.
+- `onConflict`, as applied.
+- `completed`: `{ destinationPath, action, entityId?, entityType?, replaced?, recoveredAfterTimeout? }`,
+  where `action` is `create_folder` or `upload`, and `replaced` says whether something was at the
+  path before an upload.
+- `skipped`: `{ destinationPath, localPath, entityType }`, with `onConflict: "skip"` only.
+- `failed`: `{ destinationPath, action, errorCode, message }`.
+- `remaining`: `{ destinationPath, action }`, what was not attempted after `stopOnError` or
+  `RATE_LIMITED` stopped the call.
+- `verified`: `true` when the tree was read back and every completed upload was confirmed in it,
+  or when nothing was attempted; `false` when the read-back failed, in which case the entries are
+  as the uploads reported them.
+
+Nothing is retried. A client that sends a progress token receives `notifications/progress` as
+each file is uploaded.
 
 ### `download_file` <small>read-only</small>
 
@@ -238,14 +319,63 @@ Save one document or binary file to a local path.
 Returns `bytes` and `localPath`. Fails with `INVALID_ARGUMENT` when the local file exists and
 `overwrite` is not `true`.
 
+### `download_project_zip` <small>destructive</small>
+
+Save the whole project, sources and binaries, as one zip archive on the server's disk: the same
+archive as Overleaf's "Download as zip".
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `localPath` | yes | Where to write the archive; its folder must exist |
+| `overwrite` | no | Replace `localPath` if it exists; default `false` |
+| `timeoutMs` | no | How long the whole transfer may take, 1 second to 15 minutes; default 5 minutes |
+
+The local checks run before anything is requested: a missing parent folder is `NOT_FOUND`, a
+folder at `localPath` is `INVALID_ARGUMENT`, and an existing file without `overwrite: true` is
+`CONFIRMATION_MISMATCH` (where `download_file` answers `INVALID_ARGUMENT`). The temporary file the
+archive is streamed to is created in the same folder at this point too, so a folder that cannot be
+written fails with `INVALID_ARGUMENT` (`details.errno`, such as `EACCES`) before the request uses
+up any of Overleaf's allowance. The archive must start with a zip signature, else the call fails
+with `PROTOCOL_UNSUPPORTED`, and end with a complete zip end record. Overleaf builds the archive
+while it sends it, so a transfer cut short still arrives with HTTP 200; one without that end
+record, or one that stops before its first four bytes, fails with `REMOTE_ERROR`,
+`retryable: true`. Either way nothing is written. Only
+a complete archive is moved into place. With `overwrite: true` the existing file is replaced in
+one step, so a failed download leaves it intact; without it, a file that appeared at `localPath`
+in the meantime is not replaced (`CONFIRMATION_MISMATCH`). The temporary file is removed on every
+failure.
+
+The end check catches a truncated transfer, not a missing file: if Overleaf fails to read one
+file while building the archive, it leaves that file out of an otherwise well-formed archive and
+reports no error. For a backup that must be complete, compare the archive's contents with
+`get_project_tree`.
+
+Overleaf allows about 10 downloads per project a minute. It sends no `Retry-After`, so
+`RATE_LIMITED` normally has no `details.retryAfterMs`: wait a minute before trying again. Nothing
+is written. Overleaf checks this route's project access rather than the login, so an expired
+session shows up as `PERMISSION_DENIED` rather than `AUTH_EXPIRED`; check `auth_status`.
+
+It changes nothing on Overleaf; it is annotated destructive because it can replace a local file.
+Take one as a backup before a mirror `sync_directory` or a large `batch_upload` with
+`onConflict: "overwrite"`.
+
+Returns `projectId`, `localPath` resolved to an absolute path, `bytes`, and `replaced` (whether a
+file existed at `localPath`).
+
 ## Choosing between `write_file` and `upload_file`
 
 | Need | Tool | Revision check | Tracked changes | Content source |
 | --- | --- | :---: | :---: | --- |
 | Small edit, or collaborators may be editing | `write_file` with `content` | yes | optional | inline |
 | Replace a large text file safely | `write_file` with `localPath` | yes | optional | disk |
-| Replace a binary, or push text when nobody else is editing | `upload_file` | no | never | disk |
+| Replace a binary, or push text when nobody else is editing | `upload_file` | no | account setting | disk |
+| Upload a list of files to paths you choose | `batch_upload` | no | account setting | disk |
 | Bring a whole folder up to date | `plan_sync`, then `sync_directory` | yes, for documents | optional | disk |
+
+"Account setting" means the caller does not choose: replacing an existing document by upload is
+recorded as tracked changes when track changes is already on for this account, and untracked
+otherwise. A binary, or a new file, is never tracked.
 
 Neither is limited by file size in practice: `DOC_TOO_LARGE` applies at the advertised
 `ol-maxDocLength` (2,097,152 UTF-16 code units by default) and `UPDATE_TOO_LARGE` at 7,340,032
@@ -257,8 +387,8 @@ ceiling on inline `content` is the MCP client's tool-argument budget, which `loc
 `plan_sync` and `sync_directory` compare a local folder with a project folder and make the
 project match it; `delete_entities` removes several entities at once. All three are compositions
 of the tools above, so they inherit their checks: changed text documents are replaced through
-the same revision-checked, verified edit as `write_file`, binaries through the same in-place
-upload as `upload_file`, and deletes through `manage_entity`. They save tool calls and context,
+the same revision-checked, verified edit as `write_file`, binaries through the same upload as
+`upload_file`, and deletes through `manage_entity`. They save tool calls and context,
 not time: every step still runs through the project's one queue, one after another. A client that
 sends a progress token receives `notifications/progress` as documents are read and files are
 applied.
@@ -371,9 +501,9 @@ What happens, in order:
    and every new file are uploaded, and Overleaf decides whether a new file is a document or a
    binary. With `writeMode: "tracked"`, changed documents are written as tracked changes, and
    new files Overleaf treats as text (`.tex`, `.bib`, `.sty`, `.cls`, `.bst`, `.txt`, and
-   similar) are created as documents with tracked content, the way `create_file` does; an
-   upload is never tracked, so binaries are uploaded as usual. Conflicts from the plan are
-   reported as failures.
+   similar) are created as documents with tracked content, the way `create_file` does, since a
+   new file created by upload is never tracked content; binaries are uploaded as usual.
+   Conflicts from the plan are reported as failures.
 4. The tree is read back, and an upload that is not there, or whose hash does not match the
    local file, is moved to `failed` with `REMOTE_ERROR`.
 5. Deletes, in mirror mode only, and only if nothing so far failed. Just before each delete, the

@@ -30,30 +30,41 @@ unexpected shape surfaces as `PROTOCOL_UNSUPPORTED` rather than a parse exceptio
 | `POST /project/:id/trash`, `DELETE /project/:id/trash` | nothing | nothing | `manage_project` `trash`, `restore` |
 | `POST /Project/:id/archive`, `DELETE /Project/:id/archive` | nothing | nothing | `manage_project` `archive`, `unarchive` |
 | `DELETE /Project/:id` | nothing | nothing | `manage_project` `delete`; the server only sends it for a project the list reports as trashed |
+| `GET /Project/:id/download/zip` | nothing | the archive's bytes, streamed to a temporary file and checked for a zip signature at the start and a zip end record at the end; `Content-Type` only when the bytes are not a zip; HTTP 429 without `Retry-After` past about 10 a minute per project; HTTP 403, not a login redirect, for an expired session | `download_project_zip` |
 
 The capitalised `/Project/` prefix is Overleaf's own; both spellings are live routes.
+
+Overleaf builds the zip archive while it streams it, with no `Content-Length`, so a transfer cut
+short arrives with HTTP 200; only the missing end record shows it. A file Overleaf fails to read
+while building the archive is left out without an error.
 
 ## Files and folders
 
 | Method and route | Sent | Read | Used by |
 | --- | --- | --- | --- |
 | `POST /project/:id/doc` | `{ parent_folder_id, name }` | `_id` | `create_file` |
-| `POST /project/:id/folder` | `{ parent_folder_id, name }` | `_id` | `manage_entity` `create_folder` |
+| `POST /project/:id/folder` | `{ parent_folder_id, name }` | `_id`; HTTP 429 past about 60 a minute per project | `manage_entity` `create_folder` |
 | `POST /project/:id/:type/:entityId/rename` | `{ name }` | nothing | `manage_entity` `rename` |
 | `POST /project/:id/:type/:entityId/move` | `{ folder_id }` | nothing | `manage_entity` `move` |
 | `DELETE /project/:id/:type/:entityId` | nothing | nothing | `manage_entity` `delete`; deleting a folder removes its subtree |
-| `POST /project/:id/upload?folder_id=` | multipart `qqfile` and `name` | `success`, `entity_id`, `entity_type`, `hash`; HTTP 422 with a short `error` code on rejection | `upload_file` |
+| `POST /project/:id/upload?folder_id=` | multipart `qqfile` and `name` | `success`, `entity_id`, `entity_type`, `hash`; HTTP 422 with a short `error` code on rejection; HTTP 429 past about 500 a project in 15 minutes | `upload_file`, `batch_upload` |
 | `GET /Project/:id/doc/:entityId/download`, `GET /Project/:id/file/:entityId` | nothing | raw bytes | `download_file` |
 
-`plan_sync`, `sync_directory`, and `delete_entities` add no routes of their own. They are built
+`plan_sync`, `sync_directory`, `delete_entities`, and `batch_upload` add no routes of their own. They are built
 from the rows above and from the document channel: the tree comes from a fresh `joinProject`,
 documents are read and written over OT exactly as for `read_file` and `write_file`, and files,
 folders, and deletes use the same routes as `upload_file` and `manage_entity`.
 
-`:type` is `doc`, `file`, or `folder`. Rejection codes the server translates: `duplicate_file_name`,
-`invalid_filename`, `project_has_too_many_files`, `folder_not_found` (uploads);
-`invalid_zip_file`, `empty_zip_file`, `zip_contents_too_large` (zip import). Only a value matching
-`^[a-z][a-z0-9_]{0,63}$` is ever propagated, under `details.overleafError`.
+An upload over an existing path replaces the entity. In Overleaf's source a text document
+replacing a text document keeps its id and is updated as a diff, recorded as tracked changes when
+track changes is on for the uploading user; a binary replacing a binary, and a document replacing
+a binary or the reverse, become a new entity with a new id.
+
+`:type` is `doc`, `file`, or `folder`. Rejection codes the server translates: `duplicate_file_name`
+(a folder of the same name is in the way), `invalid_filename`, `project_has_too_many_files`,
+`folder_not_found` (uploads); `invalid_zip_file`, `empty_zip_file`, `zip_contents_too_large` (zip
+import). Only a value matching `^[a-z][a-z0-9_]{0,63}$` is ever propagated, under
+`details.overleafError`.
 
 ## Compilation
 
@@ -84,5 +95,6 @@ Comment ranges themselves travel over the OT channel, not REST.
 
 The HTTP client maps statuses before any tool sees them: 401 or a redirect to `/login` is
 `AUTH_EXPIRED`, 403 is `PERMISSION_DENIED`, 404 is `NOT_FOUND`, 413 is `UPDATE_TOO_LARGE`, 429 is
-`RATE_LIMITED` with `retryAfterMs` from `Retry-After` when present, and anything else that is not
-successful is `REMOTE_ERROR` with `details.status`. Writes are never retried on any of these.
+`RATE_LIMITED` with `retryAfterMs` from `Retry-After` when present (the zip download sends
+none), and anything else that is not successful is `REMOTE_ERROR` with `details.status`. Writes
+are never retried on any of these.

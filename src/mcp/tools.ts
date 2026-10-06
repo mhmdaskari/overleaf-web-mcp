@@ -15,12 +15,20 @@ import type { EntitiesApi, EntityAction } from '../overleaf/entities.js'
 import type { HistoryApi } from '../overleaf/history.js'
 import {
   COMPILERS,
+  DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS,
   type ProjectAction,
   type ProjectsApi,
   type ProjectTemplate,
 } from '../overleaf/projects.js'
 import type { SectionsApi } from '../overleaf/sections-api.js'
-import type { ProgressReporter, SyncApi, SyncMode } from '../overleaf/sync.js'
+import {
+  BATCH_UPLOAD_LIMIT,
+  type BatchUploadConflict,
+  type BatchUploadFile,
+  type ProgressReporter,
+  type SyncApi,
+  type SyncMode,
+} from '../overleaf/sync.js'
 
 export const TOOL_NAMES = [
   'auth_status',
@@ -36,7 +44,9 @@ export const TOOL_NAMES = [
   'create_file',
   'manage_entity',
   'upload_file',
+  'batch_upload',
   'download_file',
+  'download_project_zip',
   'plan_sync',
   'sync_directory',
   'delete_entities',
@@ -57,7 +67,12 @@ export interface OverleafToolRuntime {
   account: Pick<AccountApi, 'listProjects'>
   projects: Pick<
     ProjectsApi,
-    'createProject' | 'cloneProject' | 'importProjectZip' | 'manageProject' | 'updateProjectSettings'
+    | 'createProject'
+    | 'cloneProject'
+    | 'importProjectZip'
+    | 'downloadProjectZip'
+    | 'manageProject'
+    | 'updateProjectSettings'
   >
   entities: Pick<
     EntitiesApi,
@@ -77,7 +92,7 @@ export interface OverleafToolRuntime {
     'listComments' | 'replyToComment' | 'addComment' | 'setCommentStatus'
   >
   history: Pick<HistoryApi, 'monitorProjectHistory'>
-  sync: Pick<SyncApi, 'planSync' | 'syncDirectory' | 'deleteEntities'>
+  sync: Pick<SyncApi, 'planSync' | 'syncDirectory' | 'deleteEntities' | 'batchUpload'>
 }
 
 /**
@@ -247,6 +262,7 @@ const ignorePatterns = z
 const entityTypeSchema = z.enum(['doc', 'file', 'folder'])
 const syncActionSchema = z.enum(['create_folder', 'upload', 'write', 'create', 'delete'])
 const errorCodeSchema = z.string()
+const batchUploadActionSchema = z.enum(['create_folder', 'upload'])
 
 const projectSummarySchema = z.object({
   id: z.string(),
@@ -578,7 +594,7 @@ export function registerOverleafTools(
     'upload_file',
     {
       description:
-        'Upload a local file into a project folder, replacing any entity already at that path in place and keeping its entity ID. Works for text documents as well as binaries; Overleaf decides which by extension and UTF-8 validity. Replacing a document this way is a blind write with no revision check that is never tracked, so prefer write_file when a collaborator may be editing.',
+        'Upload a local file into a project folder, replacing any entity already at that path. A replaced text document keeps its entity ID; a replaced binary file may get a new one. Works for text documents as well as binaries; Overleaf decides which by extension and UTF-8 validity. Replacing a document this way is a blind write with no revision check, which Overleaf may record as tracked changes only when track changes is already on for this account, so prefer write_file when a collaborator may be editing.',
       inputSchema: z.object({
         projectId,
         localPath: z.string().min(1),
@@ -606,6 +622,71 @@ export function registerOverleafTools(
     )
   )
   server.registerTool(
+    'batch_upload',
+    {
+      description:
+        'Upload a list of local files to explicit project paths in one call, instead of one upload_file call per file. Each destinationPath is the full project path including the file name; missing folders are created. onConflict "overwrite" (the default, as in upload_file) replaces whatever document or file is at the path; "skip" leaves an existing document or file untouched and lists it in skipped. A folder at a destination path, or a file where a folder is needed, fails that file in either mode. Replacing a text document this way has no revision check, so use write_file or sync_directory for documents a collaborator may be editing. Every path is checked before anything is sent: a duplicate destination or a missing local file fails the call with nothing uploaded. Failures are per file and nothing is retried: the call continues past a failure unless stopOnError, and stops at RATE_LIMITED (Overleaf allows about 500 uploads per project in 15 minutes). It returns status, completed (with replaced per upload), skipped, failed, remaining, and verified, which is true when the tree read back afterwards confirmed every completed entry. A timed-out upload is classified from that read-back, never resubmitted: recoveredAfterTimeout when the path holds the local bytes, OUTCOME_UNKNOWN when the tree cannot tell. It saves tool calls, not time. Confirm overwrites with the user first.',
+      inputSchema: z.object({
+        projectId,
+        files: z
+          .array(
+            z.object({
+              localPath: z.string().min(1).describe("File on the server's own disk"),
+              destinationPath: filePath.describe('Project path to upload to, including the file name'),
+            })
+          )
+          .min(1)
+          .max(BATCH_UPLOAD_LIMIT)
+          .describe(`Files to upload, in order; at most ${BATCH_UPLOAD_LIMIT}`),
+        onConflict: z
+          .enum(['skip', 'overwrite'])
+          .default('overwrite')
+          .describe('What to do when something is already at a destination path; defaults to overwrite'),
+        stopOnError: z.boolean().default(false).describe('Stop at the first failure instead of continuing'),
+      }),
+      outputSchema: z.object({
+        status: z.enum(['complete', 'partial']),
+        onConflict: z.enum(['skip', 'overwrite']),
+        completed: z.array(
+          z.object({
+            destinationPath: z.string(),
+            action: batchUploadActionSchema,
+            entityId: z.string().optional(),
+            entityType: z.enum(['doc', 'file']).optional(),
+            replaced: z.boolean().optional(),
+            recoveredAfterTimeout: z.literal(true).optional(),
+          })
+        ),
+        skipped: z.array(
+          z.object({ destinationPath: z.string(), localPath: z.string(), entityType: z.enum(['doc', 'file']) })
+        ),
+        failed: z.array(
+          z.object({
+            destinationPath: z.string(),
+            action: batchUploadActionSchema,
+            errorCode: errorCodeSchema,
+            message: z.string(),
+          })
+        ),
+        remaining: z.array(z.object({ destinationPath: z.string(), action: batchUploadActionSchema })),
+        verified: z.boolean(),
+      }),
+      annotations: { destructiveHint: true, idempotentHint: false },
+    },
+    structured(async (args: {
+      projectId: string
+      files: BatchUploadFile[]
+      onConflict: BatchUploadConflict
+      stopOnError: boolean
+    }, extra) => ({
+      ...(await runtime.sync.batchUpload(args.projectId, args.files, {
+        onConflict: args.onConflict,
+        stopOnError: args.stopOnError,
+        onProgress: progressReporter(extra),
+      })),
+    }))
+  )
+  server.registerTool(
     'download_file',
     {
       description:
@@ -631,6 +712,38 @@ export function registerOverleafTools(
         args.overwrite
       )
     )
+  )
+  server.registerTool(
+    'download_project_zip',
+    {
+      description:
+        'Download the whole project, sources and binaries, as one zip archive (Overleaf\'s "Download as zip") to a local path on the server\'s own disk. The folder must exist. An existing file is replaced only when overwrite is true, else CONFIRMATION_MISMATCH and nothing is downloaded; a replacement is atomic, so a failed or incomplete download leaves the old file intact. Offer it as a backup before a mirror sync_directory or an overwriting batch_upload. Overleaf allows about 10 downloads per project a minute, so on RATE_LIMITED wait a minute. PERMISSION_DENIED here can also mean the session expired; check auth_status. Returns the absolute localPath, bytes, and replaced.',
+      inputSchema: z.object({
+        projectId,
+        localPath: z.string().min(1).describe('Local file to write the archive to, for example backup.zip'),
+        overwrite: z.boolean().default(false).describe('Replace localPath if it already exists'),
+        timeoutMs: z
+          .number()
+          .int()
+          .min(1_000)
+          .max(15 * 60_000)
+          .optional()
+          .describe(`Limit for the whole download; defaults to ${DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS / 60_000} minutes`),
+      }),
+      outputSchema: z.object({
+        projectId: z.string(),
+        localPath: z.string(),
+        bytes: z.number().int().nonnegative(),
+        replaced: z.boolean(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    structured(async (args: { projectId: string; localPath: string; overwrite: boolean; timeoutMs?: number }) => ({
+      ...(await runtime.projects.downloadProjectZip(args.projectId, args.localPath, {
+        overwrite: args.overwrite,
+        timeoutMs: args.timeoutMs,
+      })),
+    }))
   )
   server.registerTool(
     'plan_sync',
