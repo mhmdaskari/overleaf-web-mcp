@@ -17,12 +17,12 @@ before publishing.
 Unit and deterministic integration tests cover revision identity, Unicode positions, section
 parsing, tracked and untracked OT operations, history normalization, update limits, queue and
 cache behaviour, Socket.IO frames, timeout recovery, comment attachment, file-tree events, MCP
-registration, progress notifications, and the initialize instructions. Folder sync is tested
-against an in-memory project: git blob hashes against `git hash-object` values, ignore rules and
-symbolic links, plan comparison and folder collapsing, an upload failing midway (no delete runs,
-and the returned token resumes), a remote or local change between plan and sync (`REMOTE_DRIFT`,
-nothing applied), and a collaborator's edit during the sync (`REVISION_CONFLICT` for that file
-only).
+registration, progress notifications, and the server instructions on both MCP protocol eras.
+Folder sync is tested against an in-memory project: git blob hashes against `git hash-object`
+values, ignore rules and symbolic links, plan comparison and folder collapsing, an upload failing
+midway (no delete runs, and the returned token resumes), a remote or local change between plan and
+sync (`REMOTE_DRIFT`, nothing applied), and a collaborator's edit during the sync
+(`REVISION_CONFLICT` for that file only).
 
 ## Live tests
 

@@ -4,6 +4,29 @@ All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
 result shapes may change in a minor or patch release; each such change is listed below.
 
+## [Unreleased]
+
+### Changed
+
+- **Built on the v2 MCP SDK.** The server now depends on `@modelcontextprotocol/server` 2.3 in
+  place of `@modelcontextprotocol/sdk` 1.x, and `serve` answers both protocol eras over stdio.
+  Clients on the 2025-era protocol versions (2024-11-05 through 2025-11-25) connect with
+  `initialize` exactly as before; clients on MCP 2026-07-28 are served through `server/discover`,
+  whose result carries the same usage instructions. Tool names, input fields, annotations, and
+  result shapes are unchanged. An install no longer pulls in the v1 SDK's HTTP server stack
+  (Express, Hono, and their dependencies), and `npm audit --omit=dev` reports no advisories.
+- The `inputSchema` and `outputSchema` of each tool in `tools/list` now declare JSON Schema draft
+  2020-12, the default dialect since MCP 2025-11-25, instead of draft-07. The schemas themselves
+  are unchanged. Tools no longer carry `execution: { taskSupport: "forbidden" }`, which is the
+  default when the field is absent.
+- Calling a tool name the server does not register now fails with JSON-RPC error `-32602` instead
+  of returning an `isError` result.
+- `serve` now exits when its client closes stdin, releasing the Overleaf session and sockets,
+  instead of waiting for a signal.
+- Library use: `createMcpServer()` returns the `McpServer` class from
+  `@modelcontextprotocol/server`. Connecting it by hand with `connect()` serves 2025-era clients
+  only; the new `serveOverStdio(runtime, transport?)` serves both eras, as `serve` does.
+
 ## [0.4.0] - 2026-09-27
 
 Bulk and sync operations. Bringing one folder up to date used to take a hand-rolled hash

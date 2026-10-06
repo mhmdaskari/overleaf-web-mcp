@@ -80,13 +80,20 @@ export interface OverleafToolRuntime {
   sync: Pick<SyncApi, 'planSync' | 'syncDirectory' | 'deleteEntities'>
 }
 
-/** The part of the SDK's per-request context a tool uses: the progress token and a notifier. */
+/**
+ * The part of the SDK's per-request context (`ServerContext.mcpReq`) a tool uses: the progress
+ * token the client sent in `_meta` and the notifier bound to this request.
+ */
 export interface ToolCallExtra {
-  _meta?: { progressToken?: string | number | undefined } | undefined
-  sendNotification?: (notification: {
-    method: 'notifications/progress'
-    params: { progressToken: string | number; progress: number; total?: number; message?: string }
-  }) => Promise<void>
+  mcpReq?:
+    | {
+        _meta?: { progressToken?: string | number | undefined } | undefined
+        notify?: (notification: {
+          method: 'notifications/progress'
+          params: { progressToken: string | number; progress: number; total?: number; message?: string }
+        }) => Promise<void>
+      }
+    | undefined
 }
 
 interface ToolRegistrar {
@@ -154,8 +161,8 @@ function structured<T>(
  * Progress is advisory, so a notification that cannot be delivered never fails the call.
  */
 function progressReporter(extra: ToolCallExtra | undefined): ProgressReporter | undefined {
-  const progressToken = extra?._meta?.progressToken
-  const send = extra?.sendNotification
+  const progressToken = extra?.mcpReq?._meta?.progressToken
+  const send = extra?.mcpReq?.notify
   if (progressToken === undefined || send === undefined) return undefined
   return async (progress, total, message) => {
     try {

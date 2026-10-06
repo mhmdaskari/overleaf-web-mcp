@@ -1,5 +1,6 @@
 /**
- * Usage guidance sent to MCP clients in the initialize response.
+ * Usage guidance sent to MCP clients when they connect: in the `initialize` result on 2025-era
+ * protocol versions and in the `server/discover` result on 2026-07-28.
  * This, plus the tool descriptions, is what an assistant actually reads at runtime,
  * so it must stand on its own without the README.
  */

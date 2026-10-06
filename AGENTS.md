@@ -1,8 +1,9 @@
 # Working on overleaf-web-mcp
 
 Guidance for coding agents, and people, contributing to this repository. Guidance for agents
-*using* the server at runtime lives in `src/mcp/instructions.ts` and is sent to MCP clients in the
-initialize response; do not duplicate it here.
+*using* the server at runtime lives in `src/mcp/instructions.ts` and is sent to MCP clients when they
+connect, in the `initialize` result on 2025-era protocol versions and in the `server/discover`
+result on 2026-07-28; do not duplicate it here.
 
 ## What this is
 
@@ -53,7 +54,8 @@ CI runs all of these on Node 20 and 24 for every push and pull request. For the 
   the maintainer owns. Never point them at a real manuscript.
 - `test/mcp/tools.test.ts` asserts the README badge and `docs/tools.md` agree with `TOOL_NAMES`.
   Update both when adding or removing a tool.
-- `test/server.test.ts` asserts the initialize instructions are present and bounded in length.
+- `test/server.test.ts` asserts the server instructions are present, bounded in length, and
+  delivered on both protocol eras (`initialize` and `server/discover`).
 - `test/overleaf/sync.test.ts` drives folder sync against an in-memory project. Keep its
   fault-injection, drift, and mid-sync edit cases passing when changing sync.
 

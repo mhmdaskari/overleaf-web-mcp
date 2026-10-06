@@ -443,10 +443,9 @@ describe('MCP tool registration', () => {
       stopOnError: false,
     }
 
-    const sendNotification = vi.fn(async () => undefined)
+    const notify = vi.fn(async () => undefined)
     const synced = await registered.get('sync_directory')!(args, {
-      _meta: { progressToken: 7 },
-      sendNotification,
+      mcpReq: { _meta: { progressToken: 7 }, notify },
     })
     expect(runtime.sync.syncDirectory).toHaveBeenCalledWith('p', '/work/paper', expect.objectContaining({
       mode: 'mirror',
@@ -455,13 +454,13 @@ describe('MCP tool registration', () => {
       writeMode: 'untracked',
       stopOnError: false,
     }))
-    expect(sendNotification).toHaveBeenCalledWith({
+    expect(notify).toHaveBeenCalledWith({
       method: 'notifications/progress',
       params: { progressToken: 7, progress: 1, total: 2, message: 'Uploaded 1 of 2' },
     })
     expect(synced.structuredContent).toEqual(result)
 
-    await registered.get('sync_directory')!(args, { sendNotification })
+    await registered.get('sync_directory')!(args, { mcpReq: { notify } })
     expect(runtime.sync.syncDirectory.mock.calls[1]?.[2].onProgress).toBeUndefined()
 
     await registered.get('delete_entities')!({ projectId: 'p', paths: ['a.png'], confirmCount: 1, stopOnError: true })
