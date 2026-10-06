@@ -4,7 +4,57 @@ All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
 result shapes may change in a minor or patch release; each such change is listed below.
 
-## [Unreleased]
+## [0.4.1] - 2026-10-06
+
+The v0.4.x point release. `batch_upload` sends a list of local files to the project paths given,
+creating missing folders, in one call, and `download_project_zip` saves the whole project as one
+zip archive, the backup step before a mirror sync. The server now runs on the v2 MCP SDK and also
+serves clients on MCP 2026-07-28, and the documentation no longer overstates what a folder sync
+without a `planToken`, a destructive tool, or an upload that replaces a file guarantees. The
+server registers 29 tools. Planned in [ROADMAP.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/ROADMAP.md).
+
+### Added
+
+- **`batch_upload`** uploads 1 to 500 `{ localPath, destinationPath }` entries, where
+  `destinationPath` is the full project path including the file name. Every entry is checked
+  before anything is sent: an invalid or duplicate destination, one that is the parent folder of
+  another, a missing local file, or a folder given as one fails the whole call with nothing
+  changed. Missing folders are created once each, parents first; a folder that could not be
+  created is not tried again, and the files under it fail with its error code. Files upload in the
+  order given, one at a time through the project's queue. `onConflict` is `overwrite` by default,
+  replacing what is at the path as `upload_file` does, or `skip`, which leaves an existing
+  document or file alone and checks again just before each upload. A destination that is a
+  folder, or runs through a file, fails that one file. Failures are per file unless
+  `stopOnError`, and nothing is retried. The call also stops at the first `RATE_LIMITED`, listing
+  the rest in `remaining` and sending nothing more, since Overleaf allows about 500 uploads per
+  project in 15 minutes and would refuse them too. Afterwards the tree is read back: an upload
+  that is missing, or a binary whose hash differs, moves to `failed` with `REMOTE_ERROR`. A
+  timed-out upload is classified from that read-back without being sent again: completed with
+  `recoveredAfterTimeout: true` when a binary with the local file's hash is at the path,
+  `TIMEOUT` when the path is unchanged (it had not landed, though it could still land late), and
+  `OUTCOME_UNKNOWN` otherwise, a document included. The result carries `status`, `onConflict`,
+  `completed`, `skipped`, `failed`, `remaining`, and `verified`. It is annotated destructive and
+  sends progress notifications per file.
+- **`download_project_zip`** saves the whole project, sources and binaries, from
+  `GET /Project/:id/download/zip` to `localPath`, with `overwrite` (default `false`) and
+  `timeoutMs` (default 5 minutes, at most 15, for the whole transfer). A missing parent folder is
+  `NOT_FOUND`, a folder at `localPath` `INVALID_ARGUMENT`, and an existing file without
+  `overwrite: true` `CONFIRMATION_MISMATCH`, each before any request. The archive is streamed to a
+  temporary file in the same folder, created before the request, so a folder that cannot be
+  written fails first with `INVALID_ARGUMENT` and `details.errno`; it is never held in memory. It must begin with a zip signature,
+  else `PROTOCOL_UNSUPPORTED`, and end with a zip end-of-central-directory record: Overleaf builds
+  the archive while it sends it, so a transfer cut short still arrives with HTTP 200, and that,
+  like a body that stops inside the signature, fails with `REMOTE_ERROR`, retryable. Either way nothing is written. A complete archive is then
+  renamed into place, so a failed download never destroys an existing file; without
+  `overwrite`, a file that appeared in the meantime is not replaced. Overleaf allows about 10
+  downloads per project a minute and sends no `Retry-After`, so `RATE_LIMITED` usually has no
+  `retryAfterMs` and the description says to wait a minute. The route checks project access
+  rather than the login, so an expired session arrives as `PERMISSION_DENIED`; the description
+  says to check `auth_status`. The end check cannot tell when Overleaf left out a file it failed
+  to read, which it does without an error; the documentation says so. The result is
+  `{ projectId, localPath, bytes, replaced }`. It changes nothing on Overleaf and is annotated
+  destructive because it can replace a local file.
+- **`outputSchema` and `structuredContent`** on both new tools.
 
 ### Changed
 
@@ -12,9 +62,10 @@ result shapes may change in a minor or patch release; each such change is listed
   place of `@modelcontextprotocol/sdk` 1.x, and `serve` answers both protocol eras over stdio.
   Clients on the 2025-era protocol versions (2024-10-07 through 2025-11-25) connect with
   `initialize` exactly as before; clients on MCP 2026-07-28 are served through `server/discover`,
-  whose result carries the same usage instructions. Tool names, input fields, annotations, and
-  result shapes are unchanged. An install no longer pulls in the v1 SDK's HTTP server stack
-  (Express, Hono, and their dependencies), and `npm audit --omit=dev` reports no advisories.
+  whose result carries the same usage instructions. The existing tools' names, input fields,
+  annotations, and result shapes are unchanged. An install no longer pulls in the v1 SDK's HTTP
+  server stack (Express, Hono, and their dependencies), and `npm audit --omit=dev` reports no
+  advisories.
 - The `inputSchema` and `outputSchema` of each tool in `tools/list` now declare JSON Schema draft
   2020-12, the default dialect since MCP 2025-11-25, instead of draft-07. The schemas themselves
   are unchanged. Tools no longer carry `execution: { taskSupport: "forbidden" }`, which is the
@@ -30,9 +81,39 @@ result shapes may change in a minor or patch release; each such change is listed
   `@modelcontextprotocol/server`. Connecting it by hand with `connect()` serves 2025-era clients
   only; the new `serveOverStdio(runtime, transport?)` serves both eras, as `serve` does, and
   returns a connection with `close()` and `whenIdle(timeoutMs)`.
+- **`CONFIRMATION_MISMATCH`** also covers `download_project_zip` called on an existing local file
+  without `overwrite: true`. `download_file` keeps `INVALID_ARGUMENT` for the same case.
+- **`upload_file`'s description is corrected** after a read of Overleaf's source. It no longer
+  says a replacement keeps the entity ID: a replaced text document keeps it, and a replaced binary
+  file may get a new one. It no longer says replacing a document is never tracked: Overleaf may
+  record it as tracked changes when track changes is already on for this account. The result's
+  `writeMode` still reads `untracked` in that case; v0.5.0 resolves it. The tool's behaviour is
+  unchanged.
+- The `INVALID_ARGUMENT` message for Overleaf's `duplicate_file_name` upload rejection now says an
+  entity the upload cannot replace, usually a folder, already has that name. It used to say a text
+  document cannot replace a binary or the reverse, which Overleaf in fact allows.
+  `details.overleafError` is unchanged.
+- The connect-time instructions mention `batch_upload` for a list of files, offer
+  `download_project_zip` as a backup before a mirror sync, and no longer say an upload is never
+  tracked, within the 450-word bound (445 words).
 
 ### Documentation
 
+- **Corrections planned for v0.5.0, shipped early.** The README, the documentation home page, and
+  the safety model now make the folder-sync guarantee conditional on a `planToken`: without one,
+  `sync_directory` has nothing to compare against. The README's "each one confirms by value" now
+  names the destructive tools that do not: `upload_file`, `batch_upload` with its default
+  `onConflict`, `stop_compile`, and `sync_directory` in additive mode. The safety model says a
+  `planToken` records what `plan_sync` observed rather than a person's approval, and that a
+  `failed` entry in a per-item result leaves the earlier `completed` entries applied.
+- The tool reference, safety model, usage guide, internals page, and private API catalogue cover
+  the two new tools, and the README lists them. The usage guide adds the zip backup before a
+  mirror sync.
+- The tool reference, safety model, and private API catalogue no longer say an upload keeps a
+  binary's entity id or is never tracked, and no longer say uploading over the other kind of
+  entity fails. They state Overleaf's upload, folder-creation, and download rate limits, that an
+  expired session reaches `download_project_zip` as `PERMISSION_DENIED`, and that Overleaf can
+  leave a file it failed to read out of an otherwise complete archive.
 - The README and the documentation site show the package's all-time npm downloads. A weekly
   `Download count` workflow sums them from npm's downloads API, one year at a time so npm's
   18-month limit cannot shorten the total, and publishes the badge data to the `badges` branch,
@@ -44,6 +125,14 @@ result shapes may change in a minor or patch release; each such change is listed
   v0.5.0 to v0.6.0 and multi-file documents from v0.6.0 to v0.9.0. v1.0.0 becomes "Hardening and
   compatibility" (a `doctor` command, backend capabilities, and an MCP protocol compatibility
   matrix), and Stage 0 checks the v2 SDK packages.
+- The roadmap marks v0.4.0 shipped and records how the point release's design settled: a
+  `skipped` list and a `verified` flag, timed-out uploads classified rather than resent,
+  `CONFIRMATION_MISMATCH` for an existing local file, a streamed download with an atomic replace
+  and an end-record check, and `timeoutMs`. It records what a read of Overleaf's source found
+  (replaced binaries may get a new id, replacing a document can be tracked, what
+  `duplicate_file_name` means, and the rate limits), corrects its "What already works well" and
+  Stage 0 notes to match, and adds a v0.5.0 task to resolve `upload_file`'s `writeMode` when
+  track changes is on. Its v0.5.0 documentation-corrections task is marked done.
 
 ## [0.4.0] - 2026-09-27
 
@@ -379,6 +468,8 @@ still registers 19 tools. Planned in [ROADMAP.md](https://github.com/mhmdaskari/
 - First release: browser-assisted session capture, project and file management, revision-checked
   and section-level writing, compilation, and review comments.
 
+[0.4.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.4.1
+[0.4.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.4.0
 [0.3.2]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.3.2
 [0.3.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.3.1
 [0.3.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.3.0

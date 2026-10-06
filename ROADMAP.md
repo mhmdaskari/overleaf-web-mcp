@@ -70,7 +70,7 @@ from v0.7.0, CLI commands and SDK methods are derived from them.
 | v0.1.3 | Documentation, metadata, small additive fixes | 0 | shipped | Behaviour that had to be reverse-engineered |
 | v0.2.0 | Project lifecycle | 5 | shipped | No way to create, rename, trash, or configure a project |
 | v0.3.0 | Session keepalive | 0 | shipped | A saved session that dies after five idle days and presents as a dead server |
-| v0.4.0 | Bulk and sync | 3, then 2 | S (point release) | 24 one-at-a-time calls to sync one folder |
+| v0.4.0 | Bulk and sync | 3, then 2 | shipped | 24 one-at-a-time calls to sync one folder |
 | v0.5.0 | Shared core and safety | 0 | L | Operations reachable only through MCP; safety that depends on the caller picking the safe option |
 | v0.6.0 | Compile and build ergonomics | 2 | M | Success inferred from counters; no PDF or log access. Also enforces the safety defaults v0.5.0 announced |
 | v0.7.0 | CLI, SDK, and Skills | 0 | L | Every Overleaf operation needs an MCP client |
@@ -80,16 +80,16 @@ from v0.7.0, CLI commands and SDK methods are derived from them.
 
 Effort is a relative size (S, M, L) of the work still open in a stage, not a date.
 
-**v0.1.3 shipped on 1 September 2026**, followed the same day by **v0.1.4**, a documentation release: a human-first README, the documentation site at <https://mhmdaskari.github.io/overleaf-web-mcp/>, and usage instructions sent to MCP clients at connect time. **v0.2.0 shipped on 10 September 2026** with the five project lifecycle tools, filtered `list_projects`, and the `RATE_LIMITED` and `CONFIRMATION_MISMATCH` error codes, followed the same day by **v0.2.1**, a documentation patch. **v0.3.0 shipped on 14 September 2026** with the `keepalive` command, `sessionExpiresAt` on `auth_status`, and a cookie-jar fix that persists the session deadline, followed on 22 September by **v0.3.1** (proxy support) and **v0.3.2** (documentation). **v0.4.0 shipped on 27 September 2026** with `plan_sync`, `sync_directory`, and `delete_entities`, ignore rules, progress notifications, and the `REMOTE_DRIFT` and `PATH_OUTSIDE_ROOT` error codes; `batch_upload` and `download_project_zip` follow in a point release. See the [changelog](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/CHANGELOG.md) for what landed.
+**v0.1.3 shipped on 1 September 2026**, followed the same day by **v0.1.4**, a documentation release: a human-first README, the documentation site at <https://mhmdaskari.github.io/overleaf-web-mcp/>, and usage instructions sent to MCP clients at connect time. **v0.2.0 shipped on 10 September 2026** with the five project lifecycle tools, filtered `list_projects`, and the `RATE_LIMITED` and `CONFIRMATION_MISMATCH` error codes, followed the same day by **v0.2.1**, a documentation patch. **v0.3.0 shipped on 14 September 2026** with the `keepalive` command, `sessionExpiresAt` on `auth_status`, and a cookie-jar fix that persists the session deadline, followed on 22 September by **v0.3.1** (proxy support) and **v0.3.2** (documentation). **v0.4.0 shipped on 27 September 2026** with `plan_sync`, `sync_directory`, and `delete_entities`, ignore rules, progress notifications, and the `REMOTE_DRIFT` and `PATH_OUTSIDE_ROOT` error codes. **v0.4.1 shipped on 6 October 2026**, the stage's point release, with `batch_upload` and `download_project_zip`, the move to the v2 MCP SDK, and the documentation corrections planned for v0.5.0. See the [changelog](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/CHANGELOG.md) for what landed.
 
-**Unreleased:** the server moved from `@modelcontextprotocol/sdk` 1.29 to `@modelcontextprotocol/server` 2.3, the v2 SDK, and `serve` answers both protocol eras over stdio. Protocol 2026-07-28 removes the `initialize` handshake (each request carries its protocol version and client capabilities in `_meta`) and adds `server/discover`, which servers must implement and clients may call, and whose result carries the server instructions; clients on the 2025-era versions still receive them in the `initialize` result. A 2026-07-28 client that never calls `server/discover` never sees the instructions, so tool descriptions must stay self-sufficient. Tool names, inputs, and result shapes are unchanged.
+**The MCP SDK (v0.4.1):** the server moved from `@modelcontextprotocol/sdk` 1.29 to `@modelcontextprotocol/server` 2.3, the v2 SDK, and `serve` answers both protocol eras over stdio. Protocol 2026-07-28 removes the `initialize` handshake (each request carries its protocol version and client capabilities in `_meta`) and adds `server/discover`, which servers must implement and clients may call, and whose result carries the server instructions; clients on the 2025-era versions still receive them in the `initialize` result. A 2026-07-28 client that never calls `server/discover` never sees the instructions, so tool descriptions must stay self-sufficient. The existing tools' names, inputs, and result shapes did not change.
 
-After v1.0.0 the server would register 34 tools (27 today): two in the v0.4.x point release (`batch_upload`, `download_project_zip`), two in v0.6.0 (`download_compile_output`, `get_compile_log`), two in v0.8.0 (`list_tracked_changes`, `manage_tracked_changes`), and one in v0.9.0 (`get_full_document`). Every tool description costs the MCP client context on every turn, so the lifecycle and tracked-change review stages deliberately reuse the `manage_entity` action-enum pattern instead of adding one tool per verb, and checks that need no agent (`doctor`, `capabilities`) are CLI commands, not tools.
+After v1.0.0 the server would register 34 tools (29 today, after the two the v0.4.1 point release added, `batch_upload` and `download_project_zip`): two in v0.6.0 (`download_compile_output`, `get_compile_log`), two in v0.8.0 (`list_tracked_changes`, `manage_tracked_changes`), and one in v0.9.0 (`get_full_document`). Every tool description costs the MCP client context on every turn, so the lifecycle and tracked-change review stages deliberately reuse the `manage_entity` action-enum pattern instead of adding one tool per verb, and checks that need no agent (`doctor`, `capabilities`) are CLI commands, not tools.
 
 ## What already works well (keep these patterns)
 
 - **`manage_entity`'s `confirmPath === path` requirement on delete.** It caught nothing dangerous in the session, but it is the right shape for a destructive action, and later stages reuse it (`confirmName` on project trash/delete, a delete-count confirmation on mirror sync).
-- **`upload_file` overwrites in place by path**, keeping the same `entity_id` across re-uploads. This is what made replacing `main.tex` wholesale possible without a `read_file` → revision → `write_file` round trip. From v0.6.0 (announced in v0.5.0) a replacement must be asked for (`overwrite`, or `uncheckedDocumentReplace` for a document); the stable `entity_id` stays.
+- **`upload_file` overwrites by path.** This is what made replacing `main.tex` wholesale possible without a `read_file` → revision → `write_file` round trip, and a text document replaced this way keeps its `entity_id`. A replaced binary may not: Overleaf's source (`ProjectEntityMongoUpdateHandler.replaceFileWithNew`) gives it a new id, as it does a document replaced by a binary or the reverse, so callers look ids up again after a replacement (read in the source while building 0.4.1, not yet confirmed live). From v0.6.0 (announced in v0.5.0) a replacement must be asked for (`overwrite`, or `uncheckedDocumentReplace` for a document).
 - **`get_sections` is honest about its own limits.** Its description states outright that it never follows `\input`/`\include`. Keep this practice when multi-file support lands in v0.9.0.
 - **`write_file` requiring a `revision` from a prior `read_file`** is the right default against blind clobbers of text a human might be editing concurrently.
 - **the error model already exists.** `McpError` carries a typed `code`, a `retryable` flag, and structured `details`. v1.0.0 should extend this, not replace it. The CLI and SDK (v0.7.0) report failures with the same class and codes.
@@ -156,15 +156,14 @@ The code moves on between releases. Confirm the following before touching anythi
 what you find:
 
 - [ ] `npm view overleaf-web-mcp version` and `git tag` agree with `package.json` and
-      `SERVER_VERSION` in `src/version.ts`. Current release: `0.4.0`.
-- [ ] `TOOL_NAMES` in `src/mcp/tools.ts` lists the 27 registered tools: `auth_status`,
+      `SERVER_VERSION` in `src/version.ts`. Current release: `0.4.1`.
+- [ ] `TOOL_NAMES` in `src/mcp/tools.ts` lists the 29 registered tools: `auth_status`,
       `list_projects`, `create_project`, `clone_project`, `import_project_zip`, `manage_project`,
       `update_project_settings`, `get_project_tree`, `read_file`, `write_file`, `create_file`,
-      `manage_entity`, `upload_file`, `download_file`, `plan_sync`, `sync_directory`,
-      `delete_entities`, `get_sections`, `get_section_content`,
+      `manage_entity`, `upload_file`, `batch_upload`, `download_file`, `download_project_zip`,
+      `plan_sync`, `sync_directory`, `delete_entities`, `get_sections`, `get_section_content`,
       `write_section`, `compile_project`, `stop_compile`, `list_comments`, `reply_to_comment`,
-      `add_comment`, `set_comment_status`, `monitor_project_history` (29 once the v0.4.x point
-      release adds `batch_upload` and `download_project_zip`). The README badge and
+      `add_comment`, `set_comment_status`, `monitor_project_history`. The README badge and
       `docs/tools.md` must agree (`test/mcp/tools.test.ts` enforces it). From v0.5.0, every name
       also has an entry in the operation registry under `src/contracts/`.
 - [ ] The MCP SDK is v2: `@modelcontextprotocol/server` 2.x in `dependencies`,
@@ -177,13 +176,17 @@ what you find:
       `test/server.test.ts` still finds `SERVER_INSTRUCTIONS` in the `initialize` and
       `server/discover` results.
 - [ ] `SERVER_INSTRUCTIONS` stays under the 450-word bound in `test/server.test.ts` (444 words at
-      0.4.0). v0.5.0 brings it to at most 400 words once, so v0.6.0 and v0.8.0 can spend the
+      0.4.0, 445 at 0.4.1). v0.5.0 brings it to at most 400 words once, so v0.6.0 and v0.8.0 can spend the
       headroom; after that, a stage that adds guidance trims elsewhere.
 - [ ] The limits and their environment variables still hold: `OVERLEAF_MAX_DOC_LENGTH` (fallback
       2,097,152 UTF-16 code units → `DOC_TOO_LARGE`) and `OVERLEAF_MAX_UPDATE_CHARS` (7,340,032
       serialized characters → `UPDATE_TOO_LARGE`).
-- [ ] *(verify live)* `upload_file` to an existing path replaces content **in place and keeps the
-      `entity_id`**. Session evidence says yes; the `replaced` flag in its result depends on it.
+- [ ] *(verify live)* `upload_file` to an existing path replaces it and reports `replaced: true`.
+      Record the `entity_id` before and after: a replaced text document keeps it, and a replaced
+      binary may get a new one, which Overleaf's source (`replaceFileWithNew`) says but no live
+      run has confirmed. With track changes on for the account, record whether replacing a
+      document shows up as tracked changes (`upsertDoc` → `DocumentUpdaterHandler.setDocument`
+      passes the uploader's setting) while the result still says `writeMode: "untracked"`.
       From v0.5.0 check it with `overwrite: true`, which v0.6.0 requires.
 - [ ] `get_project_tree` `hash` equals `git hash-object <file>` for at least one binary entity.
 - [ ] The gated live tests (`RUN_OVERLEAF_LIVE_TESTS=1`, `test/live/`) and the CI workflows under
@@ -208,6 +211,8 @@ what you find:
    - the tool is registered with `destructiveHint: false`, which is wrong for an in-place overwrite. Set `destructiveHint: true`.
    - the remote name is always `basename(localPath)`; there is no way to upload `fig_v3.png` as `figures/fig.png`. Add an optional `destinationName`.
    - normalise the response. Today it passes Overleaf's raw `{ success, entity_id, entity_type }` through under `upload`. Return `{ entityId, entityType, path, replaced, hash }`, where `replaced` comes from a tree lookup before the upload and `hash` is the git blob hash computed locally from the bytes sent, so callers can verify against `get_project_tree` later without a round trip.
+
+   *Corrected in 0.4.1, after a closer read of Overleaf's source:* a replacement is in place only for a text document replacing a text document; a replaced binary, or a change of type, may get a new entity and id (seen in the source, not yet live). Uploading over the other type replaces it; `duplicate_file_name` comes from a folder of the same name. And replacing a document is recorded as tracked changes when track changes is on for the uploading user, so "never tracked" holds only when it is off.
 
 3. **Document that `upload_file` works for text documents, not just binaries.** `main.tex`, `ref.bib`, and `elsarticle-num.bst` (all `doc` entities) were replaced successfully via `localPath`. Fold this into item 2's "type is decided by Overleaf" paragraph and keep the concrete example.
 
@@ -373,7 +378,7 @@ This stage was split out of the bulk-sync work, now v0.4.0, so the fix could shi
 
 ---
 
-## v0.4.0 — Bulk and sync operations (first release shipped)
+## v0.4.0 — Bulk and sync operations (shipped)
 
 **Motivation:** almost everything after authentication in the session was one-file-at-a-time: 3 text overwrites, 1 binary upload, and **20 individual `manage_entity` delete calls**, each needing its own `confirmPath`. Before that, a hand-rolled diff over 9 local figures established that none of them needed re-uploading. That comparison is generically useful and should not be reinvented per caller.
 
@@ -394,12 +399,35 @@ This stage was split out of the bulk-sync work, now v0.4.0, so the fix could shi
 - **`destinationFolderPath`** (default `""`, the project root) was added, so `./figures` can be synced against the project's `figures/` without mirroring the whole project.
 - **A `conflicts` list.** A local file where the project has a folder, a local folder where it has a file, and non-UTF-8 text where it has a document cannot be applied without a person deciding. `plan_sync` lists them; `sync_directory` reports them as failures, so they also block deletes.
 - **Ignore rules protect the project side.** A remote entity an ignore rule matches is never compared or deleted, the way rsync treats excluded files, so mirror mode cannot remove the `.latexmkrc` it was told to ignore. A remote-only folder that holds such an entity is not collapsed; its other contents are listed individually. Patterns are applied in the order defaults, `.olignore`, `ignore`, so `!pattern` re-includes, using the `ignore` package, and match case-insensitively.
-- **Tracked mode covers new text files.** An upload is never tracked, so with `writeMode: "tracked"` new files Overleaf treats as text are created the way `create_file` does, as an empty document followed by a tracked write; binaries are uploaded as usual.
+- **Tracked mode covers new text files.** A new file created by upload is never tracked content, so with `writeMode: "tracked"` new files Overleaf treats as text are created the way `create_file` does, as an empty document followed by a tracked write; binaries are uploaded as usual. (An upload that *replaces* a document can be tracked, when track changes is on for the account, as 0.4.1 found in Overleaf's source; `sync_directory` never replaces a document by upload, so this does not change it.)
 - **Uploads are confirmed before deletes.** After the upload phase the tree is read back; an upload that is missing or whose hash differs from the local file counts as a failure, which withholds every delete. Each delete re-checks the entity's id, and for a folder its contents, against the plan first.
 - **Empty folders.** A remote folder with no local counterpart is deleted whole, which is how required semantic 4's "remove folders left empty" is met. A remote folder whose local counterpart exists is kept even when the sync empties it, because mirror mode reproduces the local side, and only folders needed to hold uploaded files are created, so an empty local folder is not reproduced.
 - **`mode` is required.** There is no default that could delete.
 - **Walk limits.** More than 2,000 included files (Overleaf's own per-project limit) or 20,000 scanned entries fail fast with `INVALID_ARGUMENT`, so a mistaken `localFolderPath` does not hash a home folder.
 - **Only `identical` and `ignored` are bounded** (25 unless `verbose`). `toUpload`, `remoteOnly`, and `conflicts` are what the user is approving, so they are always complete.
+
+**Design decisions made while building the point release (0.4.1):**
+
+- **`batch_upload` keeps `onConflict`, defaulting to `"overwrite"`.** Unlike `sync_directory` it has no plan and no revision to protect, so its default matches `upload_file`, which a batch replaces call for call; `"skip"` is the conservative choice. Replacing a document this way is a blind write with no revision check, recorded as tracked changes only when track changes is already on for the account, and the description says to prefer `write_file` or `sync_directory` for documents a collaborator may edit. The default joins the v0.5.0 transition with `upload_file`'s.
+- **`destinationPath` is a full path, file name included**, so one call can send `fig_v3.png` to `figures/fig.png` and files to several folders.
+- **Everything that can be checked locally is checked first.** Invalid, duplicate, or nested destinations and missing or non-file local paths fail the whole call before any request. Problems only the project tree shows (a folder at the destination, or a file where a parent folder should be) fail that one file, in both modes, because a fresh tree is read once and a batch should not stop for one bad path.
+- **A `skipped` list.** In skip mode an existing document or file is reported under `skipped`, which does not make the call `partial`, and the check is repeated inside the upload's queue job right before the request (an `ifExists` option on `EntitiesApi.uploadFile`, defaulting to `replace`, so `upload_file` is unchanged). A path a collaborator filled in between is skipped, not replaced.
+- **Folder creation is shared with `sync_directory`.** Missing folders are created parents first, each once; a folder that failed is not tried again, and every file under it fails with the folder's code and a message naming it.
+- **A `verified` flag.** After any attempt the tree is read back once, as sync's verification does: an upload that is missing, or a binary whose hash differs from the local file's (computed before the upload), moves to `failed` with `REMOTE_ERROR`. If the read-back itself fails, `verified` is `false` and the entries stand as reported.
+- **Timed-out uploads are classified, never resent.** A binary now in the tree with the local hash becomes `completed` with `recoveredAfterTimeout: true`, whether this upload put the bytes there or they were already identical, since the requested outcome holds either way; a path absent before and after, or the same entity with the same hash as before, stays `TIMEOUT`, with a message that it had not landed when read back but could still land late; anything else, a document included since documents carry no hash, is `OUTCOME_UNKNOWN`, with a message to check `get_project_tree` before uploading again.
+- **`download_project_zip` uses `CONFIRMATION_MISMATCH`** for an existing `localPath` without `overwrite: true`, checked before any request, as new tools should; `download_file`'s `INVALID_ARGUMENT` stays the one recorded exception. A missing parent folder is `NOT_FOUND`, a folder at `localPath` `INVALID_ARGUMENT`.
+- **Streaming and atomic replace.** The archive is streamed through a streaming GET on the same HTTP client path (authentication, status mapping, and the timeout all apply) to a temporary file in the target folder, created before the request so an unwritable folder fails without spending one of Overleaf's downloads, and never buffered whole. It must start with a zip signature, else `PROTOCOL_UNSUPPORTED`, with only a MIME-shaped `contentType` in `details`, and end with a zip end-of-central-directory record whose comment length accounts for the bytes after it, else `REMOTE_ERROR`, retryable, with nothing written. With `overwrite` it is renamed over the target, so a failed download never destroys the existing file; without it, it is hard-linked into place so a file that appeared meanwhile is not replaced, falling back to an exclusive copy where links are unsupported. The temporary file is removed on every failure path.
+- **`timeoutMs`** (1 second to 15 minutes, default 5 minutes) bounds the whole transfer, because a large project's archive can take longer than a default request timeout. No project socket and no queue: it is one HTTP request.
+- **Annotations.** `batch_upload` is `{ destructiveHint: true, idempotentHint: false }`, since it composes `upload_file` and never retries; `download_project_zip` is `{ readOnlyHint: false, destructiveHint: true, idempotentHint: false }`, because it writes locally.
+
+**Checked against Overleaf's source before 0.4.1 shipped** (`overleaf/overleaf`, `services/web`). The read corrected earlier assumptions, and the code and documentation follow it. These are read from the source, not yet confirmed live; Stage 0 records them.
+
+- **Replaced binaries may get a new entity id.** Only a text document replacing a text document keeps its id. A binary replacing a binary goes through `ProjectEntityMongoUpdateHandler.replaceFileWithNew`, and a document replaced by a binary or the reverse is a new entity too. `upload_file`'s description now says a replaced binary "may get a new one", and nothing promises a kept id for binaries.
+- **Replacing a document by upload can be tracked.** `upsertDoc` hands the new text to `DocumentUpdaterHandler.setDocument`, which diffs it and records tracked changes when track changes is on for the uploading user. The descriptions and connect-time instructions no longer say "never tracked". New text files created by upload are still untracked content, so `sync_directory`'s tracked mode is unaffected. `upload_file`'s result still reports `writeMode: "untracked"`; changing the result shape is left to v0.5.0.
+- **`duplicate_file_name` means a folder is in the way.** Overleaf replaces a document with a binary, or the reverse, without complaint; the code comes from a folder of the same name. The error message was corrected.
+- **The zip route.** Its rate limiter (`zip-download`) allows 10 requests a minute per project and user and answers 429 with no `Retry-After`, so `details.retryAfterMs` is normally absent and the description says to wait a minute. The route has no login check of its own, so an expired session is a 403, `PERMISSION_DENIED`, not `AUTH_EXPIRED`; the description says so. The archive is built while it is sent, chunked with no `Content-Length`, so a transfer cut short still ends with HTTP 200: hence the end-record check. A file Overleaf fails to read is left out of an otherwise well-formed archive and only logged upstream, which the documentation states rather than hides.
+- **Upload rate limits.** `file-upload` allows 500 uploads per 15 minutes per project and user, the same as `batch_upload`'s cap, and folder creation 60 a minute. Since every later upload would be refused too, `batch_upload` stops at the first `RATE_LIMITED`, even without `stopOnError`, and lists the rest in `remaining` with nothing more sent.
+- **Timeout classification, simplified.** The read-back now settles a timed-out upload in one of three ways, as recorded above: the local bytes at the path (recovered), the path unchanged (`TIMEOUT`), or anything else (`OUTCOME_UNKNOWN`).
 
 ### Tools
 
@@ -447,14 +475,29 @@ delete_entities({ projectId: string, paths: string[], confirmCount: number, stop
   // Composes manage_entity's delete; collapses the session's 20 calls into one.
   // annotations: destructiveHint true
 
-// Planned for the point release.
-batch_upload({ projectId: string, files: [{ localPath: string, destinationPath: string }],
-               onConflict?: "skip" | "overwrite" })   // default "overwrite", matching upload_file
-  → same { status, completed, failed, remaining } shape as sync_directory
+// Shipped in 0.4.1.
+batch_upload({ projectId: string,
+               files: [{ localPath: string, destinationPath: string }],  // 1..500; destinationPath includes the file name
+               onConflict?: "skip" | "overwrite",   // default "overwrite", matching upload_file
+               stopOnError?: boolean })
+  → {
+      status: "complete" | "partial",   // skipped entries do not make it partial
+      onConflict,
+      completed: [{ destinationPath, action: "create_folder" | "upload", entityId?,
+                    entityType?: "doc" | "file", replaced?, recoveredAfterTimeout?: true }],
+      skipped:   [{ destinationPath, localPath, entityType }],   // onConflict "skip" only
+      failed:    [{ destinationPath, action, errorCode, message }],
+      remaining: [{ destinationPath, action }],   // after stopOnError, or the first RATE_LIMITED
+      verified: boolean                 // the tree was read back and every completed entry confirmed
+    }
+  // annotations: destructiveHint true, idempotentHint false
 
-download_project_zip({ projectId: string, localPath: string, overwrite?: boolean })
-  // GET /Project/:id/download/zip. The reverse direction of sync; recommend it as the backup
-  // step before any mirror sync.
+download_project_zip({ projectId: string, localPath: string, overwrite?: boolean,
+                       timeoutMs?: number })   // 1,000..900,000, default 300,000
+  → { projectId, localPath, bytes, replaced }
+  // GET /Project/:id/download/zip. The reverse direction of sync; recommended as the backup
+  // step before any mirror sync. annotations: readOnlyHint false, destructiveHint true,
+  // idempotentHint false
 ```
 
 ### Required semantics (write these into the tool descriptions)
@@ -468,16 +511,16 @@ download_project_zip({ projectId: string, localPath: string, overwrite?: boolean
 
 Keep `manage_entity` and `upload_file` exactly as they are underneath; every tool here is a composition of existing primitives.
 
-### Scope of the first release
+### Scope of the releases
 
-The first release of this stage ships `plan_sync`, `sync_directory`, and `delete_entities`: the two-call workflow the acceptance criteria name, plus the batched delete that collapses the session's 20 calls into one. `batch_upload` and `download_project_zip` follow in a point release once the planner and its ignore rules have had real-world use, so their descriptions below stand but their tasks are not part of the first cut.
+The first release of this stage, 0.4.0, shipped `plan_sync`, `sync_directory`, and `delete_entities`: the two-call workflow the acceptance criteria name, plus the batched delete that collapses the session's 20 calls into one. `batch_upload` and `download_project_zip` followed in the 0.4.1 point release, once the planner and its ignore rules had had real-world use.
 
 ### Tasks
 
 - [x] Streaming `gitBlobHash` helper plus unit tests against `git hash-object` fixtures (text, binary, empty file).
 - [x] Ignore-pattern matcher (reuse a gitignore-compatible library; support `.olignore`).
 - [x] `plan_sync`, `sync_directory`, and `delete_entities` composed from existing primitives.
-- [ ] `batch_upload` and `download_project_zip`, in the point release.
+- [x] `batch_upload` and `download_project_zip`, in the 0.4.1 point release.
 - [x] Fault-injection tests: fail upload N of M; assert no deletes ran and `remaining` is correct; assert resume completes.
 - [x] Drift test: mutate a remote doc between `plan_sync` and `sync_directory`; assert `REMOTE_DRIFT`.
 - [x] Progress notifications (`notifications/progress`) per file when the client supplies a progress token.
@@ -495,8 +538,8 @@ The first release of this stage ships `plan_sync`, `sync_directory`, and `delete
 
 **Motivation:** two problems with one root. First, every operation, as a tool defines it, is reachable only through the MCP adapter: `OverleafToolRuntime` is declared in `src/mcp/tools.ts`, the argument shaping for `manage_project`, `write_file`, `manage_entity`, and `list_comments` lives in its handlers, and the exported `OverleafRuntime` reaches the domain classes but not that shaping. A CLI or library built on that would copy the shaping, and copies are where safety rules drift apart. Second, safety holds only when the caller picks the safe option, and error details carry what AGENTS.md forbids:
 
-- `sync_directory` checks drift only when given a `planToken`; without one, mirror mode counts `confirmDeleteCount` against a delete set nobody reviewed, while the README, `docs/index.md`, and the `docs/safety.md` heading state the guarantee unconditionally.
-- `upload_file` replaces whatever is at the path, documents included, with no revision check and no confirm value.
+- `sync_directory` checks drift only when given a `planToken`; without one, mirror mode counts `confirmDeleteCount` against a delete set nobody reviewed, while the README, `docs/index.md`, and the `docs/safety.md` heading stated the guarantee unconditionally until 0.4.1.
+- `upload_file` replaces whatever is at the path, documents included, with no revision check and no confirm value, and so does `batch_upload` (0.4.1) with its default `onConflict: "overwrite"`.
 - Local paths are read and written wherever the process can reach, and `download_file` writes locally while annotated `readOnlyHint: true`.
 - Ids reach request paths unencoded, and `new URL(path, base)` in `OverleafHttpClient.request` honours `..` and `?`, so a crafted `projectId` or `threadId` can retarget a POST that carries the CSRF token.
 - `COMPILE_FAILED` carries the whole compile response in `details.result`, the protocol layer stringifies upstream socket payloads into messages, and a non-JSON 200 body is quoted in a `REMOTE_ERROR`.
@@ -521,6 +564,7 @@ There is no compatibility switch: `overleaf-web-mcp/core` follows the table, and
 - **Expected state by default.** Single-entity writes use a revision, an `expectedHash`, or entity ids, and a mutation with none must be asked for by name. A `planToken` records what `plan_sync` observed, not that a person reviewed it; confirm-by-value and elicitation (v1.0.0) are the approval layer.
 - **`uncheckedDocumentReplace` keeps a recorded workflow.** The v0.1.3 decision table recommends `upload_file` to "push text when nobody else is editing", and the checked route through `read_file` costs the whole document in the model's context.
 - **`overwrite` has no default until v0.6.0**, so an omitted value (deprecated) differs from an explicit `false` (refused). `download_file`'s `INVALID_ARGUMENT` for the same case stays, as the one recorded exception. **`expectedHash` is a preflight, not a compare-and-swap**: the upload route takes only `qqfile` and `name`, so a replacement landing between check and upload is lost, and the docs say so.
+- **`upload_file`'s `writeMode: "untracked"` is inaccurate when track changes is on.** Since 0.4.1 the description says a replaced document is recorded as tracked changes when track changes is on for the account, but the result still reports `writeMode: "untracked"`. Resolve it with the `outputSchema` this stage gives `upload_file`: report what Overleaf will record (from the account's track-changes state observed on join, `"untracked"` for a binary or a new file), or drop the field. Either is a result-shape change listed in the changelog, and `batch_upload`'s entries follow the same rule if they gain the field.
 - **The access policy is not a sandbox.** `src/core/policy.ts` decides allowed projects, local read and write roots, and allowed effects. With every new variable unset, only three refusals are new: local writes to the cookie jar or browser profile, a `.olignore` that resolves outside its folder, and ids that are not path-safe. It cannot close the gap between the realpath check and the open or contain a malicious local process; it stops an agent, possibly steered by text it read in a project, from reaching outside what it was given. Projects created in a process join its allowlist in memory, so a later CLI process (v0.7.0) does not see them.
 
 ```ts
@@ -531,7 +575,7 @@ sync_directory({ ...existing, unplanned?: boolean })
 
 upload_file({ ...existing, overwrite?: boolean,        // no default until v0.6.0, then false
               expectedHash?: string,                   // 40 hex characters, from get_project_tree
-              uncheckedDocumentReplace?: boolean })    // blind and never tracked; effect-gated
+              uncheckedDocumentReplace?: boolean })    // blind; tracked only if the account has it on; effect-gated
   → { ...existing, deprecations?: [...] }              // gains an outputSchema; still destructiveHint true
 
 download_file  // annotations become { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
@@ -541,25 +585,26 @@ New error code `POLICY_DENIED`; new variables `OVERLEAF_ALLOWED_PROJECTS`, `OVER
 
 ### Tasks
 
-- [ ] **Documentation corrections** (may ship earlier, in a 0.4.x patch). Make the sync guarantee conditional on a `planToken` in the README, `docs/index.md`, and `docs/safety.md`, and qualify the README's "each one confirms by value", false for `upload_file`, `stop_compile`, and additive `sync_directory`. `docs/safety.md` says a `planToken` is not human approval and that a per-item `failed[]` entry leaves earlier `completed[]` items applied.
+- [x] **Documentation corrections** (shipped in 0.4.1). Make the sync guarantee conditional on a `planToken` in the README, `docs/index.md`, and `docs/safety.md`, and qualify the README's "each one confirms by value", false for `upload_file`, `stop_compile`, and additive `sync_directory`. `docs/safety.md` says a `planToken` is not human approval and that a per-item `failed[]` entry leaves earlier `completed[]` items applied.
 - [ ] **AGENTS.md.** Add the one-minor rule. Amend the confirm-by-value rule: `stop_compile` is the one destructive tool without a confirm value, a `revision` or `planToken` counts as expected-state confirmation, and `unplanned` and `uncheckedDocumentReplace` are the only named unchecked opt-ins. Rescope "stdout is reserved for MCP protocol frames" to `serve`, since `help`, `login`, and `keepalive` already print to stdout.
 - [ ] **Contracts and service** as designed, with the `listTools()` golden snapshot in `test/server.test.ts`; `McpErrorCode` is derived from `ERROR_CODES`; no write path receives a request's abort signal.
 - [ ] **Lint boundary.** `no-restricted-imports` forbidding `**/mcp/**`, `**/server.js`, and `@modelcontextprotocol/*`, type imports included, outside `src/mcp/`, `src/server.ts`, `src/cli.ts`, and `src/index.ts`; `no-console`; and no `process.stdout` or `process.stderr` outside `src/cli.ts` and `src/server.ts` (whose `runStdioServer` defaults the stdio transport to `process.stdin` and `process.stdout`). Only `src/cli.ts` writes `OperationContext.onDiagnostic` notices (`{ tool, code }`) to stderr.
 - [ ] **`./core` export.** `src/sdk.ts` exports `OverleafRuntime`, `readConfig`, `McpError`, `ERROR_CODES`, `createOverleafService`, and the contract types; `package.json` `exports` gains `"./core"`; a CI step after Build imports it by package self-reference.
-- [ ] **Announce phase.** The new fields, with upload checks inside the queue job before `postForm`. Sync's `#applyUpload` passes `overwrite: false` for new paths and `overwrite: true` with `expectedHash` for changed binaries, so a refusal becomes a per-item `REMOTE_DRIFT`, which already withholds deletes. A `batch_upload` defaulting to `onConflict: "overwrite"` joins the transition.
-- [ ] **Tests.** Every operation with a destructive effect has one of `confirmPath`, `confirmName`, `confirmCount`, `confirmDeleteCount`, `overwrite`, `revision`, or `planToken`, with an allowlist of exactly `['stop_compile']`. In `test/overleaf/sync.test.ts`, tokenless call sites plan first or pass `unplanned`, and `FakeProject` counts reads and mutations.
-- [ ] **Access policy.** `assertProject`, `resolveLocalRead`, `resolveLocalWrite`, and `assertEffect`, with roots resolved by `realpath` in `OverleafRuntime.create`. Reads: `resolveTextContent`, `EntitiesApi.uploadFile`, `ProjectsApi.importProjectZip`, the `scanLocalFolder` root, and `.olignore` (refused outside the folder, since its patterns are echoed back). Writes: `EntitiesApi.downloadFile`, later `download_project_zip` and `download_compile_output`. Refusals are `PATH_OUTSIDE_ROOT` with `details.kind`. Projects are checked in `ProjectConnectionCache.withConnection` and every HTTP-only path, and `list_projects` shows only allowed ones.
+- [ ] **Announce phase.** The new fields, with upload checks inside the queue job before `postForm`. Sync's `#applyUpload` passes `overwrite: false` for new paths and `overwrite: true` with `expectedHash` for changed binaries, so a refusal becomes a per-item `REMOTE_DRIFT`, which already withholds deletes. `batch_upload`, which shipped in 0.4.1 with `onConflict` defaulting to `"overwrite"`, joins the transition through the same `uploadFile` checks, per file.
+- [ ] **Tests.** Every operation with a destructive effect has one of `confirmPath`, `confirmName`, `confirmCount`, `confirmDeleteCount`, `overwrite`, `onConflict` (for `batch_upload`), `revision`, or `planToken`, with an allowlist of exactly `['stop_compile']`. In `test/overleaf/sync.test.ts`, tokenless call sites plan first or pass `unplanned`, and `FakeProject` counts reads and mutations.
+- [ ] **Access policy.** `assertProject`, `resolveLocalRead`, `resolveLocalWrite`, and `assertEffect`, with roots resolved by `realpath` in `OverleafRuntime.create`. Reads: `resolveTextContent`, `EntitiesApi.uploadFile` and `batch_upload`'s local checks, `ProjectsApi.importProjectZip`, the `scanLocalFolder` root, and `.olignore` (refused outside the folder, since its patterns are echoed back). Writes: `EntitiesApi.downloadFile`, `ProjectsApi.downloadProjectZip` (0.4.1), and later `download_compile_output`. Refusals are `PATH_OUTSIDE_ROOT` with `details.kind`. Projects are checked in `ProjectConnectionCache.withConnection` and every HTTP-only path, and `list_projects` shows only allowed ones.
 - [ ] **Path-safe ids.** Reject `/`, `\`, `.`, `?`, `#`, and `%` in `projectId`, `sourceProjectId`, and `threadId` (check Community Edition id formats before narrowing to 24 hex); `encodeURIComponent` at every interpolation in `src/overleaf/`; `OverleafHttpClient.request` asserts the resolved origin equals `baseUrl`'s, and mutating requests use `redirect: "manual"` if a cross-origin redirect would keep `x-csrf-token`.
 - [ ] **Allowlisted error details.** `COMPILE_FAILED` details become `{ status, rootFilePath, result: { status } }`, with `status` echoed only when it matches `^[a-z][a-z0-9-]{0,63}$`, else `"unrecognized"`; known upstream socket messages, which contain spaces, map to identifiers, and a raw socket `Error` in `openProjectConnection` no longer supplies the message; the upload body's `error` must pass the short-code check; `create_folder`'s `created` becomes `{ _id, name }`; JSON parse failures become `PROTOCOL_UNSUPPORTED` with `{ path, contentType }`.
 - [x] Instructions are delivered on both protocol eras (`initialize` and `server/discover`), tested in memory (done with the SDK move).
 - [ ] **Instructions, counts, docs.** `SERVER_INSTRUCTIONS` to at most 400 words once; `test/mcp/tools.test.ts` also checks every "All N tools" in the README (the tool-list sentence and the Documentation table row) and the comparison "Tools" cell; a "Local effect" column in the tool tables, a policy section in `docs/configuration.md`, and "The access policy is not a sandbox" in `docs/safety.md`, which with the `upload_file` description also says `expectedHash` is a preflight, not a compare-and-swap.
+- [ ] **Upload `writeMode`.** Resolve `upload_file`'s `writeMode: "untracked"`, inaccurate since 0.4.1 found that replacing a document is tracked when track changes is on for the account, as designed above, with a test for each state.
 - [ ] **CHANGELOG 0.5.0:** `Added`, `Deprecated` (each announced default, naming 0.6.0), and `Changed` (annotations, path-safe ids, `.olignore` refusal, sanitized details, the `create_folder` result).
 
 ### Acceptance
 
 - After the move the committed `listTools()` snapshot is unchanged, and `test/mcp/tools.test.ts` and `test/server.test.ts` pass with only import-path changes.
 - `grep -rnE "from '(\.\./)*\.?/?mcp/|@modelcontextprotocol" src` matches only `src/mcp/`, `src/server.ts`, and `src/cli.ts`, and a lint fixture importing `./mcp/tools.js` from `src/runtime.ts` fails.
-- With every `@modelcontextprotocol/*` module and `src/mcp/tools.js` mocked to throw on load, `src/sdk.js` performs `read_file` through injected fakes. The built `overleaf-web-mcp/core` exposes `createOverleafService` and a `McpError` strictly equal to the root's, not `ProjectConnection`, and the root still exports every 0.4.0 name.
+- With every `@modelcontextprotocol/*` module and `src/mcp/tools.js` mocked to throw on load, `src/sdk.js` performs `read_file` through injected fakes. The built `overleaf-web-mcp/core` exposes `createOverleafService` and a `McpError` strictly equal to the root's, not `ProjectConnection`, and the root still exports every 0.4.1 name.
 - Tokenless `sync_directory` resolves with `planned === false` and a `deprecations` entry `{ parameter: "planToken", enforcedIn: "0.6.0" }`; `unplanned: true` with a `planToken` or `mode: "mirror"` rejects with `INVALID_ARGUMENT` before any read.
 - `upload_file` onto an existing binary: `overwrite: false` gives `CONFIRMATION_MISMATCH` and a wrong `expectedHash` gives `REMOTE_DRIFT`, each with 0 `postForm` calls; the matching hash gives `replaced: true`; an omitted `overwrite` resolves with a `deprecations` entry.
 - `download_file` annotations equal the block above; no `readOnlyHint: true` operation has an effect other than `overleaf-read` or `local-read`; the destructive-tools test passes; `grep -n "one minor" AGENTS.md` matches; `grep -nE "plan you reviewed|what you reviewed" README.md docs/*.md | grep -v planToken` prints nothing.
@@ -634,7 +679,7 @@ get_compile_log({ projectId: string, buildRef?: string, kind?: "latex" | "bibtex
 **Safety defaults flip (announced in v0.5.0)**
 
 - [ ] `sync_directory`: a `planToken` presence check before any read; mirror without a token, or additive with neither a token nor `unplanned: true`, fails with `CONFIRMATION_MISMATCH` and `details.missing: "planToken"`.
-- [ ] `upload_file`: `overwrite` defaults to `false`; an existing document without `uncheckedDocumentReplace` fails with `INVALID_ARGUMENT` naming `write_file` with `localPath`; `batch_upload` flips too if it joined.
+- [ ] `upload_file`: `overwrite` defaults to `false`; an existing document without `uncheckedDocumentReplace` fails with `INVALID_ARGUMENT` naming `write_file` with `localPath`; `batch_upload`, shipped in 0.4.1 with `onConflict` defaulting to `"overwrite"`, flips with it: no default that replaces, and the same document rule per file.
 - [ ] Wording in `src/mcp/instructions.ts`, the `sync_directory` description ("required in mirror mode"), `docs/tools.md`, AGENTS.md, and `docs/safety.md`; CHANGELOG 0.6.0 `Changed` names each flipped default.
 
 ### Acceptance
@@ -874,18 +919,18 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 | Code | Introduced | Meaning |
 | --- | --- | --- |
 | `AUTH_EXPIRED` | 0.1.0 | No saved session, or Overleaf no longer accepts it |
-| `PERMISSION_DENIED` | 0.1.0 | HTTP 403; from v0.8.0 also an access level that cannot decide tracked changes |
+| `PERMISSION_DENIED` | 0.1.0 | HTTP 403, which on the zip download (v0.4.1) can also be an expired session; from v0.8.0 also an access level that cannot decide tracked changes |
 | `NOT_FOUND` | 0.1.0 | Project, path, resource, or (v0.8.0) tracked change does not exist (covers the first draft's `ENTITY_NOT_FOUND`) |
 | `REVISION_CONFLICT` | 0.1.0 | `write_file` / `write_section` revision no longer matches, or a verified result differs from the intent (`details.outcome: "unknown"`) |
-| `PROTOCOL_UNSUPPORTED` | 0.1.0 | Collaboration protocol or response shape this release does not understand; from v0.5.0 a body that is not JSON; from v0.8.0 a tracked write that landed untracked (`details.kind: "applied_untracked"`) |
+| `PROTOCOL_UNSUPPORTED` | 0.1.0 | Collaboration protocol or response shape this release does not understand; from v0.4.1 a project download that is not a zip archive; from v0.5.0 a body that is not JSON; from v0.8.0 a tracked write that landed untracked (`details.kind: "applied_untracked"`) |
 | `DOC_TOO_LARGE` | 0.1.0 | Document would exceed `OVERLEAF_MAX_DOC_LENGTH` |
 | `UPDATE_TOO_LARGE` | 0.1.0 | Single update exceeds `OVERLEAF_MAX_UPDATE_CHARS`, or HTTP 413, or (v0.8.0) the matching socket error |
 | `TIMEOUT`, `OUTCOME_UNKNOWN` | 0.1.0 | Timed-out request; timed-out write whose outcome could not be observed |
 | `COMPILE_FAILED` | 0.1.0 | Compile finished without a usable build; from v0.6.0 `failure` returns a summary instead, and details are `{ status, rootFilePath, buildId?, buildRef? }` only |
 | `PARTIAL_CLEANUP` | 0.1.0 | A multi-step operation could not undo every step |
 | `INVALID_ARGUMENT` | 0.1.0 | Malformed call, wrong entity type (covers the first draft's `NOT_A_DOC`), rejected name; from v0.5.0 an id that is not path-safe |
-| `REMOTE_ERROR` | 0.1.0 | Anything else |
-| `CONFIRMATION_MISMATCH` | v0.2.0 | `confirmPath` / `confirmName` / `confirmCount` / `confirmDeleteCount` wrong; from v0.5.0 an explicit `overwrite: false` on an existing binary; from v0.6.0 an omitted `overwrite` there, a missing required `planToken` (`details.missing`), or an existing `localPath` without `overwrite: true` on `download_compile_output`; from v0.8.0 a missing `confirmCount` on `manage_tracked_changes` |
+| `REMOTE_ERROR` | 0.1.0 | Anything else; from v0.4.1 also a project download cut short before its zip end record (retryable) |
+| `CONFIRMATION_MISMATCH` | v0.2.0 | `confirmPath` / `confirmName` / `confirmCount` / `confirmDeleteCount` wrong; from v0.4.1 an existing `localPath` without `overwrite: true` on `download_project_zip`; from v0.5.0 an explicit `overwrite: false` on an existing binary; from v0.6.0 an omitted `overwrite` there, a missing required `planToken` (`details.missing`), or an existing `localPath` without `overwrite: true` on `download_compile_output`; from v0.8.0 a missing `confirmCount` on `manage_tracked_changes` |
 | `RATE_LIMITED` | v0.2.0 | HTTP 429; `details.retryAfterMs` when Overleaf said how long |
 | `REMOTE_DRIFT` | v0.4.0 | The project or the local folder differs from the `planToken` snapshot, or an entity changed just before its delete or, from v0.5.0, its replacement (`expectedHash`) |
 | `PATH_OUTSIDE_ROOT` | v0.4.0 | A symbolic link in `localFolderPath` resolves outside it; from v0.5.0 any local path outside the allowed roots (`details.kind`) |
@@ -955,7 +1000,7 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 
 ## Competitive position this roadmap targets
 
-| Capability | v0.4.0 (today) | After roadmap | `olcli` | `@netique/overleaf-mcp` | Git-bridge MCPs |
+| Capability | v0.4.1 (today) | After roadmap | `olcli` | `@netique/overleaf-mcp` | Git-bridge MCPs |
 | --- | :---: | :---: | :---: | :---: | :---: |
 | Works on a free plan | ✅ | ✅ | ✅ | ✅ | ❌ (paid) |
 | Create / clone / import / rename / trash project, set root | ✅ | ✅ | create and rename only | ❌ | partial |
