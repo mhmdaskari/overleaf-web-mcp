@@ -16,6 +16,7 @@ function fakeRuntime() {
       createProject: vi.fn(),
       cloneProject: vi.fn(),
       importProjectZip: vi.fn(),
+      downloadProjectZip: vi.fn(),
       manageProject: vi.fn(),
       updateProjectSettings: vi.fn(),
     },
@@ -40,7 +41,7 @@ function fakeRuntime() {
       setCommentStatus: vi.fn(),
     },
     history: { monitorProjectHistory: vi.fn() },
-    sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn() },
+    sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn(), batchUpload: vi.fn() },
   }
 }
 

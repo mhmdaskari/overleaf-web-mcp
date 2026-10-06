@@ -117,4 +117,20 @@ describe('authenticated HTTP client', () => {
       code: 'TIMEOUT',
     })
   })
+
+  test('streams a body unread and reports its content type, with the same status mapping', async () => {
+    const client = new OverleafHttpClient({
+      baseUrl: 'https://overleaf.test',
+      jar: new CookieJar(),
+      fetcher: async url =>
+        url.endsWith('/missing')
+          ? new Response('gone', { status: 404 })
+          : new Response(new Uint8Array([0x50, 0x4b, 3, 4]), { headers: { 'content-type': 'application/zip' } }),
+    })
+
+    const { body, contentType } = await client.getStream('/Project/p/download/zip')
+    expect(contentType).toBe('application/zip')
+    expect(new Uint8Array(await new Response(body).arrayBuffer())).toEqual(new Uint8Array([0x50, 0x4b, 3, 4]))
+    await expect(client.getStream('/missing')).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
 })

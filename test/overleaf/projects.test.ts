@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -22,6 +22,9 @@ function harness(overrides: { name?: string; trashed?: boolean; archived?: boole
     postJson: vi.fn(async () => ({ project_id: 'new' })),
     deleteJson: vi.fn(async () => ({})),
     postForm: vi.fn(async () => ({ project_id: 'imported' })),
+    getStream: vi.fn(async (): Promise<{ body: ReadableStream<Uint8Array>; contentType?: string }> => ({
+      body: new Response(new Uint8Array()).body!,
+    })),
   }
   const tree: ProjectTree = {
     entities: [rootDoc],
@@ -254,5 +257,202 @@ describe('projects API', () => {
       await api.updateProjectSettings('p', { spellCheckLanguage: '' })
       expect(http.postJson).toHaveBeenCalledWith('/project/p/settings', { spellCheckLanguage: '' })
     })
+  })
+})
+
+describe('download_project_zip', () => {
+  /** A zip end-of-central-directory record, with an optional trailing comment. */
+  function endRecord(comment = ''): Uint8Array {
+    const text = new TextEncoder().encode(comment)
+    const record = new Uint8Array(22 + text.byteLength)
+    record.set([0x50, 0x4b, 0x05, 0x06])
+    record[20] = text.byteLength & 0xff
+    record[21] = text.byteLength >> 8
+    record.set(text, 22)
+    return record
+  }
+  const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4, 5, 6, 7, 8, 9, ...endRecord()])
+
+  function streamOf(chunks: Uint8Array[], failWith?: unknown): ReadableStream<Uint8Array> {
+    let index = 0
+    return new ReadableStream({
+      pull(controller) {
+        const chunk = chunks[index++]
+        if (chunk !== undefined) controller.enqueue(chunk)
+        else if (failWith !== undefined) controller.error(failWith)
+        else controller.close()
+      },
+    })
+  }
+
+  async function folder(): Promise<string> {
+    return await mkdtemp(join(tmpdir(), 'overleaf-zip-'))
+  }
+
+  test('streams the archive into a new local file and leaves no temporary file behind', async () => {
+    const { api, http } = harness()
+    // Split inside the signature, so the check must join chunks before deciding.
+    http.getStream.mockResolvedValueOnce({ body: streamOf([zip.slice(0, 2), zip.slice(2)]), contentType: 'application/zip' })
+    const dir = await folder()
+
+    await expect(api.downloadProjectZip('p/1', join(dir, 'backup.zip'))).resolves.toEqual({
+      projectId: 'p/1',
+      localPath: join(dir, 'backup.zip'),
+      bytes: zip.byteLength,
+      replaced: false,
+    })
+    expect(http.getStream).toHaveBeenCalledWith('/Project/p%2F1/download/zip', { timeoutMs: 300_000 })
+    expect(new Uint8Array(await readFile(join(dir, 'backup.zip')))).toEqual(zip)
+    expect(await readdir(dir)).toEqual(['backup.zip'])
+
+    // A name near the file-system limit still fits, since the temporary name does not repeat it.
+    const long = `${'a'.repeat(240)}.zip`
+    http.getStream.mockResolvedValueOnce({ body: streamOf([zip]) })
+    await expect(api.downloadProjectZip('p', join(dir, long))).resolves.toMatchObject({ bytes: zip.byteLength })
+  })
+
+  test('removes the temporary file when the request itself fails', async () => {
+    const { api, http } = harness()
+    const dir = await folder()
+    http.getStream.mockRejectedValueOnce(new McpError('RATE_LIMITED', 'Overleaf rate-limited this request.'))
+
+    await expect(api.downloadProjectZip('p', join(dir, 'backup.zip'))).rejects.toMatchObject({ code: 'RATE_LIMITED' })
+    expect(await readdir(dir)).toEqual([])
+  })
+
+  test('refuses an existing file without overwrite before any request, and replaces it with overwrite', async () => {
+    const { api, http } = harness()
+    const dir = await folder()
+    const path = join(dir, 'backup.zip')
+    await writeFile(path, 'previous')
+
+    await expect(api.downloadProjectZip('p', path)).rejects.toMatchObject({ code: 'CONFIRMATION_MISMATCH' })
+    expect(http.getStream).not.toHaveBeenCalled()
+    expect(await readFile(path, 'utf8')).toBe('previous')
+
+    http.getStream.mockResolvedValueOnce({ body: streamOf([zip]) })
+    await expect(api.downloadProjectZip('p', path, { overwrite: true, timeoutMs: 5_000 })).resolves.toMatchObject({
+      replaced: true,
+      bytes: zip.byteLength,
+    })
+    expect(http.getStream).toHaveBeenCalledWith('/Project/p/download/zip', { timeoutMs: 5_000 })
+    expect(new Uint8Array(await readFile(path))).toEqual(zip)
+  })
+
+  test('checks the local destination before any request', async () => {
+    const { api, http } = harness()
+    const dir = await folder()
+
+    // A folder that cannot be written fails before the rate-limited request is spent.
+    const locked = join(dir, 'locked')
+    await mkdir(locked)
+    await chmod(locked, 0o555)
+    try {
+      await expect(api.downloadProjectZip('p', join(locked, 'backup.zip'))).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+        details: { errno: expect.stringMatching(/^E/u) },
+      })
+    } finally {
+      await chmod(locked, 0o755)
+    }
+
+    await expect(api.downloadProjectZip('p', join(dir, 'missing', 'backup.zip'))).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+    await expect(api.downloadProjectZip('p', dir, { overwrite: true })).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    expect(http.getStream).not.toHaveBeenCalled()
+  })
+
+  test('refuses a body that is not a zip archive without quoting it, and keeps the old file', async () => {
+    const { api, http } = harness()
+    const dir = await folder()
+    const path = join(dir, 'backup.zip')
+    await writeFile(path, 'previous')
+    http.getStream.mockResolvedValueOnce({
+      body: streamOf([new TextEncoder().encode('<!DOCTYPE html><p>SENTINEL</p>')]),
+      contentType: 'text/html; charset=utf-8',
+    })
+
+    const error = await api.downloadProjectZip('p', path, { overwrite: true }).catch((caught: unknown) => caught)
+    expect(error).toMatchObject({ code: 'PROTOCOL_UNSUPPORTED', details: { contentType: 'text/html' } })
+    expect(JSON.stringify((error as McpError).toJSON())).not.toMatch(/SENTINEL|DOCTYPE/u)
+    expect(await readFile(path, 'utf8')).toBe('previous')
+    expect(await readdir(dir)).toEqual(['backup.zip'])
+
+    http.getStream.mockResolvedValueOnce({ body: streamOf([new Uint8Array([0x7b])]), contentType: 'SENTINEL free text' })
+    const other = await api.downloadProjectZip('p', join(dir, 'other.zip')).catch((caught: unknown) => caught)
+    expect(other).toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
+    expect((other as McpError).details).toBeUndefined()
+    expect(await readdir(dir)).toEqual(['backup.zip'])
+
+    // A body that stops inside the signature, or before it, is a transfer cut short.
+    for (const body of [new Uint8Array(0), new Uint8Array([0x50]), new Uint8Array([0x50, 0x4b, 0x05])]) {
+      http.getStream.mockResolvedValueOnce({ body: streamOf(body.byteLength === 0 ? [] : [body]) })
+      await expect(api.downloadProjectZip('p', join(dir, 'short.zip'))).rejects.toMatchObject({
+        code: 'REMOTE_ERROR',
+        retryable: true,
+      })
+    }
+    expect(await readdir(dir)).toEqual(['backup.zip'])
+  })
+
+  test('refuses an archive cut short, and accepts an empty archive or one with a comment', async () => {
+    const { api, http } = harness()
+    const dir = await folder()
+    const path = join(dir, 'backup.zip')
+    await writeFile(path, 'previous')
+    http.getStream.mockResolvedValueOnce({ body: streamOf([zip.slice(0, zip.byteLength - 5)]) })
+
+    await expect(api.downloadProjectZip('p', path, { overwrite: true })).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+      retryable: true,
+    })
+    expect(await readFile(path, 'utf8')).toBe('previous')
+    expect(await readdir(dir)).toEqual(['backup.zip'])
+
+    // A long archive arrives in many chunks; only its last bytes decide whether it is complete.
+    const long = new Uint8Array(200_000)
+    long.set([0x50, 0x4b, 0x03, 0x04])
+    const chunks = [long.subarray(0, 70_000), long.subarray(70_000), endRecord('made by Overleaf')]
+    http.getStream.mockResolvedValueOnce({ body: streamOf(chunks) })
+    await expect(api.downloadProjectZip('p', join(dir, 'long.zip'))).resolves.toMatchObject({
+      bytes: 200_000 + 22 + 16,
+    })
+
+    http.getStream.mockResolvedValueOnce({ body: streamOf([endRecord()]) })
+    await expect(api.downloadProjectZip('p', join(dir, 'empty.zip'))).resolves.toMatchObject({ bytes: 22 })
+  })
+
+  test('a download that times out midway writes nothing and leaves the old file intact', async () => {
+    const { api, http } = harness()
+    const dir = await folder()
+    const path = join(dir, 'backup.zip')
+    await writeFile(path, 'previous')
+    http.getStream.mockResolvedValueOnce({
+      body: streamOf([zip], new DOMException('The operation timed out.', 'TimeoutError')),
+    })
+
+    await expect(api.downloadProjectZip('p', path, { overwrite: true })).rejects.toMatchObject({
+      code: 'TIMEOUT',
+      retryable: true,
+    })
+    expect(await readFile(path, 'utf8')).toBe('previous')
+    expect(await readdir(dir)).toEqual(['backup.zip'])
+  })
+
+  test('does not replace a file that appeared during the download', async () => {
+    const { api, http } = harness()
+    const dir = await folder()
+    const path = join(dir, 'backup.zip')
+    http.getStream.mockImplementationOnce(async () => {
+      await writeFile(path, 'appeared')
+      return { body: streamOf([zip]) }
+    })
+
+    await expect(api.downloadProjectZip('p', path)).rejects.toMatchObject({ code: 'CONFIRMATION_MISMATCH' })
+    expect(await readFile(path, 'utf8')).toBe('appeared')
+    expect(await readdir(dir)).toEqual(['backup.zip'])
   })
 })

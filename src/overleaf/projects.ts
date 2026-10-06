@@ -4,12 +4,17 @@ import { basename } from 'node:path'
 import { z } from 'zod'
 
 import { McpError } from '../core/errors.js'
+import { prepareLocalDownload, writeDownload } from '../core/local-download.js'
 import type { EntityType, ProjectEntity, ProjectTree } from './tree.js'
 
 interface ProjectsHttp {
   postJson(path: string, body?: unknown): Promise<unknown>
   deleteJson(path: string): Promise<unknown>
   postForm(path: string, form: FormData): Promise<unknown>
+  getStream(
+    path: string,
+    options?: { timeoutMs?: number }
+  ): Promise<{ body: ReadableStream<Uint8Array>; contentType?: string }>
 }
 
 export interface ProjectsApiOptions {
@@ -49,6 +54,23 @@ export interface CreatedProject {
   rootDocPath?: string
 }
 
+export interface DownloadedProjectZip {
+  projectId: string
+  /** Absolute path the archive was written to. */
+  localPath: string
+  bytes: number
+  /** Whether a local file was replaced. */
+  replaced: boolean
+}
+
+export interface DownloadProjectZipOptions {
+  overwrite?: boolean | undefined
+  timeoutMs?: number | undefined
+}
+
+/** A whole-project archive can take a while to build and stream; this bounds the transfer. */
+export const DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS = 5 * 60_000
+
 export interface ProjectSettings {
   projectId: string
   rootDocPath?: string
@@ -80,6 +102,33 @@ function validateProjectName(name: string): void {
     )
   }
 }
+
+/** A local file header, or the end-of-directory record that is all an empty archive holds. */
+const ZIP_SIGNATURES = [
+  [0x50, 0x4b, 0x03, 0x04],
+  [0x50, 0x4b, 0x05, 0x06],
+] as const
+
+function startsLikeZip(head: Uint8Array): boolean {
+  return head.byteLength >= 4 && ZIP_SIGNATURES.some(signature => signature.every((byte, at) => head[at] === byte))
+}
+
+/**
+ * Whether the bytes end with a zip end-of-central-directory record whose comment length
+ * accounts exactly for what follows it. Overleaf builds the archive while it streams it, so a
+ * transfer cut short arrives with HTTP 200 and a valid start but no end record.
+ */
+function endsLikeZip(tail: Uint8Array): boolean {
+  for (let at = tail.byteLength - 22; at >= 0; at -= 1) {
+    if (tail[at] === 0x50 && tail[at + 1] === 0x4b && tail[at + 2] === 0x05 && tail[at + 3] === 0x06) {
+      const commentLength = tail[at + 20]! | (tail[at + 21]! << 8)
+      if (at + 22 + commentLength === tail.byteLength) return true
+    }
+  }
+  return false
+}
+
+const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]{1,64}$/u
 
 function zipFailure(code: string | undefined): McpError {
   const detail = code === undefined ? undefined : ZIP_ERRORS[code]
@@ -203,6 +252,55 @@ export class ProjectsApi {
     if (body?.success === false) throw zipFailure(body.error)
     const projectId = this.#parseCreated(response, 'project import')
     return { projectId, name: projectName, url: this.#projectUrl(projectId) }
+  }
+
+  /**
+   * Downloads the whole project as Overleaf's "Download as zip" archive, streamed to a local
+   * file. An existing file is replaced only with `overwrite`, and atomically, so a failed
+   * download leaves it as it was.
+   */
+  async downloadProjectZip(
+    projectId: string,
+    localPath: string,
+    options: DownloadProjectZipOptions = {}
+  ): Promise<DownloadedProjectZip> {
+    const target = await prepareLocalDownload(localPath, options.overwrite === true)
+    let response: { body: ReadableStream<Uint8Array>; contentType?: string }
+    try {
+      response = await this.#options.http.getStream(
+        `/Project/${encodeURIComponent(projectId)}/download/zip`,
+        { timeoutMs: options.timeoutMs ?? DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS }
+      )
+    } catch (error) {
+      await target.discard()
+      throw error
+    }
+    const { body, contentType } = response
+    const cutShort = (): McpError =>
+      new McpError(
+        'REMOTE_ERROR',
+        'The archive Overleaf sent ended before it was complete; nothing was written. Try again.',
+        { retryable: true }
+      )
+    const written = await writeDownload(body, target, {
+      head: head => {
+        if (startsLikeZip(head)) return
+        // A body that stops inside the signature is a transfer cut short, not some other format.
+        if (head.byteLength < 4 && ZIP_SIGNATURES.some(signature => head.every((byte, at) => byte === signature[at]))) {
+          throw cutShort()
+        }
+        const type = contentType?.split(';')[0]?.trim().toLowerCase()
+        throw new McpError(
+          'PROTOCOL_UNSUPPORTED',
+          'Overleaf did not return a zip archive for this project; nothing was written.',
+          type !== undefined && MIME_TYPE_PATTERN.test(type) ? { details: { contentType: type } } : {}
+        )
+      },
+      tail: tail => {
+        if (!endsLikeZip(tail)) throw cutShort()
+      },
+    })
+    return { projectId, localPath: target.path, bytes: written.bytes, replaced: written.replaced }
   }
 
   async manageProject(

@@ -15,6 +15,7 @@ function fakeRuntime() {
       createProject: vi.fn(),
       cloneProject: vi.fn(),
       importProjectZip: vi.fn(),
+      downloadProjectZip: vi.fn(),
       manageProject: vi.fn(),
       updateProjectSettings: vi.fn(),
     },
@@ -39,7 +40,7 @@ function fakeRuntime() {
       setCommentStatus: vi.fn(),
     },
     history: { monitorProjectHistory: vi.fn() },
-    sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn() },
+    sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn(), batchUpload: vi.fn() },
   }
 }
 
@@ -468,6 +469,63 @@ describe('MCP tool registration', () => {
       stopOnError: true,
       onProgress: undefined,
     })
+  })
+
+  test('registers batch_upload and download_project_zip with schemas, annotations, and defaults', async () => {
+    const runtime = fakeRuntime()
+    const registered = new Map<string, { config: any; handler: (...args: any[]) => any }>()
+    registerOverleafTools(
+      {
+        registerTool: (name: string, config: any, handler: (...args: any[]) => any) => {
+          registered.set(name, { config, handler })
+        },
+      },
+      runtime
+    )
+
+    const batch = registered.get('batch_upload')!
+    expect(batch.config.annotations).toEqual({ destructiveHint: true, idempotentHint: false })
+    expect(batch.config.outputSchema).toBeDefined()
+    for (const term of ['destinationPath', 'onConflict', 'skip', 'overwrite', 'write_file', 'stopOnError', 'never resubmitted', 'OUTCOME_UNKNOWN']) {
+      expect(batch.config.description).toContain(term)
+    }
+    const input = batch.config.inputSchema as { parse: (value: unknown) => Record<string, unknown> }
+    // The default matches upload_file, which replaces whatever is at the path.
+    expect(input.parse({ projectId: 'p', files: [{ localPath: '/a.png', destinationPath: 'a.png' }] })).toMatchObject({
+      onConflict: 'overwrite',
+      stopOnError: false,
+    })
+    expect(() => input.parse({ projectId: 'p', files: [] })).toThrow()
+
+    const zip = registered.get('download_project_zip')!
+    // It writes a local file, so it is not read-only, and overwrite can replace one.
+    expect(zip.config.annotations).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: false })
+    expect(zip.config.outputSchema).toBeDefined()
+    for (const term of ['overwrite', 'CONFIRMATION_MISMATCH', 'mirror sync_directory', 'RATE_LIMITED', 'PERMISSION_DENIED'])  {
+      expect(zip.config.description).toContain(term)
+    }
+    expect((zip.config.inputSchema as { parse: (value: unknown) => unknown }).parse({ projectId: 'p', localPath: 'b.zip' })).toEqual({
+      projectId: 'p',
+      localPath: 'b.zip',
+      overwrite: false,
+    })
+
+    const uploaded = { status: 'complete', onConflict: 'skip', completed: [], skipped: [], failed: [], remaining: [], verified: true }
+    runtime.sync.batchUpload.mockResolvedValue(uploaded)
+    const files = [{ localPath: '/a.png', destinationPath: 'figs/a.png' }]
+    const batchResult = await batch.handler({ projectId: 'p', files, onConflict: 'skip', stopOnError: true })
+    expect(runtime.sync.batchUpload).toHaveBeenCalledWith('p', files, {
+      onConflict: 'skip',
+      stopOnError: true,
+      onProgress: undefined,
+    })
+    expect(batchResult.structuredContent).toEqual(uploaded)
+
+    const downloaded = { projectId: 'p', localPath: '/abs/b.zip', bytes: 10, replaced: false }
+    runtime.projects.downloadProjectZip.mockResolvedValue(downloaded)
+    const zipResult = await zip.handler({ projectId: 'p', localPath: 'b.zip', overwrite: false })
+    expect(runtime.projects.downloadProjectZip).toHaveBeenCalledWith('p', 'b.zip', { overwrite: false, timeoutMs: undefined })
+    expect(zipResult.structuredContent).toEqual(downloaded)
   })
 
   test('registers a read-only history monitor and forwards its cursor', async () => {

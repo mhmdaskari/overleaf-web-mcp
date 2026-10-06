@@ -34,7 +34,7 @@ interface TreeConnection {
 /** Overleaf reports every upload rejection as HTTP 422 with a machine-readable code. */
 const UPLOAD_ERRORS: Record<string, string> = {
   duplicate_file_name:
-    'Overleaf already holds an entity of the other kind at this path. A text document cannot replace a binary file, or the reverse; delete the existing entity first.',
+    'Overleaf already holds an entity with this name in the destination folder that an upload cannot replace, usually a folder. Delete or rename it first.',
   invalid_filename:
     'Overleaf rejected the file name. Names are limited to 150 characters and may not use reserved names or path separators.',
   project_has_too_many_files: 'The project has reached its file-count limit.',
@@ -66,6 +66,14 @@ function uploadFailure(code: string | undefined): McpError {
 interface EntityConnections {
   withConnection<T>(projectId: string, operation: (connection: TreeConnection) => Promise<T>): Promise<T>
   invalidate(projectId: string): Promise<void>
+}
+
+export interface UploadFileOptions {
+  /**
+   * `skip` leaves an entity already at the destination path untouched and sends nothing. It is
+   * checked inside the upload's queue job, so nothing this process does can slip in between.
+   */
+  ifExists?: 'replace' | 'skip' | undefined
 }
 
 export type EntityAction =
@@ -221,18 +229,21 @@ export class EntitiesApi {
   /**
    * Uploads a local file, replacing any entity already at the destination path.
    *
-   * Overleaf upserts by name inside the destination folder, so an existing entity keeps its
-   * `entity_id` and has its content replaced. Overleaf, not the caller, decides whether the
-   * result is a text `doc` or a binary `file`, by extension and UTF-8 validity. Replacing a
-   * `doc` this way is a blind write: it carries no revision check and is never recorded as a
-   * tracked change, so a collaborator's concurrent edit is overwritten. Use `write_file` when
-   * that matters.
+   * Overleaf upserts by name inside the destination folder. Per its source, a text document
+   * replaced by text keeps its `entity_id`; a replaced binary, or a change between document and
+   * binary, gets a new one. Overleaf, not the caller, decides whether the result is a text `doc`
+   * or a binary `file`, by extension and UTF-8 validity. Replacing a `doc` this way is a blind
+   * write with no revision check, so a collaborator's concurrent edit is overwritten; Overleaf
+   * records it as tracked changes when track changes is on for this user, which the
+   * `writeMode: 'untracked'` in the result does not reflect yet. Use `write_file` when that
+   * matters.
    */
   async uploadFile(
     projectId: string,
     localPath: string,
     destinationFolderPath = '',
-    destinationName?: string
+    destinationName?: string,
+    options: UploadFileOptions = {}
   ): Promise<Record<string, unknown>> {
     const bytes = await readFile(localPath)
     const name = destinationName ?? basename(localPath)
@@ -245,7 +256,14 @@ export class EntitiesApi {
       await connection.queue.run(async () => {
         const folderId = resolveFolderId(connection, folderPath)
         // Captured before the upload, because afterwards the entity always exists.
-        const replaced = connection.getTree().some(entity => entity.path === path)
+        const existing = connection.getTree().find(entity => entity.path === path)
+        if (existing !== undefined && options.ifExists === 'skip') {
+          if (existing.type === 'folder') {
+            throw new McpError('INVALID_ARGUMENT', `The project holds a folder at ${path}.`)
+          }
+          return { path, skipped: true, entityId: existing.id, entityType: existing.type }
+        }
+        const replaced = existing !== undefined
         const form = new FormData()
         form.append('qqfile', new Blob([bytes]), name)
         form.append('name', name)

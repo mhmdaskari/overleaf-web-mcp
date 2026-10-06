@@ -38,6 +38,11 @@ class FakeProject {
   failFolders = new Set<string>()
   /** Uploads Overleaf acknowledges without storing anything. */
   dropUploads = new Set<string>()
+  /** Uploads that time out, after landing or without landing. */
+  timeoutUploads = new Map<string, 'landed' | 'lost'>()
+  rateLimitUploads = new Set<string>()
+  treeReads = 0
+  failTreeReadsAfter: number | undefined
   beforeWrite: ((path: string) => void) | undefined
   afterUpload: ((path: string) => void) | undefined
 
@@ -114,7 +119,13 @@ class FakeProject {
 
   deps(options: { currentUserId?: string } = { currentUserId: 'user' }): SyncDependencies {
     return {
-      getProjectTree: async () => this.tree(),
+      getProjectTree: async () => {
+        this.treeReads += 1
+        if (this.failTreeReadsAfter !== undefined && this.treeReads > this.failTreeReadsAfter) {
+          throw new McpError('TIMEOUT', 'Overleaf request timed out.', { retryable: true })
+        }
+        return this.tree()
+      },
       readFile: async (_projectId, filePath) => {
         const entity = this.#doc(filePath)
         return {
@@ -147,9 +158,25 @@ class FakeProject {
         this.entities.set(filePath, { id: this.#id(), type: 'doc', content: normalizeLf(content), version: 1 })
         return { revision: this.#revision(filePath), protocol: 'sharejs', trackChangesActive: false, writeMode }
       },
-      uploadFile: async (_projectId, localPath, folderPath, name) => {
+      uploadFile: async (_projectId, localPath, folderPath, name, options) => {
         const path = folderPath === '' ? name : `${folderPath}/${name}`
+        const existing = this.entities.get(path)
+        if (options?.ifExists === 'skip' && existing !== undefined) {
+          return { path, skipped: true, entityId: existing.id, entityType: existing.type }
+        }
         if (this.failUploads.has(path)) throw new McpError('REMOTE_ERROR', 'Overleaf returned HTTP 500.')
+        if (this.rateLimitUploads.has(path)) {
+          throw new McpError('RATE_LIMITED', 'Overleaf rate-limited this request. Wait before retrying.', { retryable: true })
+        }
+        const timeout = this.timeoutUploads.get(path)
+        if (timeout !== undefined) {
+          this.mutations.push(`upload ${path}`)
+          if (timeout === 'landed') {
+            const bytes = await readFile(localPath)
+            this.put(path, /\.(tex|bib|txt)$/u.test(path) ? new TextDecoder().decode(bytes) : bytes)
+          }
+          throw new McpError('TIMEOUT', 'Overleaf request timed out.', { retryable: true })
+        }
         if (folderPath !== '' && this.entities.get(folderPath)?.type !== 'folder') {
           throw new McpError('INVALID_ARGUMENT', 'The destination folder no longer exists in the project tree.')
         }
@@ -754,5 +781,298 @@ describe('delete_entities', () => {
     const continued = await api.deleteEntities(PROJECT, ['a.png', 'b.png', 'c.png'], 3)
     expect(continued.completed.map(entry => entry.path)).toEqual(['b.png', 'c.png'])
     expect(continued.failed.map(entry => entry.path)).toEqual(['a.png'])
+  })
+})
+
+describe('batch_upload', () => {
+  test('uploads to explicit paths, creating missing folders parents first, and confirms each in the tree', async () => {
+    const project = new FakeProject({ 'main.tex': 'x', 'figures/old.png': png(1) })
+    const root = await localFolder({ 'a.png': png(2), 'b.png': png(3), 'c.png': png(4) })
+    const oldId = project.entities.get('figures/old.png')!.id
+
+    const result = await new SyncApi(project.deps()).batchUpload(PROJECT, [
+      { localPath: join(root, 'a.png'), destinationPath: 'figures/old.png' },
+      { localPath: join(root, 'b.png'), destinationPath: 'figures/deep/er/b.png' },
+      { localPath: join(root, 'c.png'), destinationPath: 'c.png' },
+    ])
+
+    expect(project.mutations).toEqual([
+      'upload figures/old.png',
+      'create_folder figures/deep',
+      'create_folder figures/deep/er',
+      'upload figures/deep/er/b.png',
+      'upload c.png',
+    ])
+    expect(result).toEqual({
+      status: 'complete',
+      onConflict: 'overwrite',
+      completed: [
+        { destinationPath: 'figures/old.png', action: 'upload', entityId: oldId, entityType: 'file', replaced: true },
+        { destinationPath: 'figures/deep', action: 'create_folder', entityId: expect.any(String) },
+        { destinationPath: 'figures/deep/er', action: 'create_folder', entityId: expect.any(String) },
+        { destinationPath: 'figures/deep/er/b.png', action: 'upload', entityId: expect.any(String), entityType: 'file', replaced: false },
+        { destinationPath: 'c.png', action: 'upload', entityId: expect.any(String), entityType: 'file', replaced: false },
+      ],
+      skipped: [],
+      failed: [],
+      remaining: [],
+      verified: true,
+    })
+    expect(project.entities.get('figures/old.png')).toMatchObject({ id: oldId, hash: gitBlobHash(png(2)) })
+  })
+
+  test('skip leaves every existing path untouched and sends nothing for it', async () => {
+    const project = new FakeProject({ 'main.tex': 'old\n', 'fig.png': png(1) })
+    const root = await localFolder({ 'main.tex': 'new\n', 'fig.png': png(2), 'new.png': png(3) })
+
+    const result = await new SyncApi(project.deps()).batchUpload(
+      PROJECT,
+      [
+        { localPath: join(root, 'main.tex'), destinationPath: 'main.tex' },
+        { localPath: join(root, 'fig.png'), destinationPath: 'fig.png' },
+        { localPath: join(root, 'new.png'), destinationPath: 'new.png' },
+      ],
+      { onConflict: 'skip' }
+    )
+
+    expect(project.mutations).toEqual(['upload new.png'])
+    expect(result.status).toBe('complete')
+    expect(result.skipped).toEqual([
+      { destinationPath: 'main.tex', localPath: join(root, 'main.tex'), entityType: 'doc' },
+      { destinationPath: 'fig.png', localPath: join(root, 'fig.png'), entityType: 'file' },
+    ])
+    expect(result.completed.map(entry => entry.destinationPath)).toEqual(['new.png'])
+    expect(project.entities.get('main.tex')!.content).toBe('old\n')
+  })
+
+  test('skip re-checks inside the upload, so a path that appeared after the tree read is not replaced', async () => {
+    const project = new FakeProject({ 'main.tex': 'x' })
+    const root = await localFolder({ 'a.png': png(1), 'b.png': png(2) })
+    project.afterUpload = path => {
+      if (path === 'a.png') project.put('b.png', png(9))
+    }
+
+    const result = await new SyncApi(project.deps()).batchUpload(
+      PROJECT,
+      [
+        { localPath: join(root, 'a.png'), destinationPath: 'a.png' },
+        { localPath: join(root, 'b.png'), destinationPath: 'b.png' },
+      ],
+      { onConflict: 'skip' }
+    )
+
+    expect(project.mutations).toEqual(['upload a.png'])
+    expect(result.skipped).toEqual([{ destinationPath: 'b.png', localPath: join(root, 'b.png'), entityType: 'file' }])
+    expect(project.entities.get('b.png')!.hash).toBe(gitBlobHash(png(9)))
+  })
+
+  test('checks every path before anything is sent', async () => {
+    const project = new FakeProject({ 'main.tex': 'x' })
+    const root = await localFolder({ 'a.png': png(1) })
+    const file = join(root, 'a.png')
+    const api = new SyncApi(project.deps())
+    const cases: Array<[Array<{ localPath: string; destinationPath: string }>, string]> = [
+      [[{ localPath: file, destinationPath: 'x.png' }, { localPath: file, destinationPath: './x.png' }], 'INVALID_ARGUMENT'],
+      [[{ localPath: file, destinationPath: 'figs' }, { localPath: file, destinationPath: 'figs/x.png' }], 'INVALID_ARGUMENT'],
+      [[{ localPath: file, destinationPath: 'figs/' }], 'INVALID_ARGUMENT'],
+      [[{ localPath: file, destinationPath: '.' }], 'INVALID_ARGUMENT'],
+      [[{ localPath: file, destinationPath: '../x.png' }], 'INVALID_ARGUMENT'],
+      [[{ localPath: file, destinationPath: 'figs/.' }], 'INVALID_ARGUMENT'],
+      [[{ localPath: file, destinationPath: 'x/a.png/..' }], 'INVALID_ARGUMENT'],
+      [[{ localPath: file, destinationPath: 'a.png' }, { localPath: join(root, 'missing.png'), destinationPath: 'b.png' }], 'NOT_FOUND'],
+      [[{ localPath: root, destinationPath: 'a.png' }], 'INVALID_ARGUMENT'],
+      [[], 'INVALID_ARGUMENT'],
+    ]
+    for (const [files, code] of cases) {
+      await expect(api.batchUpload(PROJECT, files)).rejects.toMatchObject({ code })
+    }
+    expect(project.mutations).toEqual([])
+    expect(project.treeReads).toBe(0)
+  })
+
+  test('fails a file whose path is taken by a folder or sits under a file, and continues with the rest', async () => {
+    const project = new FakeProject({ 'main.tex': 'x', 'figures': null })
+    const root = await localFolder({ 'a.png': png(1), 'b.png': png(2), 'c.png': png(3) })
+
+    const result = await new SyncApi(project.deps()).batchUpload(PROJECT, [
+      { localPath: join(root, 'a.png'), destinationPath: 'figures' },
+      { localPath: join(root, 'b.png'), destinationPath: 'main.tex/b.png' },
+      { localPath: join(root, 'c.png'), destinationPath: 'c.png' },
+    ])
+
+    expect(project.mutations).toEqual(['upload c.png'])
+    expect(result.status).toBe('partial')
+    expect(result.failed).toEqual([
+      { destinationPath: 'figures', action: 'upload', errorCode: 'INVALID_ARGUMENT', message: expect.stringContaining('folder') },
+      { destinationPath: 'main.tex/b.png', action: 'upload', errorCode: 'INVALID_ARGUMENT', message: expect.stringContaining('main.tex') },
+    ])
+    expect(result.completed.map(entry => entry.destinationPath)).toEqual(['c.png'])
+  })
+
+  test('continues past a failed upload, or stops with stopOnError and lists the rest as remaining', async () => {
+    const files = async () => {
+      const root = await localFolder({ 'a.png': png(1), 'b.png': png(2), 'c.png': png(3) })
+      return ['a.png', 'b.png', 'c.png'].map(name => ({ localPath: join(root, name), destinationPath: name }))
+    }
+
+    const continuing = new FakeProject({ 'main.tex': 'x' })
+    continuing.failUploads.add('b.png')
+    const continued = await new SyncApi(continuing.deps()).batchUpload(PROJECT, await files())
+    expect(continued.status).toBe('partial')
+    expect(continued.completed.map(entry => entry.destinationPath)).toEqual(['a.png', 'c.png'])
+    expect(continued.failed).toEqual([
+      { destinationPath: 'b.png', action: 'upload', errorCode: 'REMOTE_ERROR', message: 'Overleaf returned HTTP 500.' },
+    ])
+    expect(continued.remaining).toEqual([])
+
+    const stopping = new FakeProject({ 'main.tex': 'x' })
+    stopping.failUploads.add('b.png')
+    const stopped = await new SyncApi(stopping.deps()).batchUpload(PROJECT, await files(), { stopOnError: true })
+    expect(stopping.mutations).toEqual(['upload a.png'])
+    expect(stopped.remaining).toEqual([{ destinationPath: 'c.png', action: 'upload' }])
+  })
+
+  test('stops sending at RATE_LIMITED even without stopOnError, since every further upload would be refused', async () => {
+    const project = new FakeProject({ 'main.tex': 'x' })
+    project.rateLimitUploads.add('b.png')
+    const root = await localFolder({ 'a.png': png(1), 'b.png': png(2), 'c.png': png(3) })
+
+    const result = await new SyncApi(project.deps()).batchUpload(
+      PROJECT,
+      ['a.png', 'b.png', 'c.png'].map(name => ({ localPath: join(root, name), destinationPath: name }))
+    )
+
+    expect(project.mutations).toEqual(['upload a.png'])
+    expect(result.failed.map(entry => [entry.destinationPath, entry.errorCode])).toEqual([['b.png', 'RATE_LIMITED']])
+    expect(result.remaining).toEqual([{ destinationPath: 'c.png', action: 'upload' }])
+  })
+
+  test('stops at a RATE_LIMITED folder creation too, sending nothing more', async () => {
+    const project = new FakeProject({ 'main.tex': 'x' })
+    const deps = project.deps()
+    let folderCalls = 0
+    const api = new SyncApi({
+      ...deps,
+      manageEntity: async (projectId, action) => {
+        if (action.action !== 'create_folder') return await deps.manageEntity(projectId, action)
+        folderCalls += 1
+        throw new McpError('RATE_LIMITED', 'Overleaf rate-limited this request. Wait before retrying.', { retryable: true })
+      },
+    })
+    const root = await localFolder({ 'a.png': png(1), 'b.png': png(2), 'c.png': png(3) })
+
+    const result = await api.batchUpload(PROJECT, [
+      { localPath: join(root, 'a.png'), destinationPath: 'one/a.png' },
+      { localPath: join(root, 'b.png'), destinationPath: 'two/b.png' },
+      { localPath: join(root, 'c.png'), destinationPath: 'c.png' },
+    ])
+
+    expect(folderCalls).toBe(1)
+    expect(project.mutations).toEqual([])
+    expect(result.failed.map(entry => [entry.destinationPath, entry.errorCode])).toEqual([['one', 'RATE_LIMITED']])
+    expect(result.remaining.map(entry => entry.destinationPath)).toEqual(['one/a.png', 'two/b.png', 'c.png'])
+  })
+
+  test('never retries a folder that could not be created', async () => {
+    const project = new FakeProject({ 'main.tex': 'x' })
+    project.failFolders.add('figs')
+    const root = await localFolder({ 'a.png': png(1), 'b.png': png(2) })
+
+    const result = await new SyncApi(project.deps()).batchUpload(PROJECT, [
+      { localPath: join(root, 'a.png'), destinationPath: 'figs/a.png' },
+      { localPath: join(root, 'b.png'), destinationPath: 'figs/sub/b.png' },
+    ])
+
+    expect(project.mutations).toEqual([])
+    expect(result.failed).toEqual([
+      { destinationPath: 'figs', action: 'create_folder', errorCode: 'PERMISSION_DENIED', message: 'Overleaf returned HTTP 403.' },
+      { destinationPath: 'figs/a.png', action: 'upload', errorCode: 'PERMISSION_DENIED', message: expect.stringContaining('figs') },
+      { destinationPath: 'figs/sub/b.png', action: 'upload', errorCode: 'PERMISSION_DENIED', message: expect.stringContaining('figs/sub') },
+    ])
+  })
+
+  test('moves an acknowledged upload the tree does not show to failed', async () => {
+    const project = new FakeProject({ 'main.tex': 'x' })
+    project.dropUploads.add('a.png')
+    const root = await localFolder({ 'a.png': png(1) })
+
+    const result = await new SyncApi(project.deps()).batchUpload(PROJECT, [
+      { localPath: join(root, 'a.png'), destinationPath: 'a.png' },
+    ])
+
+    expect(result.completed).toEqual([])
+    expect(result.failed).toEqual([
+      { destinationPath: 'a.png', action: 'upload', errorCode: 'REMOTE_ERROR', message: expect.stringContaining('nothing is at this path') },
+    ])
+    expect(result.verified).toBe(true)
+    expect(result.status).toBe('partial')
+  })
+
+  test('classifies a timed-out upload from the tree read back afterwards and never resubmits it', async () => {
+    const project = new FakeProject({ 'main.tex': 'x', 'same.png': png(5) })
+    project.timeoutUploads.set('landed.png', 'landed')
+    project.timeoutUploads.set('lost.png', 'lost')
+    project.timeoutUploads.set('notes.tex', 'landed')
+    project.timeoutUploads.set('same.png', 'landed')
+    const root = await localFolder({ 'landed.png': png(1), 'lost.png': png(2), 'notes.tex': 'text\n', 'same.png': png(5) })
+
+    const result = await new SyncApi(project.deps()).batchUpload(
+      PROJECT,
+      ['landed.png', 'lost.png', 'notes.tex', 'same.png'].map(name => ({ localPath: join(root, name), destinationPath: name }))
+    )
+
+    expect(project.mutations).toEqual(['upload landed.png', 'upload lost.png', 'upload notes.tex', 'upload same.png'])
+    expect(result.completed).toEqual([
+      {
+        destinationPath: 'landed.png',
+        action: 'upload',
+        entityId: project.entities.get('landed.png')!.id,
+        entityType: 'file',
+        replaced: false,
+        recoveredAfterTimeout: true,
+      },
+      // The project already held these bytes, which is the outcome asked for either way.
+      {
+        destinationPath: 'same.png',
+        action: 'upload',
+        entityId: project.entities.get('same.png')!.id,
+        entityType: 'file',
+        replaced: true,
+        recoveredAfterTimeout: true,
+      },
+    ])
+    expect(result.failed).toEqual([
+      { destinationPath: 'lost.png', action: 'upload', errorCode: 'TIMEOUT', message: expect.stringContaining('had not landed') },
+      { destinationPath: 'notes.tex', action: 'upload', errorCode: 'OUTCOME_UNKNOWN', message: expect.stringContaining('get_project_tree') },
+    ])
+  })
+
+  test('reports verified false when the tree cannot be read back', async () => {
+    const project = new FakeProject({ 'main.tex': 'x' })
+    project.failTreeReadsAfter = 1
+    const root = await localFolder({ 'a.png': png(1) })
+
+    const result = await new SyncApi(project.deps()).batchUpload(PROJECT, [
+      { localPath: join(root, 'a.png'), destinationPath: 'a.png' },
+    ])
+
+    expect(result.verified).toBe(false)
+    expect(result.completed.map(entry => entry.destinationPath)).toEqual(['a.png'])
+  })
+
+  test('reports progress per file and reads the tree only when something was sent', async () => {
+    const project = new FakeProject({ 'main.tex': 'x', 'a.png': png(1) })
+    const root = await localFolder({ 'a.png': png(2) })
+    const progress: Array<[number, number]> = []
+
+    const result = await new SyncApi(project.deps()).batchUpload(
+      PROJECT,
+      [{ localPath: join(root, 'a.png'), destinationPath: 'a.png' }],
+      { onConflict: 'skip', onProgress: async (done, total) => void progress.push([done, total]) }
+    )
+
+    expect(result).toMatchObject({ status: 'complete', verified: true, completed: [] })
+    expect(progress).toEqual([[1, 1]])
+    expect(project.treeReads).toBe(1)
   })
 })

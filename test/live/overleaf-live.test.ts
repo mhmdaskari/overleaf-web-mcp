@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -207,6 +207,45 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_SYNC_TESTS !== '1')(
         expect(again.toUpload).toEqual([])
         expect(again.remoteOnly).toEqual([])
         expect(again.identical.count).toBe(2)
+      } finally {
+        await runtime.projects.manageProject(created.projectId, { action: 'trash', confirmName: name })
+        await rm(folder, { recursive: true })
+      }
+    })
+
+    test('batch-uploads into new folders, skips on request, and downloads the project as a zip', async () => {
+      const folder = await mkdtemp(join(tmpdir(), 'overleaf-live-batch-'))
+      const figure = join(folder, 'figure.png')
+      await writeFile(figure, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]))
+      await writeFile(join(folder, 'notes.tex'), 'Disposable batch upload test.\n')
+
+      const name = `mcp-batch-${Date.now()}`
+      const created = await runtime.projects.createProject(name, 'blank')
+      try {
+        const files = [
+          { localPath: figure, destinationPath: 'figures/new/figure.png' },
+          { localPath: join(folder, 'notes.tex'), destinationPath: 'notes.tex' },
+        ]
+        const uploaded = await runtime.sync.batchUpload(created.projectId, files)
+        expect(uploaded).toMatchObject({ status: 'complete', verified: true, failed: [] })
+        expect(uploaded.completed.map(entry => entry.destinationPath)).toEqual([
+          'figures',
+          'figures/new',
+          'figures/new/figure.png',
+          'notes.tex',
+        ])
+
+        const skipped = await runtime.sync.batchUpload(created.projectId, files, { onConflict: 'skip' })
+        expect(skipped.skipped.map(entry => entry.destinationPath)).toEqual(['figures/new/figure.png', 'notes.tex'])
+        expect(skipped.completed).toEqual([])
+
+        const zipPath = join(folder, 'backup.zip')
+        const downloaded = await runtime.projects.downloadProjectZip(created.projectId, zipPath)
+        expect(downloaded.bytes).toBeGreaterThan(0)
+        expect((await readFile(zipPath)).subarray(0, 2).toString('latin1')).toBe('PK')
+        await expect(runtime.projects.downloadProjectZip(created.projectId, zipPath)).rejects.toMatchObject({
+          code: 'CONFIRMATION_MISMATCH',
+        })
       } finally {
         await runtime.projects.manageProject(created.projectId, { action: 'trash', confirmName: name })
         await rm(folder, { recursive: true })

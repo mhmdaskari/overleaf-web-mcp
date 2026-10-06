@@ -199,4 +199,22 @@ describe('entity API', () => {
       api.downloadFile('project', 'chapters/old.tex', target, true)
     ).resolves.toMatchObject({ bytes: 3 })
   })
+
+  test('with ifExists skip, leaves an existing entity untouched and sends nothing', async () => {
+    const { api, http } = harness()
+    const folder = await mkdtemp(join(tmpdir(), 'overleaf-upload-'))
+    const local = join(folder, 'old.tex')
+    await writeFile(local, 'new text')
+
+    await expect(
+      api.uploadFile('project', local, 'chapters', undefined, { ifExists: 'skip' })
+    ).resolves.toEqual({ path: 'chapters/old.tex', skipped: true, entityId: 'doc', entityType: 'doc' })
+    await expect(
+      api.uploadFile('project', local, '', 'chapters', { ifExists: 'skip' })
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    expect(http.postForm).not.toHaveBeenCalled()
+
+    await api.uploadFile('project', local, 'chapters', 'fresh.tex', { ifExists: 'skip' })
+    expect(http.postForm).toHaveBeenCalledTimes(1)
+  })
 })

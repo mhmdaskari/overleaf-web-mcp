@@ -196,6 +196,20 @@ export class OverleafHttpClient {
     return new Uint8Array(await response.arrayBuffer())
   }
 
+  /**
+   * Starts a GET and hands back the body unread, for downloads too large to buffer. The request
+   * timeout keeps running while the caller reads, so it bounds the whole transfer.
+   */
+  async getStream(
+    path: string,
+    options?: RequestOptions
+  ): Promise<{ body: ReadableStream<Uint8Array>; contentType?: string }> {
+    const response = await this.request('GET', path, undefined, options)
+    const contentType = response.headers.get('content-type') ?? undefined
+    const body = response.body ?? new Response(new Uint8Array()).body!
+    return { body, ...(contentType === undefined ? {} : { contentType }) }
+  }
+
   async postForm<T = unknown>(
     path: string,
     form: FormData,
