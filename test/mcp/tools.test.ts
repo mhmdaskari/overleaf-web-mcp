@@ -93,7 +93,7 @@ describe('MCP tool registration', () => {
     )
 
     const tool = registered.get('auth_status')
-    expect(tool?.config.outputSchema).toHaveProperty('sessionExpiresAt')
+    expect(tool?.config.outputSchema.shape).toHaveProperty('sessionExpiresAt')
     expect(tool?.config.annotations).toEqual({ readOnlyHint: true })
     const result = await tool?.handler({})
     expect(result.structuredContent).toEqual(status)
@@ -116,7 +116,7 @@ describe('MCP tool registration', () => {
       destructiveHint: true,
     })
     expect(registered.get('compile_project')?.config.description).not.toMatch(/rootDoc_id/u)
-    const rootFilePathSchema = registered.get('compile_project')?.config.inputSchema
+    const rootFilePathSchema = registered.get('compile_project')?.config.inputSchema.shape
       .rootFilePath as { safeParse: (value: unknown) => { success: boolean } }
     expect(rootFilePathSchema.safeParse(undefined).success).toBe(true)
   })
@@ -262,7 +262,7 @@ describe('MCP tool registration', () => {
 
     const tool = registered.get('list_projects')
     expect(tool?.config.annotations).toEqual({ readOnlyHint: true })
-    expect(tool?.config.outputSchema).toHaveProperty('projects')
+    expect(tool?.config.outputSchema.shape).toHaveProperty('projects')
     const result = await tool?.handler({ query: 'thesis', includeTrashed: true, limit: 5, sort: 'name' })
     expect(runtime.account.listProjects).toHaveBeenCalledWith({
       query: 'thesis',
@@ -287,7 +287,7 @@ describe('MCP tool registration', () => {
 
     for (const name of ['create_project', 'clone_project', 'import_project_zip']) {
       expect(registered.get(name)?.config.annotations).toEqual({ destructiveHint: false, idempotentHint: false })
-      expect(registered.get(name)?.config.outputSchema).toHaveProperty('projectId')
+      expect(registered.get(name)?.config.outputSchema.shape).toHaveProperty('projectId')
     }
     expect(registered.get('manage_project')?.config.annotations).toEqual({
       destructiveHint: true,
@@ -400,7 +400,7 @@ describe('MCP tool registration', () => {
     expect(registered.get('plan_sync')?.config.description).toMatch(/changing nothing/u)
     expect(registered.get('plan_sync')?.config.description).toMatch(/PATH_OUTSIDE_ROOT/u)
     expect(registered.get('delete_entities')?.config.description).toMatch(/confirmCount/u)
-    const mode = registered.get('sync_directory')?.config.inputSchema.mode as {
+    const mode = registered.get('sync_directory')?.config.inputSchema.shape.mode as {
       safeParse: (value: unknown) => { success: boolean }
     }
     // The mode is always chosen explicitly; there is no default that could delete.
