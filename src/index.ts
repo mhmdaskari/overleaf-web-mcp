@@ -8,4 +8,5 @@ export {
   SERVER_NAME,
   SERVER_VERSION,
   serveOverStdio,
+  type StdioConnection,
 } from './server.js'

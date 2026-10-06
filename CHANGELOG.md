@@ -22,10 +22,14 @@ result shapes may change in a minor or patch release; each such change is listed
 - Calling a tool name the server does not register now fails with JSON-RPC error `-32602` instead
   of returning an `isError` result.
 - `serve` now exits when its client closes stdin, releasing the Overleaf session and sockets,
-  instead of waiting for a signal.
+  instead of waiting for a signal. Tool calls still running at that moment are not answered, as
+  the MCP stdio transport specifies, but get up to 1.5 seconds to finish against Overleaf before
+  the sockets close, so a multi-step operation such as `create_file` with content is not cut off
+  between its steps.
 - Library use: `createMcpServer()` returns the `McpServer` class from
   `@modelcontextprotocol/server`. Connecting it by hand with `connect()` serves 2025-era clients
-  only; the new `serveOverStdio(runtime, transport?)` serves both eras, as `serve` does.
+  only; the new `serveOverStdio(runtime, transport?)` serves both eras, as `serve` does, and
+  returns a connection with `close()` and `whenIdle(timeoutMs)`.
 
 ## [0.4.0] - 2026-09-27
 

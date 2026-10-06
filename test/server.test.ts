@@ -1,10 +1,12 @@
+import { PassThrough } from 'node:stream'
+
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client'
 import { McpServer, type ServerContext } from '@modelcontextprotocol/server'
 import { describe, expect, test, vi } from 'vitest'
 
 import { SERVER_INSTRUCTIONS } from '../src/mcp/instructions.js'
-import { TOOL_NAMES, type ToolCallExtra } from '../src/mcp/tools.js'
-import { createMcpServer, SERVER_NAME, serveOverStdio } from '../src/server.js'
+import { ToolActivity, TOOL_NAMES, type ToolCallExtra } from '../src/mcp/tools.js'
+import { createMcpServer, runStdioServer, SERVER_NAME, serveOverStdio } from '../src/server.js'
 
 function fakeRuntime() {
   return {
@@ -305,8 +307,130 @@ describe('protocol eras', () => {
   })
 
   test('tools read the progress token and notifier where the SDK puts them', () => {
-    // Compile-time guard: npm run check fails if ServerContext stops matching ToolCallExtra.
-    const toExtra = (context: ServerContext): ToolCallExtra => context
-    expect(toExtra).toBeTypeOf('function')
+    // Compile-time guard: npm run check fails if ServerContext.mcpReq loses `_meta` or `notify`, or
+    // either stops matching what ToolCallExtra reads. The progress tests cover it at run time.
+    type Provided = Pick<ServerContext['mcpReq'], '_meta' | 'notify'>
+    const read = (fields: Provided): NonNullable<ToolCallExtra['mcpReq']> => fields
+    expect(read).toBeTypeOf('function')
+  })
+})
+
+describe('tool activity', () => {
+  test('counts running calls and reports when they settle', async () => {
+    const activity = new ToolActivity()
+    expect(await activity.whenIdle(10)).toBe(true)
+
+    let finish!: () => void
+    const call = activity.track(() => new Promise<void>(resolve => (finish = resolve)))
+    expect(activity.running).toBe(1)
+    expect(await activity.whenIdle(10)).toBe(false)
+
+    const idle = activity.whenIdle(1000)
+    finish()
+    await call
+    expect(await idle).toBe(true)
+    expect(activity.running).toBe(0)
+  })
+
+  test('settles a failed call too', async () => {
+    const activity = new ToolActivity()
+    await expect(activity.track(async () => Promise.reject(new Error('boom')))).rejects.toThrow('boom')
+    expect(activity.running).toBe(0)
+  })
+})
+
+// runStdioServer is the whole `overleaf-web-mcp serve` lifecycle after the runtime is created.
+describe('stdio lifecycle', () => {
+  function stdio(runtime: ReturnType<typeof fakeRuntime>, stdinCloseGraceMs = 1000) {
+    const input = new PassThrough()
+    const output = new PassThrough()
+    const lines: string[] = []
+    let buffered = ''
+    output.on('data', (chunk: Buffer) => {
+      buffered += chunk.toString('utf8')
+      const parts = buffered.split('\n')
+      buffered = parts.pop() ?? ''
+      lines.push(...parts.filter(Boolean))
+    })
+    const close = vi.fn(async () => undefined)
+    const exit = vi.fn()
+    const server = runStdioServer({ ...runtime, close }, { input, output, exit, stdinCloseGraceMs })
+    const send = (message: Record<string, unknown>) => input.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
+    const reply = async (id: number) => {
+      await vi.waitFor(() => expect(lines.some(line => (JSON.parse(line) as { id?: unknown }).id === id)).toBe(true))
+      return JSON.parse(lines.find(line => (JSON.parse(line) as { id?: unknown }).id === id)!) as Record<string, unknown>
+    }
+    const initialize = async () => {
+      send({ id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'pipe', version: '0' } } })
+      await reply(1)
+      send({ method: 'notifications/initialized' })
+    }
+    return { input, lines, close, exit, server, send, reply, initialize }
+  }
+
+  /** A runtime whose plan_sync stays running until release() is called. */
+  function runtimeWithSlowPlan() {
+    const runtime = fakeRuntime()
+    let release!: () => void
+    let started!: () => void
+    const running = new Promise<void>(resolve => (started = resolve))
+    runtime.sync.planSync.mockImplementation(async () => {
+      started()
+      await new Promise<void>(resolve => (release = resolve))
+      return {}
+    })
+    return { runtime, running, release: () => release() }
+  }
+
+  test('writes only JSON-RPC to stdout and exits once when the client closes stdin', async () => {
+    const { input, lines, close, exit, initialize } = stdio(fakeRuntime())
+    await initialize()
+    input.end()
+
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledTimes(1))
+    expect(exit).toHaveBeenCalledWith(0)
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) expect((JSON.parse(line) as { jsonrpc?: unknown }).jsonrpc).toBe('2.0')
+  })
+
+  test('lets a running tool call finish before closing the runtime when stdin closes', async () => {
+    const { runtime, running, release } = runtimeWithSlowPlan()
+    const { input, close, exit, send, initialize } = stdio(runtime)
+    await initialize()
+    send({ id: 2, method: 'tools/call', params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } } })
+    await running
+    input.end()
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(close).not.toHaveBeenCalled()
+    release()
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  test('closes after the grace period even if a call is still running', async () => {
+    const { runtime, running } = runtimeWithSlowPlan()
+    const { input, close, exit, send, initialize } = stdio(runtime, 30)
+    await initialize()
+    send({ id: 2, method: 'tools/call', params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } } })
+    await running
+    input.end()
+
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  test('shutdown closes at once, for signals', async () => {
+    const { runtime, running } = runtimeWithSlowPlan()
+    const { close, exit, send, server, initialize } = stdio(runtime)
+    await initialize()
+    send({ id: 2, method: 'tools/call', params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } } })
+    await running
+
+    await server.shutdown()
+    await server.shutdown()
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(exit).toHaveBeenCalledTimes(1)
   })
 })

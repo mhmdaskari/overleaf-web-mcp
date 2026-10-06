@@ -6,25 +6,16 @@ import { parseCliCommand, renderHelp } from './cli-command.js'
 import { readConfig } from './config.js'
 import { asMcpError } from './core/errors.js'
 import { OverleafRuntime } from './runtime.js'
-import { serveOverStdio } from './server.js'
+import { runStdioServer } from './server.js'
 
 async function serve(): Promise<void> {
   const runtime = await OverleafRuntime.create(readConfig())
-  const connection = serveOverStdio(runtime)
-  let closed: Promise<void> | undefined
-  const close = (): Promise<void> =>
-    (closed ??= (async () => {
-      await connection.close().catch(() => undefined)
-      await runtime.close()
-    })())
+  const server = runStdioServer(runtime)
   const shutdown = (): void => {
-    void close().finally(() => process.exit(0))
+    void server.shutdown()
   }
   process.once('SIGINT', shutdown)
   process.once('SIGTERM', shutdown)
-  // The stdio transport closes itself when the client closes stdin; release the session then too.
-  process.stdin.once('end', shutdown)
-  process.stdin.once('close', shutdown)
 }
 
 async function main(): Promise<void> {

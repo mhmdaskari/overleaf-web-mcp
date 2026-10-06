@@ -104,6 +104,59 @@ interface ToolRegistrar {
   ): unknown
 }
 
+/**
+ * Counts tool calls whose operation has started and not yet settled, so the stdio server can let
+ * them finish against Overleaf after the client closes stdin instead of closing their sockets
+ * mid-operation. The SDK has already dropped their replies by then; this protects the project,
+ * not the answer.
+ */
+export class ToolActivity {
+  #running = 0
+  #idle = new Set<() => void>()
+
+  get running(): number {
+    return this.#running
+  }
+
+  async track<T>(work: () => Promise<T>): Promise<T> {
+    this.#running += 1
+    try {
+      return await work()
+    } finally {
+      this.#running -= 1
+      if (this.#running === 0) {
+        for (const resolve of this.#idle) resolve()
+        this.#idle.clear()
+      }
+    }
+  }
+
+  /** Resolves true once no call is running, or false when timeoutMs passes first. */
+  whenIdle(timeoutMs: number): Promise<boolean> {
+    if (this.#running === 0) return Promise.resolve(true)
+    return new Promise(resolve => {
+      const done = (): void => {
+        clearTimeout(timer)
+        resolve(true)
+      }
+      const timer = setTimeout(() => {
+        this.#idle.delete(done)
+        resolve(false)
+      }, timeoutMs)
+      this.#idle.add(done)
+    })
+  }
+}
+
+function trackedRegistrar(registrar: ToolRegistrar, activity: ToolActivity): ToolRegistrar {
+  return {
+    registerTool: (name, config, handler) =>
+      registrar.registerTool(name, config, (args, extra) =>
+        activity.track(() => handler(args, extra))
+      ),
+  }
+}
+
 const projectId = z.string().min(1).describe('Overleaf project ID')
 const filePath = z.string().min(1).describe('Project-relative path using forward slashes')
 const revision = z.string().min(1).describe('Opaque revision returned by a prior read or write')
@@ -216,7 +269,12 @@ const createdProjectSchema = z.object({
   url: z.string(),
 })
 
-export function registerOverleafTools(server: ToolRegistrar, runtime: OverleafToolRuntime): void {
+export function registerOverleafTools(
+  registrar: ToolRegistrar,
+  runtime: OverleafToolRuntime,
+  activity?: ToolActivity
+): void {
+  const server = activity === undefined ? registrar : trackedRegistrar(registrar, activity)
   server.registerTool(
     'auth_status',
     {
