@@ -10,7 +10,7 @@ result shapes may change in a minor or patch release; each such change is listed
 
 - **Built on the v2 MCP SDK.** The server now depends on `@modelcontextprotocol/server` 2.3 in
   place of `@modelcontextprotocol/sdk` 1.x, and `serve` answers both protocol eras over stdio.
-  Clients on the 2025-era protocol versions (2024-11-05 through 2025-11-25) connect with
+  Clients on the 2025-era protocol versions (2024-10-07 through 2025-11-25) connect with
   `initialize` exactly as before; clients on MCP 2026-07-28 are served through `server/discover`,
   whose result carries the same usage instructions. Tool names, input fields, annotations, and
   result shapes are unchanged. An install no longer pulls in the v1 SDK's HTTP server stack

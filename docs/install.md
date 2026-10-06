@@ -87,7 +87,7 @@ worked. See [configuration](configuration.md#where-the-session-is-stored) for th
 
     The server speaks MCP over stdio. Start it with `npx -y overleaf-web-mcp serve`; `serve` is
     the default and can be omitted. It accepts clients on the 2025-era protocol versions
-    (2024-11-05 through 2025-11-25) and on 2026-07-28. It sends usage instructions when a client
+    (2024-10-07 through 2025-11-25) and on 2026-07-28. It sends usage instructions when a client
     connects, in the `initialize` result or, on 2026-07-28, the `server/discover` result, and
     every tool description is self-contained.
 

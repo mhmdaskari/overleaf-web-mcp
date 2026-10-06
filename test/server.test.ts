@@ -201,7 +201,7 @@ describe('protocol eras', () => {
     return { clientTransport, connection }
   }
 
-  test.each(['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'])(
+  test.each(['2024-10-07', '2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'])(
     'serves a client on protocol %s through initialize',
     async version => {
       const { clientTransport, connection } = served()
