@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/overleaf-web-mcp"><img alt="npm version" src="https://img.shields.io/npm/v/overleaf-web-mcp?color=1F6FEB"></a>
+  <a href="https://www.npmjs.com/package/overleaf-web-mcp"><img alt="Total npm downloads" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmhmdaskari%2Foverleaf-web-mcp%2Fbadges%2Fnpm-downloads.json"></a>
   <img alt="Node.js 20 or newer" src="https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&amp;logoColor=white">
   <img alt="27 MCP tools" src="https://img.shields.io/badge/MCP-27_tools-1F6FEB">
   <a href="https://mhmdaskari.github.io/overleaf-web-mcp/"><img alt="Documentation" src="https://img.shields.io/badge/docs-mhmdaskari.github.io-0F766E"></a>

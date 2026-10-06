@@ -33,6 +33,10 @@ result shapes may change in a minor or patch release; each such change is listed
 
 ### Documentation
 
+- The README and the documentation site show the package's all-time npm downloads. A weekly
+  `Download count` workflow sums them from npm's downloads API, one year at a time so npm's
+  18-month limit cannot shorten the total, and publishes the badge data to the `badges` branch,
+  so the badge stays current on npmjs.com without a release and `main` gets no weekly commits.
 - The roadmap gains an "Interfaces beyond MCP" section (one engine behind MCP, a command line,
   and a TypeScript library, with HTTP, Git, WebMCP, and A2A as conditional triggers rather than
   stages) and three new stages: v0.5.0 shared core and safety, v0.7.0 CLI, SDK, and Skills, and
