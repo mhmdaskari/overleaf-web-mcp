@@ -93,6 +93,15 @@ const entityTypeSchema = z.enum(['doc', 'file', 'folder'])
 const syncActionSchema = z.enum(['create_folder', 'upload', 'write', 'create', 'delete'])
 const errorCodeSchema = z.string()
 const batchUploadActionSchema = z.enum(['create_folder', 'upload'])
+const deprecationsSchema = z
+  .array(z.object({ parameter: z.string(), message: z.string(), enforcedIn: z.string() }))
+  .optional()
+const uncheckedDocumentReplace = z
+  .boolean()
+  .optional()
+  .describe(
+    'Allow replacing a text document, a blind write with no revision check; prefer write_file with localPath when a collaborator may be editing'
+  )
 
 const projectSummarySchema = z.object({
   id: z.string(),
@@ -292,7 +301,7 @@ export const OPERATIONS = {
   },
   upload_file: {
     description:
-      'Upload a local file into a project folder, replacing any entity already at that path. A replaced text document keeps its entity ID; a replaced binary file may get a new one. Works for text documents as well as binaries; Overleaf decides which by extension and UTF-8 validity. Replacing a document this way is a blind write with no revision check, which Overleaf may record as tracked changes only when track changes is already on for this account, so prefer write_file when a collaborator may be editing.',
+      'Upload a local file into a project folder. Overleaf decides whether it becomes a text document or a binary file, by extension and UTF-8 validity. Something already at the path is replaced: a replaced text document keeps its entity ID; a replaced binary file may get a new one. Replacing a binary needs overwrite: true, or expectedHash equal to its hash from get_project_tree; overwrite: false refuses with CONFIRMATION_MISMATCH and a different hash with REMOTE_DRIFT, nothing sent. expectedHash is checked just before the upload, not atomically with it. Replacing a text document is a blind write with no revision check: prefer write_file with localPath, and pass uncheckedDocumentReplace: true only when nobody else is editing it. writeMode in the result is tracked when Overleaf records that replacement as tracked changes, because track changes is on for this account. Until 0.6.0 a replacement without these parameters still happens and the result lists deprecations; from 0.6.0 it is refused.',
     inputSchema: z.object({
       projectId,
       localPath: z.string().min(1),
@@ -302,13 +311,33 @@ export const OPERATIONS = {
         .min(1)
         .optional()
         .describe('Name to store the file under; defaults to the local file name'),
+      overwrite: z
+        .boolean()
+        .optional()
+        .describe('true allows replacing a binary file at the path; false refuses to replace anything'),
+      expectedHash: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/u)
+        .optional()
+        .describe('The hash get_project_tree reported for the binary file being replaced; a different one is REMOTE_DRIFT'),
+      uncheckedDocumentReplace,
+    }),
+    outputSchema: z.object({
+      entityId: z.string().optional(),
+      entityType: z.enum(['doc', 'file']).optional(),
+      path: z.string(),
+      replaced: z.boolean(),
+      hash: z.string().optional(),
+      trackChangesActive: z.boolean(),
+      writeMode: z.enum(['untracked', 'tracked']),
+      deprecations: deprecationsSchema,
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['local-read', 'overleaf-write', 'unchecked-replace'],
   },
   batch_upload: {
     description:
-      'Upload a list of local files to explicit project paths in one call, instead of one upload_file call per file. Each destinationPath is the full project path including the file name; missing folders are created. onConflict "overwrite" (the default, as in upload_file) replaces whatever document or file is at the path; "skip" leaves an existing document or file untouched and lists it in skipped. A folder at a destination path, or a file where a folder is needed, fails that file in either mode. Replacing a text document this way has no revision check, so use write_file or sync_directory for documents a collaborator may be editing. Every path is checked before anything is sent: a duplicate destination or a missing local file fails the call with nothing uploaded. Failures are per file and nothing is retried: the call continues past a failure unless stopOnError, and stops at RATE_LIMITED (Overleaf allows about 500 uploads per project in 15 minutes). It returns status, completed (with replaced per upload), skipped, failed, remaining, and verified, which is true when the tree read back afterwards confirmed every completed entry. A timed-out upload is classified from that read-back, never resubmitted: recoveredAfterTimeout when the path holds the local bytes, OUTCOME_UNKNOWN when the tree cannot tell. It saves tool calls, not time. Confirm overwrites with the user first.',
+      'Upload a list of local files to explicit project paths in one call, instead of one upload_file call per file. Each destinationPath is the full project path including the file name; missing folders are created. onConflict "overwrite" replaces a binary file already at the path; "skip" leaves an existing document or file untouched and lists it in skipped. Pass onConflict explicitly: omitted, it still overwrites, but from 0.6.0 no default replaces anything, and the result lists deprecations when it did. A folder at a destination path, or a file where a folder is needed, fails that file in either mode. Replacing a text document has no revision check, so use write_file or sync_directory for documents a collaborator may be editing; pass uncheckedDocumentReplace: true to replace them anyway, since without it a replaced document is listed in deprecations, and refused from 0.6.0. Every path is checked before anything is sent: a duplicate destination or a missing local file fails the call with nothing uploaded. Failures are per file and nothing is retried: the call continues past a failure unless stopOnError, and stops at RATE_LIMITED (Overleaf allows about 500 uploads per project in 15 minutes). It returns status, completed (with replaced per upload), skipped, failed, remaining, and verified, which is true when the tree read back afterwards confirmed every completed entry. A timed-out upload is classified from that read-back, never resubmitted: recoveredAfterTimeout when the path holds the local bytes, OUTCOME_UNKNOWN when the tree cannot tell. It saves tool calls, not time. Confirm overwrites with the user first.',
     inputSchema: z.object({
       projectId,
       files: z
@@ -323,8 +352,9 @@ export const OPERATIONS = {
         .describe(`Files to upload, in order; at most ${BATCH_UPLOAD_LIMIT}`),
       onConflict: z
         .enum(['skip', 'overwrite'])
-        .default('overwrite')
-        .describe('What to do when something is already at a destination path; defaults to overwrite'),
+        .optional()
+        .describe('What to do when something is already at a destination path; omitted, overwrite, which is deprecated'),
+      uncheckedDocumentReplace,
       stopOnError: z.boolean().default(false).describe('Stop at the first failure instead of continuing'),
     }),
     outputSchema: z.object({
@@ -353,6 +383,7 @@ export const OPERATIONS = {
       ),
       remaining: z.array(z.object({ destinationPath: z.string(), action: batchUploadActionSchema })),
       verified: z.boolean(),
+      deprecations: deprecationsSchema,
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['local-read', 'overleaf-write', 'unchecked-replace'],
@@ -366,7 +397,8 @@ export const OPERATIONS = {
       localPath: z.string().min(1),
       overwrite: z.boolean().default(false).describe('Replace localPath if it already exists'),
     }),
-    annotations: { readOnlyHint: true },
+    // It writes a local file and can replace one, so it is not read-only.
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'local-write'],
   },
   download_project_zip: {
@@ -452,7 +484,7 @@ export const OPERATIONS = {
   },
   sync_directory: {
     description:
-      "Make a project folder match a local folder: upload new and changed files, and in mirror mode also delete what exists only in the project. Call plan_sync first, confirm the plan with the user, and pass its planToken; if the project or the folder changed since, REMOTE_DRIFT is returned and nothing changes. Changed text documents are replaced through revision-checked write_file edits, recorded as tracked changes when writeMode is tracked, so a concurrent edit fails that file with REVISION_CONFLICT rather than being overwritten. Binaries and new files are uploaded; with writeMode tracked, new .tex, .bib, and similar text files are created with tracked content instead. Missing folders are created. Uploads and writes run first. Deletes run only in mirror mode, only when confirmDeleteCount equals the number of remoteOnly entries, else CONFIRMATION_MISMATCH, and never after any upload or write failed. Failures are per file and nothing is retried: the call continues unless stopOnError, then returns status, completed, failed, remaining, and a planToken to resume with. It saves tool calls, not time.",
+      "Make a project folder match a local folder: upload new and changed files, and in mirror mode also delete what exists only in the project. Call plan_sync first, confirm the plan with the user, and pass its planToken; if the project or the folder changed since, REMOTE_DRIFT is returned and nothing changes. Without a planToken nothing is checked against a plan: the call still runs in this version, with planned false and a deprecations entry, and from 0.6.0 it is refused unless an additive sync passes unplanned: true. Changed text documents are replaced through revision-checked write_file edits, recorded as tracked changes when writeMode is tracked, so a concurrent edit fails that file with REVISION_CONFLICT rather than being overwritten. Binaries and new files are uploaded, and one whose path changed since the plan fails with REMOTE_DRIFT; with writeMode tracked, new .tex, .bib, and similar text files are created with tracked content instead. Missing folders are created. Uploads and writes run first. Deletes run only in mirror mode, only when confirmDeleteCount equals the number of remoteOnly entries, else CONFIRMATION_MISMATCH, and never after any upload or write failed. Failures are per file and nothing is retried: the call continues unless stopOnError, then returns status, completed, failed, remaining, and a planToken to resume with. It saves tool calls, not time.",
     inputSchema: z.object({
       projectId,
       localFolderPath,
@@ -465,6 +497,10 @@ export const OPERATIONS = {
         .min(1)
         .optional()
         .describe('From plan_sync, or from a partial sync_directory to resume it'),
+      unplanned: z
+        .boolean()
+        .optional()
+        .describe('Run an additive sync without a planToken on purpose; never with a planToken or in mirror mode'),
       confirmDeleteCount: z
         .number()
         .int()
@@ -492,6 +528,8 @@ export const OPERATIONS = {
       remaining: z.array(z.object({ destinationPath: z.string(), action: syncActionSchema })),
       identicalCount: z.number().int(),
       planToken: z.string().optional(),
+      planned: z.boolean(),
+      deprecations: deprecationsSchema,
     }),
     annotations: { destructiveHint: true, idempotentHint: true },
     effects: ['local-read', 'overleaf-read', 'overleaf-write', 'overleaf-delete'],

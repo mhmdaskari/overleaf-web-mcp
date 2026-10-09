@@ -42,6 +42,8 @@ class FakeProject {
   timeoutUploads = new Map<string, 'landed' | 'lost'>()
   rateLimitUploads = new Set<string>()
   treeReads = 0
+  /** Document reads, each one a join through the project's queue. */
+  documentReads = 0
   failTreeReadsAfter: number | undefined
   beforeWrite: ((path: string) => void) | undefined
   afterUpload: ((path: string) => void) | undefined
@@ -127,6 +129,7 @@ class FakeProject {
         return this.tree()
       },
       readFile: async (_projectId, filePath) => {
+        this.documentReads += 1
         const entity = this.#doc(filePath)
         return {
           content: entity.content!,
@@ -162,7 +165,15 @@ class FakeProject {
         const path = folderPath === '' ? name : `${folderPath}/${name}`
         const existing = this.entities.get(path)
         if (options?.ifExists === 'skip' && existing !== undefined) {
-          return { path, skipped: true, entityId: existing.id, entityType: existing.type }
+          if (existing.type === 'folder') throw new McpError('INVALID_ARGUMENT', `The project holds a folder at ${path}.`)
+          return { path, skipped: true as const, entityId: existing.id, entityType: existing.type }
+        }
+        // The checks EntitiesApi.uploadFile makes inside the upload's queue job, before sending.
+        if (options?.expectedHash !== undefined && (existing?.type !== 'file' || existing.hash !== options.expectedHash)) {
+          throw new McpError('REMOTE_DRIFT', `${path} no longer has expectedHash.`, { details: { changed: 'remote' } })
+        }
+        if (options?.overwrite === false && existing !== undefined && existing.type !== 'folder') {
+          throw new McpError('CONFIRMATION_MISMATCH', `${path} already exists and overwrite is false.`)
         }
         if (this.failUploads.has(path)) throw new McpError('REMOTE_ERROR', 'Overleaf returned HTTP 500.')
         if (this.rateLimitUploads.has(path)) {
@@ -188,9 +199,16 @@ class FakeProject {
         }
         this.afterUpload?.(path)
         const entity = this.entities.get(path)
+        const documentReplaced = existing?.type === 'doc' && options?.uncheckedDocumentReplace !== true
         return {
-          ...(entity === undefined ? {} : { entityId: entity.id, entityType: entity.type }),
+          ...(entity === undefined || entity.type === 'folder' ? {} : { entityId: entity.id, entityType: entity.type }),
           path,
+          replaced: existing !== undefined,
+          trackChangesActive: false,
+          writeMode: 'untracked' as const,
+          ...(documentReplaced
+            ? { deprecations: [{ parameter: 'uncheckedDocumentReplace', message: 'blind', enforcedIn: '0.6.0' }] }
+            : {}),
         }
       },
       manageEntity: async (_projectId, action: EntityAction) => {
@@ -446,6 +464,7 @@ describe('sync_directory', () => {
 
     const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
       mode: 'additive',
+      unplanned: true,
       stopOnError: true,
     })
 
@@ -481,6 +500,7 @@ describe('sync_directory', () => {
   test('fails one document with REVISION_CONFLICT when a collaborator edits it mid-sync', async () => {
     const project = new FakeProject({ 'a.tex': 'a\n', 'b.tex': 'b\n', 'stale.png': png(1) })
     const root = await localFolder({ 'a.tex': 'mine a\n', 'b.tex': 'mine b\n' })
+    const plan = await new SyncApi(project.deps()).planSync(PROJECT, root)
     project.beforeWrite = path => {
       if (path === 'a.tex') project.edit('a.tex', 'theirs\n')
       project.beforeWrite = undefined
@@ -488,6 +508,7 @@ describe('sync_directory', () => {
 
     const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
       mode: 'mirror',
+      planToken: plan.planToken,
       confirmDeleteCount: 1,
     })
 
@@ -512,17 +533,18 @@ describe('sync_directory', () => {
     const project = new FakeProject({ 'stale.png': png(1), 'old/a.png': png(2), 'old/b.png': png(3) })
     const root = await localFolder({ 'new.png': png(4) })
     const api = new SyncApi(project.deps())
+    const { planToken } = await api.planSync(PROJECT, root)
 
-    await expect(api.syncDirectory(PROJECT, root, { mode: 'mirror' })).rejects.toMatchObject({
+    await expect(api.syncDirectory(PROJECT, root, { mode: 'mirror', planToken })).rejects.toMatchObject({
       code: 'CONFIRMATION_MISMATCH',
     })
     // The folder counts once, not three times.
     await expect(
-      api.syncDirectory(PROJECT, root, { mode: 'mirror', confirmDeleteCount: 3 })
+      api.syncDirectory(PROJECT, root, { mode: 'mirror', planToken, confirmDeleteCount: 3 })
     ).rejects.toMatchObject({ code: 'CONFIRMATION_MISMATCH' })
     expect(project.mutations).toEqual([])
 
-    const result = await api.syncDirectory(PROJECT, root, { mode: 'mirror', confirmDeleteCount: 2 })
+    const result = await api.syncDirectory(PROJECT, root, { mode: 'mirror', planToken, confirmDeleteCount: 2 })
     expect(result.status).toBe('complete')
     expect([...project.entities.keys()]).toEqual(['new.png'])
   })
@@ -531,7 +553,7 @@ describe('sync_directory', () => {
     const project = new FakeProject({ 'keep.png': png(1) })
     const root = await localFolder({ 'new.png': png(2) })
 
-    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, { mode: 'additive' })
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true })
 
     expect(result).toMatchObject({ status: 'complete', remaining: [] })
     expect(project.entities.has('keep.png')).toBe(true)
@@ -547,7 +569,7 @@ describe('sync_directory', () => {
     })
     project.failFolders.add('locked')
 
-    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, { mode: 'additive' })
+    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true })
 
     expect(project.mutations).toEqual(['create_folder figures', 'upload figures/a.png', 'upload figures/b.png'])
     expect(result.completed[0]).toEqual({
@@ -565,10 +587,13 @@ describe('sync_directory', () => {
   test('syncs into a destination folder, creating it when the project has none', async () => {
     const project = new FakeProject({ 'main.tex': 'root document' })
     const root = await localFolder({ 'a.png': png(1) })
+    const api = new SyncApi(project.deps())
+    const plan = await api.planSync(PROJECT, root, { destinationFolderPath: 'assets/figures' })
 
-    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+    const result = await api.syncDirectory(PROJECT, root, {
       mode: 'mirror',
       destinationFolderPath: 'assets/figures',
+      planToken: plan.planToken,
       confirmDeleteCount: 0,
     })
 
@@ -586,14 +611,14 @@ describe('sync_directory', () => {
     const root = await localFolder({ 'main.tex': 'new\n', 'intro.tex': 'intro\n', 'empty.tex': '', 'fig.png': png(1) })
     const api = new SyncApi(project.deps())
 
-    await api.syncDirectory(PROJECT, root, { mode: 'additive', writeMode: 'tracked' })
+    await api.syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true, writeMode: 'tracked' })
 
     expect(project.mutations).toEqual(['create empty.tex', 'upload fig.png', 'create intro.tex', 'write main.tex'])
     // An empty file has nothing to track; every write with content is tracked.
     expect(project.writeModes).toEqual(['untracked', 'tracked', 'tracked'])
 
     await expect(
-      new SyncApi(project.deps({})).syncDirectory(PROJECT, root, { mode: 'additive', writeMode: 'tracked' })
+      new SyncApi(project.deps({})).syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true, writeMode: 'tracked' })
     ).rejects.toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
   })
 
@@ -601,8 +626,11 @@ describe('sync_directory', () => {
     const project = new FakeProject({ figures: png(1), 'stale.png': png(2) })
     const root = await localFolder({ 'figures/a.png': png(3), 'ok.png': png(4) })
 
-    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+    const api = new SyncApi(project.deps())
+    const plan = await api.planSync(PROJECT, root)
+    const result = await api.syncDirectory(PROJECT, root, {
       mode: 'mirror',
+      planToken: plan.planToken,
       confirmDeleteCount: 1,
     })
 
@@ -619,8 +647,11 @@ describe('sync_directory', () => {
     const root = await localFolder({ 'ghost.png': png(2) })
     project.dropUploads.add('ghost.png')
 
-    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+    const api = new SyncApi(project.deps())
+    const plan = await api.planSync(PROJECT, root)
+    const result = await api.syncDirectory(PROJECT, root, {
       mode: 'mirror',
+      planToken: plan.planToken,
       confirmDeleteCount: 1,
     })
 
@@ -637,8 +668,11 @@ describe('sync_directory', () => {
     // A collaborator drops a file into the folder while the sync is uploading.
     project.afterUpload = () => project.put('old/theirs.png', png(3))
 
-    const result = await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
+    const api = new SyncApi(project.deps())
+    const plan = await api.planSync(PROJECT, root)
+    const result = await api.syncDirectory(PROJECT, root, {
       mode: 'mirror',
+      planToken: plan.planToken,
       confirmDeleteCount: 1,
     })
 
@@ -654,7 +688,7 @@ describe('sync_directory', () => {
     const api = new SyncApi(project.deps())
     project.failUploads.add('b.png')
 
-    const partial = await api.syncDirectory(PROJECT, root, { mode: 'additive' })
+    const partial = await api.syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true })
     expect(partial.status).toBe('partial')
     project.edit('untouched.tex', 'edited during the pause\n')
     project.failUploads.clear()
@@ -689,6 +723,7 @@ describe('sync_directory', () => {
 
     await new SyncApi(project.deps()).syncDirectory(PROJECT, root, {
       mode: 'additive',
+      unplanned: true,
       onProgress: async (progress, total) => {
         updates.push([progress, total])
       },
@@ -710,10 +745,106 @@ describe('sync_directory', () => {
     await symlink(join(outside, 'secret.png'), join(root, 'link.png'))
 
     await expect(
-      new SyncApi(project.deps()).syncDirectory(PROJECT, root, { mode: 'additive' })
+      new SyncApi(project.deps()).syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true })
     ).rejects.toMatchObject({ code: 'PATH_OUTSIDE_ROOT' })
     expect(project.mutations).toEqual([])
     await rm(outside, { recursive: true })
+  })
+})
+
+describe('sync_directory without a plan (deprecated, refused from 0.6.0)', () => {
+  test('still runs tokenless, reporting planned: false and a deprecation; unplanned says it is on purpose', async () => {
+    const project = new FakeProject({})
+    const root = await localFolder({ 'a.png': png(1) })
+    const api = new SyncApi(project.deps())
+
+    const tokenless = await api.syncDirectory(PROJECT, root, { mode: 'additive' })
+    expect(tokenless).toMatchObject({
+      status: 'complete',
+      planned: false,
+      deprecations: [{ parameter: 'planToken', enforcedIn: '0.6.0', message: expect.stringContaining('unplanned') }],
+    })
+
+    const unplanned = await api.syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true })
+    expect(unplanned.planned).toBe(false)
+    expect(unplanned).not.toHaveProperty('deprecations')
+
+    const plan = await api.planSync(PROJECT, root)
+    const planned = await api.syncDirectory(PROJECT, root, { mode: 'additive', planToken: plan.planToken })
+    expect(planned.planned).toBe(true)
+    expect(planned).not.toHaveProperty('deprecations')
+  })
+
+  test('refuses unplanned with a planToken or in mirror mode before reading anything', async () => {
+    const project = new FakeProject({ 'a.tex': 'a\n' })
+    const root = await localFolder({ 'a.tex': 'b\n' })
+    const api = new SyncApi(project.deps())
+    const { planToken } = await api.planSync(PROJECT, root)
+    project.treeReads = 0
+    project.documentReads = 0
+
+    await expect(api.syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true, planToken })).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    await expect(
+      api.syncDirectory(PROJECT, root, { mode: 'mirror', unplanned: true, confirmDeleteCount: 0 })
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    expect(project.treeReads).toBe(0)
+    expect(project.documentReads).toBe(0)
+    expect(project.mutations).toEqual([])
+  })
+
+  test('refuses an upload whose path changed after the plan, per file, and then deletes nothing', async () => {
+    const project = new FakeProject({ 'b.png': png(1), 'stale.png': png(2) })
+    const root = await localFolder({ 'a.png': png(3), 'b.png': png(4), 'c.png': png(5) })
+    const api = new SyncApi(project.deps())
+    const plan = await api.planSync(PROJECT, root)
+    // After the first upload, a collaborator replaces b.png and adds c.png.
+    project.afterUpload = () => {
+      project.afterUpload = undefined
+      project.put('b.png', png(9))
+      project.put('c.png', png(8))
+    }
+
+    const result = await api.syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      planToken: plan.planToken,
+      confirmDeleteCount: 1,
+    })
+
+    expect(result.completed.map(entry => entry.destinationPath)).toEqual(['a.png'])
+    expect(result.failed.map(entry => [entry.destinationPath, entry.errorCode])).toEqual([
+      ['b.png', 'REMOTE_DRIFT'],
+      ['c.png', 'REMOTE_DRIFT'],
+    ])
+    expect(result.remaining).toEqual([{ destinationPath: 'stale.png', action: 'delete' }])
+    expect(project.mutations).toEqual(['upload a.png'])
+    expect(project.entities.get('b.png')?.hash).toBe(gitBlobHash(png(9)))
+  })
+})
+
+describe('batch_upload during the transition', () => {
+  test('an explicit onConflict replaces binaries silently and reports documents replaced without opting in', async () => {
+    const project = new FakeProject({ 'main.tex': 'old\n', 'fig.png': png(1) })
+    const root = await localFolder({ 'main.tex': 'new\n', 'fig.png': png(2) })
+    const files = [
+      { localPath: join(root, 'fig.png'), destinationPath: 'fig.png' },
+      { localPath: join(root, 'main.tex'), destinationPath: 'main.tex' },
+    ]
+    const api = new SyncApi(project.deps())
+
+    const binaryOnly = await api.batchUpload(PROJECT, files.slice(0, 1), { onConflict: 'overwrite' })
+    expect(binaryOnly).not.toHaveProperty('deprecations')
+
+    const withDocument = await api.batchUpload(PROJECT, files, { onConflict: 'overwrite' })
+    expect(withDocument.deprecations?.map(entry => entry.parameter)).toEqual(['uncheckedDocumentReplace'])
+
+    const optedIn = await api.batchUpload(PROJECT, files, { onConflict: 'overwrite', uncheckedDocumentReplace: true })
+    expect(optedIn).not.toHaveProperty('deprecations')
+
+    const defaulted = await api.batchUpload(PROJECT, files)
+    expect(defaulted.deprecations?.map(entry => entry.parameter)).toEqual(['onConflict', 'uncheckedDocumentReplace'])
+    expect(defaulted.status).toBe('complete')
   })
 })
 
@@ -817,6 +948,8 @@ describe('batch_upload', () => {
       failed: [],
       remaining: [],
       verified: true,
+      // The replacement relied on onConflict's default, which 0.6.0 removes.
+      deprecations: [{ parameter: 'onConflict', message: expect.stringContaining('0.6.0'), enforcedIn: '0.6.0' }],
     })
     expect(project.entities.get('figures/old.png')).toMatchObject({ id: oldId, hash: gitBlobHash(png(2)) })
   })

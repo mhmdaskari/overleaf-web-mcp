@@ -490,11 +490,10 @@ describe('MCP tool registration', () => {
       expect(batch.config.description).toContain(term)
     }
     const input = batch.config.inputSchema as { parse: (value: unknown) => Record<string, unknown> }
-    // The default matches upload_file, which replaces whatever is at the path.
-    expect(input.parse({ projectId: 'p', files: [{ localPath: '/a.png', destinationPath: 'a.png' }] })).toMatchObject({
-      onConflict: 'overwrite',
-      stopOnError: false,
-    })
+    // onConflict has no schema default, so an omitted value (deprecated) stays distinct from an explicit one.
+    const parsed = input.parse({ projectId: 'p', files: [{ localPath: '/a.png', destinationPath: 'a.png' }] })
+    expect(parsed).toMatchObject({ stopOnError: false })
+    expect(parsed).not.toHaveProperty('onConflict')
     expect(() => input.parse({ projectId: 'p', files: [] })).toThrow()
 
     const zip = registered.get('download_project_zip')!

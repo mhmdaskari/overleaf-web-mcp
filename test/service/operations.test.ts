@@ -129,6 +129,41 @@ describe('createOverleafService', () => {
     })
   })
 
+  test('reports a call that relied on a deprecated default and forwards the new parameters', async () => {
+    const runtime = fakeRuntime()
+    runtime.sync.syncDirectory.mockResolvedValue({
+      status: 'complete',
+      planned: false,
+      deprecations: [{ parameter: 'planToken', message: 'm', enforcedIn: '0.6.0' }],
+    })
+    const diagnostics: unknown[] = []
+    const service = createOverleafService(runtime)
+
+    await service.sync_directory(
+      { projectId: 'p', localFolderPath: '/w', mode: 'additive', unplanned: true },
+      { onDiagnostic: diagnostic => diagnostics.push(diagnostic) }
+    )
+    expect(diagnostics).toEqual([{ tool: 'sync_directory', code: 'DEPRECATED' }])
+    expect(runtime.sync.syncDirectory).toHaveBeenCalledWith('p', '/w', expect.objectContaining({ unplanned: true }))
+
+    await service.upload_file({ projectId: 'p', localPath: '/a.png', overwrite: true, expectedHash: 'a'.repeat(40) })
+    expect(runtime.entities.uploadFile).toHaveBeenCalledWith('p', '/a.png', undefined, undefined, {
+      overwrite: true,
+      expectedHash: 'a'.repeat(40),
+      uncheckedDocumentReplace: undefined,
+    })
+    await service.batch_upload({
+      projectId: 'p',
+      files: [{ localPath: '/a.tex', destinationPath: 'a.tex' }],
+      onConflict: 'overwrite',
+      uncheckedDocumentReplace: true,
+    })
+    expect(runtime.sync.batchUpload).toHaveBeenCalledWith('p', [{ localPath: '/a.tex', destinationPath: 'a.tex' }], expect.objectContaining({
+      onConflict: 'overwrite',
+      uncheckedDocumentReplace: true,
+    }))
+  })
+
   test('passes progress through to the sync operations', async () => {
     const runtime = fakeRuntime()
     const onProgress = vi.fn(async () => undefined)

@@ -1,4 +1,4 @@
-import type { OperationContext } from '../contracts/context.js'
+import type { OperationContext, OperationDiagnostic } from '../contracts/context.js'
 import type { OperationInput, OperationName } from '../contracts/operations.js'
 import type { OperationHandler, OverleafService, OverleafServiceRuntime } from '../contracts/service.js'
 import { asMcpError, McpError } from '../core/errors.js'
@@ -28,17 +28,24 @@ function guarded<N extends OperationName>(
       const fields = (input ?? {}) as { projectId?: unknown; sourceProjectId?: unknown }
       if (typeof fields.projectId === 'string') policy.assertProject(fields.projectId)
       if (typeof fields.sourceProjectId === 'string') policy.assertProject(fields.sourceProjectId, 'sourceProjectId')
-      return await run(input ?? ({} as OperationInput<N>), context)
+      const result = await run(input ?? ({} as OperationInput<N>), context)
+      const deprecations = (result as { deprecations?: unknown } | null)?.deprecations
+      if (Array.isArray(deprecations) && deprecations.length > 0) notify(context, { tool: name, code: 'DEPRECATED' })
+      return result
     } catch (error) {
       const failure = asMcpError(error)
-      try {
-        context.onDiagnostic?.({ tool: name, code: failure.code })
-      } catch {
-        // A diagnostic that cannot be delivered never changes the call's outcome.
-      }
+      notify(context, { tool: name, code: failure.code })
       throw failure
     }
   }) as OperationHandler<N>
+}
+
+function notify(context: OperationContext, diagnostic: OperationDiagnostic): void {
+  try {
+    context.onDiagnostic?.(diagnostic)
+  } catch {
+    // A diagnostic that cannot be delivered never changes the call's outcome.
+  }
 }
 
 function manageProjectAction(input: OperationInput<'manage_project'>): ProjectAction {
@@ -125,16 +132,16 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
       await runtime.entities.manageEntity(input.projectId, manageEntityAction(input))
     ),
     upload_file: operation('upload_file', async input =>
-      await runtime.entities.uploadFile(
-        input.projectId,
-        input.localPath,
-        input.destinationFolderPath,
-        input.destinationName
-      )
+      await runtime.entities.uploadFile(input.projectId, input.localPath, input.destinationFolderPath, input.destinationName, {
+        overwrite: input.overwrite,
+        expectedHash: input.expectedHash,
+        uncheckedDocumentReplace: input.uncheckedDocumentReplace,
+      })
     ),
     batch_upload: operation('batch_upload', async (input, context) =>
       await runtime.sync.batchUpload(input.projectId, input.files, {
         onConflict: input.onConflict,
+        uncheckedDocumentReplace: input.uncheckedDocumentReplace,
         stopOnError: input.stopOnError,
         onProgress: context.onProgress,
       })
@@ -161,6 +168,7 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
         mode: input.mode,
         destinationFolderPath: input.destinationFolderPath,
         planToken: input.planToken,
+        unplanned: input.unplanned,
         confirmDeleteCount: input.confirmDeleteCount,
         ignore: input.ignore,
         writeMode: input.writeMode,

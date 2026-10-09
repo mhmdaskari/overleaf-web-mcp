@@ -636,7 +636,7 @@
   },
   {
     "name": "upload_file",
-    "description": "Upload a local file into a project folder, replacing any entity already at that path. A replaced text document keeps its entity ID; a replaced binary file may get a new one. Works for text documents as well as binaries; Overleaf decides which by extension and UTF-8 validity. Replacing a document this way is a blind write with no revision check, which Overleaf may record as tracked changes only when track changes is already on for this account, so prefer write_file when a collaborator may be editing.",
+    "description": "Upload a local file into a project folder. Overleaf decides whether it becomes a text document or a binary file, by extension and UTF-8 validity. Something already at the path is replaced: a replaced text document keeps its entity ID; a replaced binary file may get a new one. Replacing a binary needs overwrite: true, or expectedHash equal to its hash from get_project_tree; overwrite: false refuses with CONFIRMATION_MISMATCH and a different hash with REMOTE_DRIFT, nothing sent. expectedHash is checked just before the upload, not atomically with it. Replacing a text document is a blind write with no revision check: prefer write_file with localPath, and pass uncheckedDocumentReplace: true only when nobody else is editing it. writeMode in the result is tracked when Overleaf records that replacement as tracked changes, because track changes is on for this account. Until 0.6.0 a replacement without these parameters still happens and the result lists deprecations; from 0.6.0 it is refused.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -657,6 +657,19 @@
           "description": "Name to store the file under; defaults to the local file name",
           "type": "string",
           "minLength": 1
+        },
+        "overwrite": {
+          "description": "true allows replacing a binary file at the path; false refuses to replace anything",
+          "type": "boolean"
+        },
+        "expectedHash": {
+          "description": "The hash get_project_tree reported for the binary file being replaced; a different one is REMOTE_DRIFT",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "uncheckedDocumentReplace": {
+          "description": "Allow replacing a text document, a blind write with no revision check; prefer write_file with localPath when a collaborator may be editing",
+          "type": "boolean"
         }
       },
       "required": [
@@ -665,6 +678,71 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "entityId": {
+          "type": "string"
+        },
+        "entityType": {
+          "type": "string",
+          "enum": [
+            "doc",
+            "file"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "replaced": {
+          "type": "boolean"
+        },
+        "hash": {
+          "type": "string"
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "writeMode": {
+          "type": "string",
+          "enum": [
+            "untracked",
+            "tracked"
+          ]
+        },
+        "deprecations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "parameter": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "enforcedIn": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "parameter",
+              "message",
+              "enforcedIn"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "path",
+        "replaced",
+        "trackChangesActive",
+        "writeMode"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": false
@@ -672,7 +750,7 @@
   },
   {
     "name": "batch_upload",
-    "description": "Upload a list of local files to explicit project paths in one call, instead of one upload_file call per file. Each destinationPath is the full project path including the file name; missing folders are created. onConflict \"overwrite\" (the default, as in upload_file) replaces whatever document or file is at the path; \"skip\" leaves an existing document or file untouched and lists it in skipped. A folder at a destination path, or a file where a folder is needed, fails that file in either mode. Replacing a text document this way has no revision check, so use write_file or sync_directory for documents a collaborator may be editing. Every path is checked before anything is sent: a duplicate destination or a missing local file fails the call with nothing uploaded. Failures are per file and nothing is retried: the call continues past a failure unless stopOnError, and stops at RATE_LIMITED (Overleaf allows about 500 uploads per project in 15 minutes). It returns status, completed (with replaced per upload), skipped, failed, remaining, and verified, which is true when the tree read back afterwards confirmed every completed entry. A timed-out upload is classified from that read-back, never resubmitted: recoveredAfterTimeout when the path holds the local bytes, OUTCOME_UNKNOWN when the tree cannot tell. It saves tool calls, not time. Confirm overwrites with the user first.",
+    "description": "Upload a list of local files to explicit project paths in one call, instead of one upload_file call per file. Each destinationPath is the full project path including the file name; missing folders are created. onConflict \"overwrite\" replaces a binary file already at the path; \"skip\" leaves an existing document or file untouched and lists it in skipped. Pass onConflict explicitly: omitted, it still overwrites, but from 0.6.0 no default replaces anything, and the result lists deprecations when it did. A folder at a destination path, or a file where a folder is needed, fails that file in either mode. Replacing a text document has no revision check, so use write_file or sync_directory for documents a collaborator may be editing; pass uncheckedDocumentReplace: true to replace them anyway, since without it a replaced document is listed in deprecations, and refused from 0.6.0. Every path is checked before anything is sent: a duplicate destination or a missing local file fails the call with nothing uploaded. Failures are per file and nothing is retried: the call continues past a failure unless stopOnError, and stops at RATE_LIMITED (Overleaf allows about 500 uploads per project in 15 minutes). It returns status, completed (with replaced per upload), skipped, failed, remaining, and verified, which is true when the tree read back afterwards confirmed every completed entry. A timed-out upload is classified from that read-back, never resubmitted: recoveredAfterTimeout when the path holds the local bytes, OUTCOME_UNKNOWN when the tree cannot tell. It saves tool calls, not time. Confirm overwrites with the user first.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -707,13 +785,16 @@
           "description": "Files to upload, in order; at most 500"
         },
         "onConflict": {
-          "default": "overwrite",
-          "description": "What to do when something is already at a destination path; defaults to overwrite",
+          "description": "What to do when something is already at a destination path; omitted, overwrite, which is deprecated",
           "type": "string",
           "enum": [
             "skip",
             "overwrite"
           ]
+        },
+        "uncheckedDocumentReplace": {
+          "description": "Allow replacing a text document, a blind write with no revision check; prefer write_file with localPath when a collaborator may be editing",
+          "type": "boolean"
         },
         "stopOnError": {
           "default": false,
@@ -867,6 +948,29 @@
         },
         "verified": {
           "type": "boolean"
+        },
+        "deprecations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "parameter": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "enforcedIn": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "parameter",
+              "message",
+              "enforcedIn"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
@@ -920,7 +1024,9 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
     "annotations": {
-      "readOnlyHint": true
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
     }
   },
   {
@@ -1228,7 +1334,7 @@
   },
   {
     "name": "sync_directory",
-    "description": "Make a project folder match a local folder: upload new and changed files, and in mirror mode also delete what exists only in the project. Call plan_sync first, confirm the plan with the user, and pass its planToken; if the project or the folder changed since, REMOTE_DRIFT is returned and nothing changes. Changed text documents are replaced through revision-checked write_file edits, recorded as tracked changes when writeMode is tracked, so a concurrent edit fails that file with REVISION_CONFLICT rather than being overwritten. Binaries and new files are uploaded; with writeMode tracked, new .tex, .bib, and similar text files are created with tracked content instead. Missing folders are created. Uploads and writes run first. Deletes run only in mirror mode, only when confirmDeleteCount equals the number of remoteOnly entries, else CONFIRMATION_MISMATCH, and never after any upload or write failed. Failures are per file and nothing is retried: the call continues unless stopOnError, then returns status, completed, failed, remaining, and a planToken to resume with. It saves tool calls, not time.",
+    "description": "Make a project folder match a local folder: upload new and changed files, and in mirror mode also delete what exists only in the project. Call plan_sync first, confirm the plan with the user, and pass its planToken; if the project or the folder changed since, REMOTE_DRIFT is returned and nothing changes. Without a planToken nothing is checked against a plan: the call still runs in this version, with planned false and a deprecations entry, and from 0.6.0 it is refused unless an additive sync passes unplanned: true. Changed text documents are replaced through revision-checked write_file edits, recorded as tracked changes when writeMode is tracked, so a concurrent edit fails that file with REVISION_CONFLICT rather than being overwritten. Binaries and new files are uploaded, and one whose path changed since the plan fails with REMOTE_DRIFT; with writeMode tracked, new .tex, .bib, and similar text files are created with tracked content instead. Missing folders are created. Uploads and writes run first. Deletes run only in mirror mode, only when confirmDeleteCount equals the number of remoteOnly entries, else CONFIRMATION_MISMATCH, and never after any upload or write failed. Failures are per file and nothing is retried: the call continues unless stopOnError, then returns status, completed, failed, remaining, and a planToken to resume with. It saves tool calls, not time.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1259,6 +1365,10 @@
           "description": "From plan_sync, or from a partial sync_directory to resume it",
           "type": "string",
           "minLength": 1
+        },
+        "unplanned": {
+          "description": "Run an additive sync without a planToken on purpose; never with a planToken or in mirror mode",
+          "type": "boolean"
         },
         "confirmDeleteCount": {
           "description": "Required in mirror mode: the number of entries in plan_sync's remoteOnly, each folder counting once",
@@ -1411,6 +1521,32 @@
         },
         "planToken": {
           "type": "string"
+        },
+        "planned": {
+          "type": "boolean"
+        },
+        "deprecations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "parameter": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "enforcedIn": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "parameter",
+              "message",
+              "enforcedIn"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
@@ -1419,7 +1555,8 @@
         "completed",
         "failed",
         "remaining",
-        "identicalCount"
+        "identicalCount",
+        "planned"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false
