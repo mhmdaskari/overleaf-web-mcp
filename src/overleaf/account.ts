@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { McpError } from '../core/errors.js'
+import { AccessPolicy } from '../core/policy.js'
 
 export interface JsonPoster {
   postJson(path: string, body?: unknown): Promise<unknown>
@@ -74,12 +75,19 @@ function compareByLastUpdated(left: ProjectSummary, right: ProjectSummary): numb
  */
 export class AccountApi {
   readonly #http: JsonPoster
+  readonly #policy: AccessPolicy
 
-  constructor(http: JsonPoster) {
+  constructor(http: JsonPoster, policy: AccessPolicy = AccessPolicy.permissive) {
     this.#http = http
+    this.#policy = policy
   }
 
+  /**
+   * Every project the account can access, or with `OVERLEAF_ALLOWED_PROJECTS` only the allowed
+   * ones; projects outside the allowlist are not listed or counted.
+   */
   async fetchProjects(): Promise<{ projects: ProjectSummary[]; totalSize: number }> {
+    this.#policy.assertEffect('overleaf-read')
     const response = await this.#http.postJson('/api/project', {})
     let parsed: z.infer<typeof projectListSchema>
     try {
@@ -100,6 +108,10 @@ export class AccountApi {
       archived: project.archived ?? false,
       trashed: project.trashed ?? false,
     }))
+    if (this.#policy.restrictsProjects) {
+      const allowed = projects.filter(project => this.#policy.allowsProject(project.id))
+      return { projects: allowed, totalSize: allowed.length }
+    }
     return { projects, totalSize: parsed.totalSize ?? projects.length }
   }
 
@@ -137,6 +149,7 @@ export class AccountApi {
 
   /** Looks a project up by id, including archived and trashed ones. */
   async findProject(projectId: string): Promise<ProjectSummary> {
+    this.#policy.assertProject(projectId)
     const { projects } = await this.fetchProjects()
     const project = projects.find(candidate => candidate.id === projectId)
     if (!project) {

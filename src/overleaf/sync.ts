@@ -7,6 +7,7 @@ import { asMcpError, McpError, type McpErrorCode } from '../core/errors.js'
 import { gitBlobHash, gitBlobHashFile } from '../core/hash.js'
 import { loadSyncIgnoreRules } from '../core/ignore-rules.js'
 import { decodeUtf8Text } from '../core/local-file.js'
+import { AccessPolicy } from '../core/policy.js'
 import { scanLocalFolder, type IgnoredLocalEntry, type LocalFile } from '../core/local-folder.js'
 import { decodeRevision } from '../core/revision.js'
 import { normalizeLf } from '../core/text.js'
@@ -48,6 +49,8 @@ export interface SyncDependencies {
   manageEntity(projectId: string, action: EntityAction): Promise<Record<string, unknown>>
   /** Tracked writes need the signed-in user's id; without it a tracked sync is refused. */
   currentUserId?: string | undefined
+  /** Defaults to allowing everything but ids that are not path-safe. */
+  policy?: AccessPolicy | undefined
 }
 
 export type SyncMode = 'additive' | 'mirror'
@@ -383,9 +386,11 @@ const ACTION_VERBS: Record<SyncAction, string> = {
  */
 export class SyncApi {
   readonly #deps: SyncDependencies
+  readonly #policy: AccessPolicy
 
   constructor(dependencies: SyncDependencies) {
     this.#deps = dependencies
+    this.#policy = dependencies.policy ?? AccessPolicy.permissive
   }
 
   async planSync(
@@ -393,6 +398,8 @@ export class SyncApi {
     localFolderPath: string,
     options: PlanSyncOptions = {}
   ): Promise<PlanSyncResult> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('local-read', 'overleaf-read')
     const plan = await this.#plan(projectId, localFolderPath, options)
     const limit = options.verbose === true ? Number.POSITIVE_INFINITY : PLAN_LISTING_LIMIT
     return {
@@ -423,6 +430,10 @@ export class SyncApi {
     localFolderPath: string,
     options: SyncDirectoryOptions
   ): Promise<SyncDirectoryResult> {
+    this.#policy.assertProject(projectId)
+    // Every effect the sync may need is checked first, so a refusal never leaves it half applied.
+    this.#policy.assertEffect('local-read', 'overleaf-read', 'overleaf-write')
+    if (options.mode === 'mirror') this.#policy.assertEffect('overleaf-delete')
     const writeMode = options.writeMode ?? 'untracked'
     if (writeMode === 'tracked' && this.#deps.currentUserId === undefined) {
       throw new McpError(
@@ -498,6 +509,8 @@ export class SyncApi {
     confirmCount: number,
     options: DeleteEntitiesOptions = {}
   ): Promise<DeleteEntitiesResult> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-delete')
     const normalized = paths.map(path => {
       const folder = normalizeFolderPath(path)
       if (folder === '') throw new McpError('INVALID_ARGUMENT', 'The project root cannot be deleted.')
@@ -564,6 +577,8 @@ export class SyncApi {
     files: readonly BatchUploadFile[],
     options: BatchUploadOptions = {}
   ): Promise<BatchUploadResult> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('local-read', 'overleaf-write')
     const onConflict = options.onConflict ?? 'overwrite'
     if (files.length === 0 || files.length > BATCH_UPLOAD_LIMIT) {
       throw new McpError('INVALID_ARGUMENT', `files must list between 1 and ${BATCH_UPLOAD_LIMIT} entries.`)
@@ -603,7 +618,7 @@ export class SyncApi {
       }
     }
     for (const { localPath } of entries) {
-      const local = await stat(localPath).catch((error: unknown) => {
+      const local = await stat(await this.#policy.resolveLocalRead(localPath)).catch((error: unknown) => {
         throw localReadFailure(error, localPath)
       })
       if (!local.isFile()) throw new McpError('INVALID_ARGUMENT', `${localPath} is not a regular file.`)
@@ -900,8 +915,9 @@ export class SyncApi {
   async #plan(projectId: string, localFolderPath: string, options: PlanSyncOptions): Promise<Plan> {
     const destination = normalizeFolderPath(options.destinationFolderPath)
     const extraIgnore = options.ignore ?? []
-    const rules = await loadSyncIgnoreRules(localFolderPath, extraIgnore)
-    const scan = await scanLocalFolder(localFolderPath, rules)
+    const folder = await this.#policy.resolveLocalRead(localFolderPath)
+    const rules = await loadSyncIgnoreRules(folder, extraIgnore)
+    const scan = await scanLocalFolder(folder, rules)
     const tree = await this.#deps.getProjectTree(projectId)
 
     const byPath = new Map(tree.entities.map(entity => [entity.path, entity]))

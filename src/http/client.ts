@@ -49,6 +49,16 @@ function parseRetryAfter(header: string | null): number | undefined {
   return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now())
 }
 
+function redirectTarget(response: Response, from: URL): URL | undefined {
+  const location = response.headers.get('location')
+  if (location === null) return undefined
+  try {
+    return new URL(location, from)
+  } catch {
+    return undefined
+  }
+}
+
 function responseSetCookies(headers: Headers): string[] {
   const enhanced = headers as Headers & { getSetCookie?: () => string[] }
   if (enhanced.getSetCookie) return enhanced.getSetCookie()
@@ -79,7 +89,16 @@ export class OverleafHttpClient {
     body?: unknown,
     options: RequestOptions = {}
   ): Promise<Response> {
-    const url = new URL(path, `${this.baseUrl}/`).href
+    const base = new URL(`${this.baseUrl}/`)
+    const target = new URL(path, base)
+    // A path that resolves elsewhere would carry the session cookie and CSRF token off Overleaf.
+    if (target.origin !== base.origin) {
+      throw new McpError('INVALID_ARGUMENT', 'Refusing a request outside OVERLEAF_BASE_URL; nothing was sent.', {
+        details: { kind: 'cross_origin' },
+      })
+    }
+    const url = target.href
+    const mutating = !['GET', 'HEAD'].includes(method)
     const headers = new Headers(options.headers)
     const cookies = await this.jar.getCookieString(url)
     if (cookies) headers.set('cookie', cookies)
@@ -88,7 +107,7 @@ export class OverleafHttpClient {
     if (body !== undefined && !(body instanceof FormData)) {
       headers.set('content-type', 'application/json')
     }
-    if (!['GET', 'HEAD'].includes(method)) {
+    if (mutating) {
       const csrf = this.#csrfToken?.()
       if (csrf) headers.set('x-csrf-token', csrf)
     }
@@ -104,7 +123,8 @@ export class OverleafHttpClient {
         method,
         headers,
         signal,
-        redirect: 'follow',
+        // fetch keeps x-csrf-token across a cross-origin redirect, so a mutation follows none.
+        redirect: mutating ? 'manual' : 'follow',
         ...(body === undefined
           ? {}
           : { body: body instanceof FormData ? body : JSON.stringify(body) }),
@@ -127,11 +147,21 @@ export class OverleafHttpClient {
     await this.#persistSetCookies?.(url, setCookies)
 
     const finalPath = response.url ? new URL(response.url).pathname : ''
-    if (response.status === 401 || finalPath.startsWith('/login')) {
+    const redirect = mutating && response.status >= 300 && response.status < 400
+    const location = redirect ? redirectTarget(response, target) : undefined
+    const toLogin = location?.origin === base.origin && location.pathname.startsWith('/login')
+    if (response.status === 401 || finalPath.startsWith('/login') || toLogin) {
       throw new McpError(
         'AUTH_EXPIRED',
         `Overleaf authentication expired. ${AUTH_LOGIN_INSTRUCTION}`,
         { retryable: false }
+      )
+    }
+    if (redirect) {
+      throw new McpError(
+        'REMOTE_ERROR',
+        `Overleaf answered ${method} ${path} with a redirect, which a request that changes something never follows.`,
+        { details: { status: response.status, path } }
       )
     }
     if (response.status === 403) {

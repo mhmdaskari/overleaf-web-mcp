@@ -1,5 +1,5 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { readFile, realpath } from 'node:fs/promises'
+import { isAbsolute, join, relative, sep } from 'node:path'
 
 import ignore from 'ignore'
 
@@ -50,8 +50,19 @@ export async function loadSyncIgnoreRules(
 ): Promise<SyncIgnoreRules> {
   let olignore: string | undefined
   try {
-    olignore = await readFile(join(root, OLIGNORE_FILE), 'utf8')
+    const path = await realpath(join(root, OLIGNORE_FILE))
+    // Its patterns are echoed back in plans, so a link to a file elsewhere would disclose that file.
+    const inside = relative(await realpath(root), path)
+    if (inside === '' || inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
+      throw new McpError(
+        'PATH_OUTSIDE_ROOT',
+        `${OLIGNORE_FILE} in the local folder is a link to a file outside it. Replace it with a regular file.`,
+        { details: { kind: 'outside_folder' } }
+      )
+    }
+    olignore = await readFile(path, 'utf8')
   } catch (error) {
+    if (error instanceof McpError) throw error
     // A missing folder, or a file in its place, is reported by the scan that follows.
     const code = (error as NodeJS.ErrnoException).code
     if (code !== 'ENOENT' && code !== 'ENOTDIR') {

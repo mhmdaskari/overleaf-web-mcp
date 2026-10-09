@@ -1,3 +1,4 @@
+import type { AccessPolicy } from '../core/policy.js'
 import type { AccountApi } from '../overleaf/account.js'
 import type { CommentsApi } from '../overleaf/comments.js'
 import type { CompileApi } from '../overleaf/compile.js'
@@ -45,6 +46,8 @@ export interface OverleafServiceRuntime {
   >
   history: Pick<HistoryApi, 'monitorProjectHistory'>
   sync: Pick<SyncApi, 'planSync' | 'syncDirectory' | 'deleteEntities' | 'batchUpload'>
+  /** Checks local paths the service reads itself; without one, only ids are checked. */
+  policy?: AccessPolicy
 }
 
 /** One operation: input as its contract describes it, resolving with its result or rejecting with `McpError`. */

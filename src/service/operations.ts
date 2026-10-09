@@ -3,6 +3,7 @@ import type { OperationInput, OperationName } from '../contracts/operations.js'
 import type { OperationHandler, OverleafService, OverleafServiceRuntime } from '../contracts/service.js'
 import { asMcpError, McpError } from '../core/errors.js'
 import { resolveTextContent } from '../core/local-file.js'
+import { AccessPolicy } from '../core/policy.js'
 import type { EntityAction } from '../overleaf/entities.js'
 import type { ProjectAction } from '../overleaf/projects.js'
 
@@ -13,11 +14,20 @@ type Implementation<N extends OperationName> = (
 
 /**
  * Runs one operation so every interface sees the same failure: a typed `McpError`, reported to
- * `onDiagnostic` as the operation and its code only.
+ * `onDiagnostic` as the operation and its code only. The project the call names is checked
+ * against the policy first, before any local or remote work; the domain engine then checks each
+ * effect it performs.
  */
-function operation<N extends OperationName>(name: N, run: Implementation<N>): OperationHandler<N> {
+function guarded<N extends OperationName>(
+  policy: AccessPolicy,
+  name: N,
+  run: Implementation<N>
+): OperationHandler<N> {
   return (async (input: OperationInput<N>, context: OperationContext = {}) => {
     try {
+      const fields = (input ?? {}) as { projectId?: unknown; sourceProjectId?: unknown }
+      if (typeof fields.projectId === 'string') policy.assertProject(fields.projectId)
+      if (typeof fields.sourceProjectId === 'string') policy.assertProject(fields.sourceProjectId, 'sourceProjectId')
       return await run(input ?? ({} as OperationInput<N>), context)
     } catch (error) {
       const failure = asMcpError(error)
@@ -67,6 +77,9 @@ function manageEntityAction(input: OperationInput<'manage_entity'>): EntityActio
  * schema before the call; a library caller is held to the same shape by the types.
  */
 export function createOverleafService(runtime: OverleafServiceRuntime): OverleafService {
+  const policy = runtime.policy ?? AccessPolicy.permissive
+  const operation = <N extends OperationName>(name: N, run: Implementation<N>): OperationHandler<N> =>
+    guarded(policy, name, run)
   return {
     auth_status: operation('auth_status', async () => await runtime.authStatus()),
     list_projects: operation('list_projects', async input => await runtime.account.listProjects(input)),
@@ -101,7 +114,7 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
         input.projectId,
         input.filePath,
         input.revision,
-        await resolveTextContent(input),
+        await resolveTextContent(input, runtime.policy),
         input.writeMode
       )
     ),

@@ -13,6 +13,8 @@ export interface ConnectionCacheOptions<T> {
   capacity: number
   idleTtlMs: number
   factory: (projectId: string) => Promise<T>
+  /** Runs before a connection is reused or opened; throwing refuses the call with nothing sent. */
+  beforeConnect?: (projectId: string) => void
 }
 
 /**
@@ -23,6 +25,7 @@ export class ProjectConnectionCache<T extends ClosableConnection> {
   readonly #capacity: number
   readonly #idleTtlMs: number
   readonly #factory: (projectId: string) => Promise<T>
+  readonly #beforeConnect: ((projectId: string) => void) | undefined
   readonly #entries = new Map<string, CacheEntry<T>>()
   #mutex: Promise<void> = Promise.resolve()
   #slotWaiters: Array<() => void> = []
@@ -31,9 +34,11 @@ export class ProjectConnectionCache<T extends ClosableConnection> {
     this.#capacity = options.capacity
     this.#idleTtlMs = options.idleTtlMs
     this.#factory = options.factory
+    this.#beforeConnect = options.beforeConnect
   }
 
   async withConnection<R>(projectId: string, operation: (connection: T) => Promise<R>): Promise<R> {
+    this.#beforeConnect?.(projectId)
     const entry = await this.#acquire(projectId)
     try {
       return await operation(entry.value)

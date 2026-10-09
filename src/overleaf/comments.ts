@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 
 import { asMcpError, McpError } from '../core/errors.js'
 import { assertUpdateSize } from '../core/limits.js'
+import { AccessPolicy, assertPathSafeId } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
 import {
   assertRevisionMatches,
@@ -97,6 +98,8 @@ export interface CommentsApiOptions {
   now?: () => number
   recoveryTimeoutMs?: number
   recoveryPollIntervalMs?: number
+  /** Defaults to allowing everything but ids that are not path-safe. */
+  policy?: AccessPolicy
 }
 
 function generateThreadId(): string {
@@ -198,6 +201,7 @@ export class CommentsApi {
   readonly #now: () => number
   readonly #recoveryTimeoutMs: number
   readonly #recoveryPollIntervalMs: number
+  readonly #policy: AccessPolicy
 
   constructor(http: CommentHttp, connections: CommentConnections, options: CommentsApiOptions = {}) {
     this.#http = http
@@ -208,16 +212,20 @@ export class CommentsApi {
     this.#now = options.now ?? Date.now
     this.#recoveryTimeoutMs = options.recoveryTimeoutMs ?? 30_000
     this.#recoveryPollIntervalMs = options.recoveryPollIntervalMs ?? 250
+    this.#policy = options.policy ?? AccessPolicy.permissive
   }
 
   async getThreads(projectId: string): Promise<ThreadsResponse> {
-    return await this.#http.getJson(`/project/${projectId}/threads`) as ThreadsResponse
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read')
+    return await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/threads`) as ThreadsResponse
   }
 
   async listComments(
     projectId: string,
     options: { filePath?: string; status?: 'open' | 'resolved' | 'all'; author?: string } = {}
   ): Promise<{ threads: ListedComment[]; positionsUnavailable: boolean }> {
+    this.#policy.assertProject(projectId)
     const threads = await this.getThreads(projectId)
     const status = options.status ?? 'open'
     const filtered = Object.entries(threads).filter(([, thread]) => {
@@ -233,7 +241,7 @@ export class CommentsApi {
       // The project index selects relevant documents; its absence must never trigger a join-all scan.
       try {
         indexedRanges = projectRanges(
-          await this.#http.getJson(`/project/${projectId}/ranges`)
+          await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/ranges`)
         )
       } catch (error) {
         if (
@@ -335,10 +343,13 @@ export class CommentsApi {
     writeMode: 'untracked'
     recoveredAfterTimeout?: boolean
   }> {
+    this.#policy.assertProject(projectId)
+    assertPathSafeId(threadId, 'threadId')
+    this.#policy.assertEffect('overleaf-write')
     const normalized = normalizeLf(content)
     const started = this.#now()
     try {
-      await this.#http.postJson(`/project/${projectId}/thread/${threadId}/messages`, {
+      await this.#http.postJson(`/project/${encodeURIComponent(projectId)}/thread/${encodeURIComponent(threadId)}/messages`, {
         content: normalized,
       })
     } catch (error) {
@@ -393,9 +404,13 @@ export class CommentsApi {
     writeMode: 'untracked'
     recoveredAfterTimeout?: boolean
   }> {
+    this.#policy.assertProject(input.projectId)
+    this.#policy.assertEffect('overleaf-write')
     const expectedText = normalizeLf(input.expectedText)
     const messageContent = normalizeLf(input.content)
     const threadId = this.#threadIdFactory()
+    assertPathSafeId(threadId, 'threadId')
+    const project = encodeURIComponent(input.projectId)
 
     const submit = await this.#connections.withConnection(input.projectId, async connection =>
       await connection.queue.run(async () => {
@@ -420,7 +435,7 @@ export class CommentsApi {
         // Overleaf creates the REST thread first; a separate OT update anchors it to the document.
         try {
           await this.#http.postJson(
-            `/project/${input.projectId}/thread/${threadId}/messages`,
+            `/project/${project}/thread/${encodeURIComponent(threadId)}/messages`,
             { content: messageContent }
           )
         } catch (error) {
@@ -473,7 +488,7 @@ export class CommentsApi {
           // A definite OT failure proves no attachment applied, so deleting the orphan is safe.
           try {
             await this.#http.deleteJson(
-              `/project/${input.projectId}/doc/${entity.id}/thread/${threadId}`
+              `/project/${project}/doc/${encodeURIComponent(entity.id)}/thread/${encodeURIComponent(threadId)}`
             )
           } catch (cleanupError) {
             throw new McpError('PARTIAL_CLEANUP', 'Comment attachment failed and orphan cleanup also failed.', {
@@ -563,7 +578,7 @@ export class CommentsApi {
       // Cleanup is permitted only after the unchanged document proves the range was not attached.
       try {
         await this.#http.deleteJson(
-          `/project/${input.projectId}/doc/${submit.entity.id}/thread/${threadId}`
+          `/project/${project}/doc/${encodeURIComponent(submit.entity.id)}/thread/${encodeURIComponent(threadId)}`
         )
       } catch (error) {
         throw new McpError('PARTIAL_CLEANUP', 'The comment range is absent and orphan cleanup failed.', {
@@ -608,6 +623,9 @@ export class CommentsApi {
     writeMode: 'untracked'
     recoveredAfterTimeout?: boolean
   }> {
+    this.#policy.assertProject(input.projectId)
+    assertPathSafeId(input.threadId, 'threadId')
+    this.#policy.assertEffect('overleaf-write')
     const resolved = input.status === 'resolved'
     const submission = await this.#connections.withConnection(input.projectId, async connection =>
       await connection.queue.run(async () => {
@@ -634,7 +652,7 @@ export class CommentsApi {
             await connection.submitUpdate(entity.id, update)
           } else {
             await this.#http.postJson(
-              `/project/${input.projectId}/doc/${entity.id}/thread/${input.threadId}/${resolved ? 'resolve' : 'reopen'}`,
+              `/project/${encodeURIComponent(input.projectId)}/doc/${encodeURIComponent(entity.id)}/thread/${encodeURIComponent(input.threadId)}/${resolved ? 'resolve' : 'reopen'}`,
               {}
             )
           }

@@ -1,6 +1,7 @@
 import type { AppConfig } from './config.js'
 import type { OverleafServiceRuntime } from './contracts/service.js'
 import { AUTH_LOGIN_INSTRUCTION, McpError } from './core/errors.js'
+import { AccessPolicy } from './core/policy.js'
 import { parseBootstrapMeta, type BootstrapMeta } from './http/bootstrap.js'
 import { OverleafHttpClient } from './http/client.js'
 import { CookieStore } from './http/cookies.js'
@@ -44,6 +45,8 @@ export class OverleafRuntime implements OverleafServiceRuntime {
   readonly projects: ProjectsApi
   readonly sync: SyncApi
   readonly connections: ProjectConnectionCache<ProjectConnection>
+  /** Decides which projects, local paths, and effects every operation may touch. */
+  readonly policy: AccessPolicy
   readonly userId?: string
   readonly #proxy: ProxyRoute | undefined
 
@@ -61,6 +64,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     projects: ProjectsApi
     sync: SyncApi
     connections: ProjectConnectionCache<ProjectConnection>
+    policy: AccessPolicy
     userId?: string
     proxy?: ProxyRoute
   }) {
@@ -77,6 +81,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     this.projects = options.projects
     this.sync = options.sync
     this.connections = options.connections
+    this.policy = options.policy
     if (options.userId !== undefined) this.userId = options.userId
     this.#proxy = options.proxy
   }
@@ -85,6 +90,15 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     config: AppConfig,
     dependencies: RuntimeDependencies = {}
   ): Promise<OverleafRuntime> {
+    // Roots resolve before anything is sent, so a misconfigured policy fails without a request.
+    const policy = await AccessPolicy.create({
+      allowedProjects: config.allowedProjects,
+      localReadRoots: config.localReadRoots,
+      localWriteRoots: config.localWriteRoots,
+      allowedEffects: config.allowedEffects,
+      cookieJarFile: config.cookieJarFile,
+      browserProfileDir: config.browserProfileDir,
+    })
     const cookieStore = await CookieStore.load(config.cookieJarFile)
     // One proxy decision, from readConfig, covers REST calls, the handshake, and the WebSocket.
     const proxy = config.proxyUrl === undefined ? undefined : createProxyRoute(config.proxyUrl)
@@ -132,15 +146,18 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       capacity: config.socketCacheSize,
       idleTtlMs: config.socketIdleTtlMs,
       factory,
+      // Every socket path, for every caller, is checked before a connection is reused or opened.
+      beforeConnect: projectId => policy.assertProject(projectId),
     })
-    const account = new AccountApi(http)
+    const account = new AccountApi(http, policy)
     const documents = new DocumentsApi(connections, {
       maxDocLength: bootstrap.maxDocLength ?? config.maxDocLength,
       maxUpdateChars: config.maxUpdateChars,
       recoveryTimeoutMs: config.recoveryTimeoutMs,
       ...(bootstrap.userId === undefined ? {} : { currentUserId: bootstrap.userId }),
+      policy,
     })
-    const entities = new EntitiesApi(http, connections)
+    const entities = new EntitiesApi(http, connections, policy)
     const sections = new SectionsApi(documents)
     // A fresh join before resolving, so a path is never looked up in a stale tree.
     const resolvePath = async (projectId: string, path: string, type: EntityType) => {
@@ -157,14 +174,16 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       async projectId => {
         await connections.invalidate(projectId)
         return await entities.getRootDocument(projectId)
-      }
+      },
+      policy
     )
     const comments = new CommentsApi(http, connections, {
       maxUpdateChars: config.maxUpdateChars,
       recoveryTimeoutMs: config.recoveryTimeoutMs,
       ...(bootstrap.userId === undefined ? {} : { currentUserId: bootstrap.userId }),
+      policy,
     })
-    const history = new HistoryApi(http)
+    const history = new HistoryApi(http, policy)
     const projects = new ProjectsApi({
       http,
       baseUrl: config.baseUrl,
@@ -172,6 +191,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       resolvePath,
       getProjectTree: async projectId => await entities.getProjectTree(projectId),
       invalidate: async projectId => await connections.invalidate(projectId),
+      policy,
     })
     // Every sync step is an existing primitive; createFile lives on the runtime itself.
     const created: { runtime?: OverleafRuntime } = {}
@@ -189,6 +209,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
         await entities.uploadFile(projectId, localPath, destinationFolderPath, destinationName, options),
       manageEntity: async (projectId, action) => await entities.manageEntity(projectId, action),
       currentUserId: bootstrap.userId,
+      policy,
     })
 
     const runtime = new OverleafRuntime({
@@ -205,6 +226,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       projects,
       sync,
       connections,
+      policy,
       ...(bootstrap.userId === undefined ? {} : { userId: bootstrap.userId }),
       ...(proxy === undefined ? {} : { proxy }),
     })

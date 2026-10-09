@@ -1,5 +1,8 @@
+import { delimiter, isAbsolute } from 'node:path'
+
 import { McpError } from './core/errors.js'
 import { resolveAuthPaths } from './auth/paths.js'
+import { EFFECTS, type Effect } from './contracts/effects.js'
 import { resolveProxyUrl } from './http/proxy.js'
 
 export interface AppConfig {
@@ -19,6 +22,14 @@ export interface AppConfig {
   supportedProtocolVersions: number[]
   /** Proxy for every connection to `baseUrl`; absent to connect directly. */
   proxyUrl?: string
+  /** Projects any operation may touch; absent allows every project the account can access. */
+  allowedProjects?: string[]
+  /** Folders local reads must stay inside; absent allows any path the process can read. */
+  localReadRoots?: string[]
+  /** Folders local writes must stay inside; absent allows any path but the saved session's files. */
+  localWriteRoots?: string[]
+  /** Effects operations may have; absent allows every effect. */
+  allowedEffects?: Effect[]
 }
 
 function positiveInteger(
@@ -33,6 +44,38 @@ function positiveInteger(
     throw new McpError('INVALID_ARGUMENT', `${name} must be a positive integer.`)
   }
   return parsed
+}
+
+/** A comma-separated list, or `undefined` when the variable is unset or empty. */
+function list(env: NodeJS.ProcessEnv, name: string): string[] | undefined {
+  const raw = env[name]
+  if (raw === undefined || raw.trim() === '') return undefined
+  const values = raw.split(',').map(value => value.trim())
+  if (values.some(value => value === '')) {
+    throw new McpError('INVALID_ARGUMENT', `${name} must be a comma-separated list without empty entries.`)
+  }
+  return values
+}
+
+/** Absolute folders separated by the platform path delimiter, `:` on POSIX and `;` on Windows. */
+function roots(env: NodeJS.ProcessEnv, name: string): string[] | undefined {
+  const raw = env[name]
+  if (raw === undefined || raw.trim() === '') return undefined
+  const values = raw.split(delimiter).filter(value => value !== '')
+  if (values.some(value => !isAbsolute(value))) {
+    throw new McpError('INVALID_ARGUMENT', `${name} must list absolute folder paths separated by "${delimiter}".`)
+  }
+  return values
+}
+
+function effects(env: NodeJS.ProcessEnv, name: string): Effect[] | undefined {
+  const values = list(env, name)
+  if (values === undefined) return undefined
+  const known = new Set<string>(EFFECTS)
+  if (values.some(value => !known.has(value))) {
+    throw new McpError('INVALID_ARGUMENT', `${name} may only list these effects: ${EFFECTS.join(', ')}.`)
+  }
+  return values as Effect[]
 }
 
 export interface ConfigContext {
@@ -65,6 +108,10 @@ export function readConfig(
   }
 
   const proxyUrl = resolveProxyUrl(baseUrl, env)
+  const allowedProjects = list(env, 'OVERLEAF_ALLOWED_PROJECTS')
+  const localReadRoots = roots(env, 'OVERLEAF_LOCAL_READ_ROOTS')
+  const localWriteRoots = roots(env, 'OVERLEAF_LOCAL_WRITE_ROOTS')
+  const allowedEffects = effects(env, 'OVERLEAF_ALLOWED_EFFECTS')
 
   return {
     baseUrl: baseUrl.href.replace(/\/$/u, ''),
@@ -89,5 +136,9 @@ export function readConfig(
     ),
     supportedProtocolVersions,
     ...(proxyUrl === undefined ? {} : { proxyUrl }),
+    ...(allowedProjects === undefined ? {} : { allowedProjects }),
+    ...(localReadRoots === undefined ? {} : { localReadRoots }),
+    ...(localWriteRoots === undefined ? {} : { localWriteRoots }),
+    ...(allowedEffects === undefined ? {} : { allowedEffects }),
   }
 }

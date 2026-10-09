@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { McpError } from '../core/errors.js'
+import { AccessPolicy } from '../core/policy.js'
 
 export interface HistoryJsonGetter {
   getJson(path: string): Promise<unknown>
@@ -184,15 +185,19 @@ function normalizeUpdate(update: z.infer<typeof updateSchema>): ProjectHistoryUp
 
 export class HistoryApi {
   readonly #http: HistoryJsonGetter
+  readonly #policy: AccessPolicy
 
-  constructor(http: HistoryJsonGetter) {
+  constructor(http: HistoryJsonGetter, policy: AccessPolicy = AccessPolicy.permissive) {
     this.#http = http
+    this.#policy = policy
   }
 
   async monitorProjectHistory(
     projectId: string,
     sinceVersion?: number
   ): Promise<ProjectHistoryMonitorResult> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read')
     if (
       sinceVersion !== undefined &&
       (!Number.isInteger(sinceVersion) || sinceVersion < 0)

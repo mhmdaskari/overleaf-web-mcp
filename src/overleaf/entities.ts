@@ -3,6 +3,7 @@ import { basename, posix } from 'node:path'
 
 import { McpError } from '../core/errors.js'
 import { gitBlobHash } from '../core/hash.js'
+import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
 import {
   normalizeProjectPath,
@@ -100,13 +101,17 @@ function resolveFolderId(connection: TreeConnection, path: string): string {
 export class EntitiesApi {
   readonly #http: EntityHttp
   readonly #connections: EntityConnections
+  readonly #policy: AccessPolicy
 
-  constructor(http: EntityHttp, connections: EntityConnections) {
+  constructor(http: EntityHttp, connections: EntityConnections, policy: AccessPolicy = AccessPolicy.permissive) {
     this.#http = http
     this.#connections = connections
+    this.#policy = policy
   }
 
   async getProjectTree(projectId: string): Promise<ProjectTree> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read')
     return await this.#connections.withConnection(projectId, async connection =>
       await connection.queue.run(() => {
         const entities = connection.getTree()
@@ -131,6 +136,7 @@ export class EntitiesApi {
 
   /** Resolves the project's configured root document, used when a compile names no root. */
   async getRootDocument(projectId: string): Promise<ProjectEntity | undefined> {
+    this.#policy.assertProject(projectId)
     return await this.#connections.withConnection(projectId, async connection =>
       await connection.queue.run(() => {
         if (connection.rootDocId === undefined) return undefined
@@ -140,13 +146,15 @@ export class EntitiesApi {
   }
 
   async createEmptyFile(projectId: string, filePath: string): Promise<unknown> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-write')
     const normalized = normalizeProjectPath(filePath)
     const name = posix.basename(normalized)
     validateName(name)
     const created = await this.#connections.withConnection(projectId, async connection =>
       await connection.queue.run(async () => {
         const parentFolderId = resolveFolderId(connection, parentPath(normalized))
-        return await this.#http.postJson(`/project/${projectId}/doc`, {
+        return await this.#http.postJson(`/project/${encodeURIComponent(projectId)}/doc`, {
           parent_folder_id: parentFolderId,
           name,
         })
@@ -157,14 +165,17 @@ export class EntitiesApi {
   }
 
   async manageEntity(projectId: string, input: EntityAction): Promise<Record<string, unknown>> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect(input.action === 'delete' ? 'overleaf-delete' : 'overleaf-write')
     const normalized = normalizeProjectPath(input.path)
+    const project = encodeURIComponent(projectId)
     const result = await this.#connections.withConnection(projectId, async connection =>
       await connection.queue.run(async () => {
         if (input.action === 'create_folder') {
           const name = posix.basename(normalized)
           validateName(name)
           const parentFolderId = resolveFolderId(connection, parentPath(normalized))
-          const created = await this.#http.postJson(`/project/${projectId}/folder`, {
+          const created = await this.#http.postJson(`/project/${project}/folder`, {
             parent_folder_id: parentFolderId,
             name,
           })
@@ -177,10 +188,10 @@ export class EntitiesApi {
         }
 
         const entity = resolveProjectPath(connection.getTree(), normalized)
-        const type = endpointType(entity)
+        const route = `/project/${project}/${endpointType(entity)}/${encodeURIComponent(entity.id)}`
         if (input.action === 'rename') {
           validateName(input.newName)
-          await this.#http.postJson(`/project/${projectId}/${type}/${entity.id}/rename`, {
+          await this.#http.postJson(`${route}/rename`, {
             name: input.newName,
           })
           return {
@@ -197,7 +208,7 @@ export class EntitiesApi {
               ? ''
               : normalizeProjectPath(input.destinationFolderPath)
           )
-          await this.#http.postJson(`/project/${projectId}/${type}/${entity.id}/move`, {
+          await this.#http.postJson(`${route}/move`, {
             folder_id: folderId,
           })
           return {
@@ -213,7 +224,7 @@ export class EntitiesApi {
             'confirmPath must exactly match path before an entity can be deleted.'
           )
         }
-        await this.#http.deleteJson(`/project/${projectId}/${type}/${entity.id}`)
+        await this.#http.deleteJson(route)
         return {
           action: input.action,
           id: entity.id,
@@ -245,7 +256,9 @@ export class EntitiesApi {
     destinationName?: string,
     options: UploadFileOptions = {}
   ): Promise<Record<string, unknown>> {
-    const bytes = await readFile(localPath)
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-write')
+    const bytes = await readFile(await this.#policy.resolveLocalRead(localPath))
     const name = destinationName ?? basename(localPath)
     validateName(name)
     const folderPath = destinationFolderPath === '' ? '' : normalizeProjectPath(destinationFolderPath)
@@ -264,13 +277,15 @@ export class EntitiesApi {
           return { path, skipped: true, entityId: existing.id, entityType: existing.type }
         }
         const replaced = existing !== undefined
+        // Replacing a document this way has no revision check.
+        if (existing?.type === 'doc') this.#policy.assertEffect('unchecked-replace')
         const form = new FormData()
         form.append('qqfile', new Blob([bytes]), name)
         form.append('name', name)
         let raw: unknown
         try {
           raw = await this.#http.postForm(
-            `/project/${projectId}/upload?folder_id=${encodeURIComponent(folderId)}`,
+            `/project/${encodeURIComponent(projectId)}/upload?folder_id=${encodeURIComponent(folderId)}`,
             form
           )
         } catch (error) {
@@ -310,22 +325,27 @@ export class EntitiesApi {
     localPath: string,
     overwrite = false
   ): Promise<{ bytes: number; localPath: string }> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read')
+    // Checked before anything is fetched, so a refused path costs no request.
+    const writePath = await this.#policy.resolveLocalWrite(localPath)
     const bytes = await this.#connections.withConnection(projectId, async connection =>
       await connection.queue.run(async () => {
         const entity = resolveProjectPath(connection.getTree(), filePath)
         if (entity.type === 'folder') {
           throw new McpError('INVALID_ARGUMENT', 'Folders cannot be downloaded with download_file.')
         }
+        const project = encodeURIComponent(projectId)
         const route =
           entity.type === 'doc'
-            ? `/Project/${projectId}/doc/${entity.id}/download`
-            : `/Project/${projectId}/file/${entity.id}`
+            ? `/Project/${project}/doc/${encodeURIComponent(entity.id)}/download`
+            : `/Project/${project}/file/${encodeURIComponent(entity.id)}`
         return await this.#http.getBytes(route)
       })
     )
     try {
       // 'wx' fails rather than truncating a file the caller did not mean to replace.
-      await writeFile(localPath, bytes, overwrite ? undefined : { flag: 'wx' })
+      await writeFile(writePath, bytes, overwrite ? undefined : { flag: 'wx' })
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
         throw new McpError(

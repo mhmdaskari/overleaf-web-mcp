@@ -1,5 +1,6 @@
 import { asMcpError, McpError } from '../core/errors.js'
 import { assertDocumentSize, assertUpdateSize } from '../core/limits.js'
+import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
 import {
   assertRevisionMatches,
@@ -65,6 +66,8 @@ export interface DocumentsApiOptions {
   recoveryTimeoutMs?: number
   recoveryPollIntervalMs?: number
   currentUserId?: string
+  /** Defaults to allowing everything but ids that are not path-safe. */
+  policy?: AccessPolicy
 }
 
 async function safelyLeave(connection: DocumentConnection, docId: string): Promise<void> {
@@ -108,6 +111,7 @@ export class DocumentsApi {
   readonly #recoveryTimeoutMs: number
   readonly #recoveryPollIntervalMs: number
   readonly #currentUserId: string | undefined
+  readonly #policy: AccessPolicy
 
   constructor(
     connections: ConnectionProvider,
@@ -119,9 +123,12 @@ export class DocumentsApi {
     this.#recoveryTimeoutMs = options.recoveryTimeoutMs ?? 30_000
     this.#recoveryPollIntervalMs = options.recoveryPollIntervalMs ?? 250
     this.#currentUserId = options.currentUserId
+    this.#policy = options.policy ?? AccessPolicy.permissive
   }
 
   async readFile(projectId: string, filePath: string): Promise<ReadFileResult> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read')
     return await this.#connections.withConnection(projectId, async connection =>
       await connection.queue.run(async () => {
         const entity = resolveProjectPath(connection.getTree(), filePath, 'doc')
@@ -152,6 +159,8 @@ export class DocumentsApi {
     content: string,
     writeMode: WriteMode = 'untracked'
   ): Promise<WriteFileResult> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-write')
     if (writeMode === 'tracked' && this.#currentUserId === undefined) {
       throw new McpError(
         'PROTOCOL_UNSUPPORTED',

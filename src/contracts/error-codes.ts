@@ -20,6 +20,7 @@ export const ERROR_CODES = [
   'RATE_LIMITED',
   'REMOTE_DRIFT',
   'PATH_OUTSIDE_ROOT',
+  'POLICY_DENIED',
   'REMOTE_ERROR',
 ] as const
 
