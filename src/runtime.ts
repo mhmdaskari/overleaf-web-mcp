@@ -1,10 +1,10 @@
 import type { AppConfig } from './config.js'
+import type { OverleafServiceRuntime } from './contracts/service.js'
 import { AUTH_LOGIN_INSTRUCTION, McpError } from './core/errors.js'
 import { parseBootstrapMeta, type BootstrapMeta } from './http/bootstrap.js'
 import { OverleafHttpClient } from './http/client.js'
 import { CookieStore } from './http/cookies.js'
 import { createProxyRoute, type ProxyRoute } from './http/proxy.js'
-import type { OverleafToolRuntime } from './mcp/tools.js'
 import { AccountApi } from './overleaf/account.js'
 import { CommentsApi } from './overleaf/comments.js'
 import { CompileApi } from './overleaf/compile.js'
@@ -27,10 +27,10 @@ export interface RuntimeDependencies {
 }
 
 /**
- * Composes authenticated HTTP, cached collaboration sockets, and the domain APIs used by MCP tools.
+ * Composes authenticated HTTP, cached collaboration sockets, and the domain APIs every operation runs on.
  * Callers must close the runtime so cached sockets do not outlive the server process.
  */
-export class OverleafRuntime implements OverleafToolRuntime {
+export class OverleafRuntime implements OverleafServiceRuntime {
   readonly config: AppConfig
   readonly cookieStore: CookieStore
   readonly http: OverleafHttpClient

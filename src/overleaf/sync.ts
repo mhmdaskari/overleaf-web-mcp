@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { posix } from 'node:path'
 
+import type { ProgressReporter } from '../contracts/context.js'
 import { asMcpError, McpError, type McpErrorCode } from '../core/errors.js'
 import { gitBlobHash, gitBlobHashFile } from '../core/hash.js'
 import { loadSyncIgnoreRules } from '../core/ignore-rules.js'
@@ -53,8 +54,7 @@ export type SyncMode = 'additive' | 'mirror'
 export type SyncAction = 'create_folder' | 'upload' | 'write' | 'create' | 'delete'
 export type ConflictReason = 'local_file_remote_folder' | 'local_folder_remote_file' | 'not_utf8_text'
 
-/** Reports progress to a client that asked for it; failures to deliver are ignored. */
-export type ProgressReporter = (progress: number, total: number, message: string) => Promise<void>
+export type { ProgressReporter }
 
 export interface PlannedUpload {
   localPath: string
