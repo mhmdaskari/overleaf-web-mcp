@@ -25,7 +25,30 @@ export interface RequestOptions {
  * `duplicate_file_name`. Only a value matching that shape is propagated, so no response
  * content or free text can reach a caller through an error.
  */
-const ERROR_CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u
+export const ERROR_CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u
+
+const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]{1,64}$/u
+
+/**
+ * Parses a JSON body, or fails with `PROTOCOL_UNSUPPORTED` carrying only the path and a
+ * MIME-shaped content type, so a page Overleaf sent instead is never quoted in an error.
+ */
+async function parseJsonBody(response: Response, path: string, emptyValue?: unknown): Promise<unknown> {
+  const text = await response.text()
+  if (text === '' && emptyValue !== undefined) return emptyValue
+  try {
+    return JSON.parse(text) as unknown
+  } catch (error) {
+    const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
+    throw new McpError('PROTOCOL_UNSUPPORTED', 'Overleaf returned a response that is not JSON.', {
+      details: {
+        path,
+        ...(contentType !== undefined && MIME_TYPE_PATTERN.test(contentType) ? { contentType } : {}),
+      },
+      cause: error,
+    })
+  }
+}
 
 async function safeErrorCode(response: Response): Promise<string | undefined> {
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) {
@@ -202,7 +225,7 @@ export class OverleafHttpClient {
 
   async getJson<T = unknown>(path: string, options?: RequestOptions): Promise<T> {
     const response = await this.request('GET', path, undefined, options)
-    return (await response.json()) as T
+    return (await parseJsonBody(response, path)) as T
   }
 
   async postJson<T = unknown>(
@@ -211,14 +234,12 @@ export class OverleafHttpClient {
     options?: RequestOptions
   ): Promise<T> {
     const response = await this.request('POST', path, body, options)
-    const text = await response.text()
-    return (text ? JSON.parse(text) : {}) as T
+    return (await parseJsonBody(response, path, {})) as T
   }
 
   async deleteJson<T = unknown>(path: string, options?: RequestOptions): Promise<T> {
     const response = await this.request('DELETE', path, undefined, options)
-    const text = await response.text()
-    return (text ? JSON.parse(text) : {}) as T
+    return (await parseJsonBody(response, path, {})) as T
   }
 
   async getBytes(path: string, options?: RequestOptions): Promise<Uint8Array> {
@@ -246,7 +267,6 @@ export class OverleafHttpClient {
     options?: RequestOptions
   ): Promise<T> {
     const response = await this.request('POST', path, form, options)
-    const text = await response.text()
-    return (text ? JSON.parse(text) : {}) as T
+    return (await parseJsonBody(response, path, {})) as T
   }
 }

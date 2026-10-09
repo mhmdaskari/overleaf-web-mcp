@@ -6,6 +6,7 @@ import { McpError } from '../core/errors.js'
 import { gitBlobHash } from '../core/hash.js'
 import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
+import { ERROR_CODE_PATTERN } from '../http/client.js'
 import {
   normalizeProjectPath,
   parentPath,
@@ -45,7 +46,7 @@ const UPLOAD_ERRORS: Record<string, string> = {
 
 interface UploadResponse {
   success?: boolean
-  error?: string
+  error?: unknown
   entity_id?: string
   entity_type?: string
   hash?: string
@@ -56,13 +57,23 @@ function parseUploadResponse(value: unknown): UploadResponse {
   return body !== null && typeof body === 'object' ? body : {}
 }
 
-function uploadFailure(code: string | undefined): McpError {
+function uploadFailure(error: unknown): McpError {
+  // Only a short machine-readable code is passed on, never free text from the response body.
+  const code = typeof error === 'string' && ERROR_CODE_PATTERN.test(error) ? error : undefined
   const detail = code === undefined ? undefined : UPLOAD_ERRORS[code]
   return new McpError(
     'INVALID_ARGUMENT',
     detail ?? 'Overleaf rejected the upload.',
     code === undefined ? {} : { details: { overleafError: code } }
   )
+}
+
+/** A created folder as Overleaf reports it, reduced to the two fields a caller needs. */
+function createdFolder(value: unknown): { _id: string; name: string } | undefined {
+  const created = value as { _id?: unknown; name?: unknown } | null
+  return typeof created?._id === 'string' && typeof created.name === 'string'
+    ? { _id: created._id, name: created.name }
+    : undefined
 }
 
 interface EntityConnections {
@@ -227,9 +238,10 @@ export class EntitiesApi {
             parent_folder_id: parentFolderId,
             name,
           })
+          const folder = createdFolder(created)
           return {
             action: input.action,
-            created,
+            ...(folder === undefined ? {} : { created: folder }),
             trackChangesActive: connection.trackChangesActive,
             writeMode: 'untracked',
           }

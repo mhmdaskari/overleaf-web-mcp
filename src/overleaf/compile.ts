@@ -19,6 +19,9 @@ export interface CompileResult {
   rootFilePath?: string
 }
 
+/** A status Overleaf reports is echoed only in this shape; anything else is `unrecognized`. */
+const COMPILE_STATUS_PATTERN = /^[a-z][a-z0-9-]{0,63}$/u
+
 export class CompileApi {
   readonly #http: JsonPoster
   readonly #resolvePath: (projectId: string, path: string, type: 'doc') => Promise<ProjectEntity>
@@ -70,8 +73,11 @@ export class CompileApi {
       { timeoutMs: boundedTimeout }
     ) as CompileResult
     if (result.status !== 'success') {
-      throw new McpError('COMPILE_FAILED', `Overleaf compile finished with status ${result.status}.`, {
-        details: { result, rootFilePath: root.path },
+      const status =
+        typeof result.status === 'string' && COMPILE_STATUS_PATTERN.test(result.status) ? result.status : 'unrecognized'
+      // details.result is deprecated and keeps only the status; 0.6.0 removes it.
+      throw new McpError('COMPILE_FAILED', `Overleaf compile finished with status ${status}.`, {
+        details: { status, rootFilePath: root.path, result: { status } },
       })
     }
     return { ...result, rootFilePath: root.path }

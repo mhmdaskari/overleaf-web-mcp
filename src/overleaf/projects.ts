@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { McpError } from '../core/errors.js'
 import { prepareLocalDownload, writeDownload } from '../core/local-download.js'
 import { AccessPolicy, isPathSafeId } from '../core/policy.js'
+import { ERROR_CODE_PATTERN } from '../http/client.js'
 import type { EntityType, ProjectEntity, ProjectTree } from './tree.js'
 
 interface ProjectsHttp {
@@ -133,7 +134,8 @@ function endsLikeZip(tail: Uint8Array): boolean {
 
 const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]{1,64}$/u
 
-function zipFailure(code: string | undefined): McpError {
+function zipFailure(error: unknown): McpError {
+  const code = typeof error === 'string' && ERROR_CODE_PATTERN.test(error) ? error : undefined
   const detail = code === undefined ? undefined : ZIP_ERRORS[code]
   return new McpError(
     'INVALID_ARGUMENT',
@@ -265,7 +267,7 @@ export class ProjectsApi {
       }
       throw error
     }
-    const body = response as { success?: boolean; error?: string } | null
+    const body = response as { success?: boolean; error?: unknown } | null
     if (body?.success === false) throw zipFailure(body.error)
     const projectId = this.#parseCreated(response, 'project import')
     return { projectId, name: projectName, url: this.#projectUrl(projectId) }
