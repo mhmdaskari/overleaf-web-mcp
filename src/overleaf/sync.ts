@@ -542,7 +542,7 @@ export class SyncApi {
     options: DeleteEntitiesOptions = {}
   ): Promise<DeleteEntitiesResult> {
     this.#policy.assertProject(projectId)
-    this.#policy.assertEffect('overleaf-delete')
+    this.#policy.assertEffect('overleaf-read', 'overleaf-delete')
     const normalized = paths.map(path => {
       const folder = normalizeFolderPath(path)
       if (folder === '') throw new McpError('INVALID_ARGUMENT', 'The project root cannot be deleted.')
@@ -610,7 +610,8 @@ export class SyncApi {
     options: BatchUploadOptions = {}
   ): Promise<BatchUploadResult> {
     this.#policy.assertProject(projectId)
-    this.#policy.assertEffect('local-read', 'overleaf-write')
+    // The tree is read before and after the uploads, so both reads are allowed before any upload.
+    this.#policy.assertEffect('local-read', 'overleaf-read', 'overleaf-write')
     const onConflict = options.onConflict ?? 'overwrite'
     const deprecations: Deprecation[] = []
     if (files.length === 0 || files.length > BATCH_UPLOAD_LIMIT) {

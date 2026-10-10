@@ -189,7 +189,8 @@ export class ProjectsApi {
    * `updateProjectSettings` or delete the stub.
    */
   async createProject(name: string, template: ProjectTemplate = 'blank'): Promise<CreatedProject> {
-    this.#policy.assertEffect('project-lifecycle')
+    // The new project's tree is read afterwards, so that read is allowed before anything is created.
+    this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
     validateProjectName(name)
     const response = await this.#options.http.postJson('/project/new', {
       projectName: name,
@@ -332,7 +333,7 @@ export class ProjectsApi {
     input: ProjectAction
   ): Promise<{ action: ProjectAction['action']; projectId: string; name: string }> {
     this.#policy.assertProject(projectId)
-    this.#policy.assertEffect('project-lifecycle')
+    this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
     if (input.action === 'delete') this.#policy.assertEffect('overleaf-delete')
     const project = await this.#options.findProject(projectId)
     const id = encodeURIComponent(projectId)
@@ -388,7 +389,8 @@ export class ProjectsApi {
     settings: ProjectSettingsInput
   ): Promise<ProjectSettings> {
     this.#policy.assertProject(projectId)
-    this.#policy.assertEffect('project-lifecycle')
+    // The settings are re-read afterwards, so that read is allowed before anything is changed.
+    this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
     const body: Record<string, string> = {}
     if (settings.rootFilePath !== undefined) {
       body.rootDocId = (await this.#options.resolvePath(projectId, settings.rootFilePath, 'doc')).id

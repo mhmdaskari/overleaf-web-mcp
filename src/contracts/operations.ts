@@ -183,7 +183,7 @@ export const OPERATIONS = {
     }),
     outputSchema: createdProjectSchema.extend({ rootDocPath: z.string().optional() }),
     annotations: { destructiveHint: false, idempotentHint: false },
-    effects: ['project-lifecycle'],
+    effects: ['project-lifecycle', 'overleaf-read'],
   },
   clone_project: {
     description:
@@ -222,7 +222,7 @@ export const OPERATIONS = {
       name: z.string(),
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
-    effects: ['project-lifecycle', 'overleaf-delete'],
+    effects: ['project-lifecycle', 'overleaf-read', 'overleaf-delete'],
   },
   update_project_settings: {
     description:
@@ -245,7 +245,7 @@ export const OPERATIONS = {
       spellCheckLanguage: z.string().optional(),
     }),
     annotations: { destructiveHint: false, idempotentHint: true },
-    effects: ['project-lifecycle'],
+    effects: ['project-lifecycle', 'overleaf-read'],
   },
   get_project_tree: {
     description:
@@ -283,7 +283,7 @@ export const OPERATIONS = {
       'Create a text document and optionally record non-empty initial content as tracked changes.',
     inputSchema: z.object({ projectId, filePath, content: z.string().optional(), writeMode }),
     annotations: { destructiveHint: false, idempotentHint: false },
-    effects: ['overleaf-write'],
+    effects: ['overleaf-write', 'overleaf-read'],
   },
   manage_entity: {
     description:
@@ -386,7 +386,7 @@ export const OPERATIONS = {
       deprecations: deprecationsSchema,
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
-    effects: ['local-read', 'overleaf-write', 'unchecked-replace'],
+    effects: ['local-read', 'overleaf-read', 'overleaf-write', 'unchecked-replace'],
   },
   download_file: {
     description:
@@ -554,7 +554,7 @@ export const OPERATIONS = {
       remaining: z.array(z.object({ path: z.string() })),
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
-    effects: ['overleaf-delete'],
+    effects: ['overleaf-read', 'overleaf-delete'],
   },
   get_sections: {
     description:
@@ -581,7 +581,7 @@ export const OPERATIONS = {
       writeMode,
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
-    effects: ['overleaf-write'],
+    effects: ['overleaf-read', 'overleaf-write'],
   },
   compile_project: {
     description:
@@ -616,7 +616,7 @@ export const OPERATIONS = {
     description: 'Reply to an existing Overleaf review thread with timeout deduplication.',
     inputSchema: z.object({ projectId, threadId: z.string().min(1), content: z.string().min(1) }),
     annotations: { destructiveHint: false, idempotentHint: false },
-    effects: ['overleaf-write'],
+    effects: ['overleaf-write', 'overleaf-read'],
   },
   add_comment: {
     description:
@@ -631,7 +631,7 @@ export const OPERATIONS = {
       content: z.string().min(1),
     }),
     annotations: { destructiveHint: false, idempotentHint: false },
-    effects: ['overleaf-write'],
+    effects: ['overleaf-write', 'overleaf-read'],
   },
   set_comment_status: {
     description: 'Resolve or reopen a review thread and verify its resulting document revision.',

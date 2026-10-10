@@ -6,6 +6,7 @@ import { describe, expect, test, vi } from 'vitest'
 
 import { readConfig } from '../src/config.js'
 import { gitBlobHash } from '../src/core/hash.js'
+import { AccessPolicy } from '../src/core/policy.js'
 import type { RawFolder } from '../src/overleaf/tree.js'
 import { ProjectConnection } from '../src/protocol/project-connection.js'
 import { OverleafRuntime } from '../src/runtime.js'
@@ -30,6 +31,7 @@ function runtimeWithWrites(userId: string | null = 'user') {
   const runtime = Object.assign(Object.create(OverleafRuntime.prototype), {
     entities,
     documents,
+    policy: AccessPolicy.permissive,
     ...(userId === null ? {} : { userId }),
   }) as OverleafRuntime
   return { runtime, entities, documents }

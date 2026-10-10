@@ -268,6 +268,9 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     content = '',
     writeMode: WriteMode = 'untracked'
   ): Promise<unknown> {
+    // The new document is read back after it is created, so that read is allowed first.
+    this.policy.assertProject(projectId)
+    this.policy.assertEffect('overleaf-write', 'overleaf-read')
     if (writeMode === 'tracked' && content === '') {
       throw new McpError(
         'INVALID_ARGUMENT',

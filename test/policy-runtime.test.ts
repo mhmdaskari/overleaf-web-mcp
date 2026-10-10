@@ -181,6 +181,33 @@ describe('allowed effects through the real runtime', () => {
   })
 })
 
+describe('effects a write needs for its own reads', () => {
+  test('are refused before the write, never after it', async () => {
+    const { runtime, fetches, socketCalls } = await createTestRuntime({
+      env: { OVERLEAF_ALLOWED_EFFECTS: 'project-lifecycle,overleaf-write' },
+      fetcher: async () => json({ project_id: 'n' }),
+    })
+    const service = createOverleafService(runtime)
+    try {
+      // Each of these reads after changing something, so the read is checked before the change.
+      await expect(service.create_project({ name: 'New' })).rejects.toMatchObject({ code: 'POLICY_DENIED' })
+      await expect(service.update_project_settings({ projectId: 'p', compiler: 'xelatex' })).rejects.toMatchObject({
+        code: 'POLICY_DENIED',
+      })
+      await expect(service.create_file({ projectId: 'p', filePath: 'new.tex', content: 'x' })).rejects.toMatchObject({
+        code: 'POLICY_DENIED',
+      })
+      await expect(service.reply_to_comment({ projectId: 'p', threadId: 't', content: 'Hi' })).rejects.toMatchObject({
+        code: 'POLICY_DENIED',
+      })
+      expect(fetches).toEqual([])
+      expect(socketCalls).toEqual([])
+    } finally {
+      await runtime.close()
+    }
+  })
+})
+
 describe('path-safe ids and request origins', () => {
   test('refuses ids that could step into another route before any request', async () => {
     const { runtime, fetches } = await createTestRuntime()

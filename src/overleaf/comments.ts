@@ -345,7 +345,8 @@ export class CommentsApi {
   }> {
     this.#policy.assertProject(projectId)
     assertPathSafeId(threadId, 'threadId')
-    this.#policy.assertEffect('overleaf-write')
+    // The thread is read back afterwards, so that read is allowed before anything is posted.
+    this.#policy.assertEffect('overleaf-write', 'overleaf-read')
     const normalized = normalizeLf(content)
     const started = this.#now()
     try {
@@ -405,7 +406,7 @@ export class CommentsApi {
     recoveredAfterTimeout?: boolean
   }> {
     this.#policy.assertProject(input.projectId)
-    this.#policy.assertEffect('overleaf-write')
+    this.#policy.assertEffect('overleaf-write', 'overleaf-read')
     const expectedText = normalizeLf(input.expectedText)
     const messageContent = normalizeLf(input.content)
     const threadId = this.#threadIdFactory()
