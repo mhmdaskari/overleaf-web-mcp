@@ -68,6 +68,11 @@ describe('MCP tool registration', () => {
 
     expect(badge).toBe(String(TOOL_NAMES.length))
     expect(prose).toBe(String(TOOL_NAMES.length))
+    // The tool-list sentence and the Documentation table row, plus the comparison's Tools cell.
+    const allCounts = [...readme.matchAll(/All (\d+) tools/gu)].map(match => match[1])
+    expect(allCounts).toHaveLength(2)
+    expect(allCounts).toEqual([String(TOOL_NAMES.length), String(TOOL_NAMES.length)])
+    expect(/^\| Tools \| (\d+) \|/mu.exec(readme)?.[1]).toBe(String(TOOL_NAMES.length))
     // The README's tool table must name every registered tool, or it rots like the count would.
     for (const name of TOOL_NAMES) expect(readme).toContain(`| \`${name}\` |`)
   })
