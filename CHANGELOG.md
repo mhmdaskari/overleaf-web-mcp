@@ -4,6 +4,165 @@ All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
 result shapes may change in a minor or patch release; each such change is listed below.
 
+## [0.5.0] - 2026-10-10
+
+Shared core and safety. Every operation is now defined once, in an operation registry the MCP
+server is one adapter over, and the engine behind it is published without MCP as
+`overleaf-web-mcp/core`. An optional access policy limits which projects, local folders, and
+kinds of change the server may touch; ids are checked before they reach a request path; and error
+details no longer carry text from Overleaf. Three safety defaults that depended on the caller
+picking the safe option are announced here and enforced in 0.6.0: a folder sync without a plan,
+an upload that replaces a file without saying so, and `batch_upload`'s overwriting default. No
+tool was added or removed; the server still registers 29 tools. Planned in
+[ROADMAP.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/ROADMAP.md).
+
+### Added
+
+- **`overleaf-web-mcp/core`**, a subpath export that never loads the MCP SDK. It exports
+  `OverleafRuntime`, `readConfig`, `createOverleafService`, `McpError` (the same class the root
+  exports), `ERROR_CODES`, `SERVER_VERSION`, and the contracts: `OPERATIONS`, `OPERATION_NAMES`,
+  `EFFECTS`, and the `OverleafService`, `OverleafServiceRuntime`, `OperationContext`,
+  `OperationInput`, and `OperationOutput` types. `createOverleafService(runtime)` returns one
+  function per operation, keyed by tool name, that takes the tool's input and resolves with its
+  result or rejects with `McpError`. It follows the same 0.5.x defaults and deprecations as the
+  MCP server; v0.7.0 documents its stable surface.
+- **An access policy**, configured by four environment variables, all unset by default. Every
+  operation is checked against it before anything is sent, through the MCP server and the
+  exported runtime alike:
+  - `OVERLEAF_ALLOWED_PROJECTS`, the project ids any tool may touch. `list_projects` and
+    `auth_status` list and count only these, and a project created by this process is allowed
+    for the rest of it.
+  - `OVERLEAF_LOCAL_READ_ROOTS` and `OVERLEAF_LOCAL_WRITE_ROOTS`, absolute folders separated by
+    `:` (`;` on Windows) that local reads (`write_file` and `upload_file` from disk,
+    `batch_upload`, `import_project_zip`, `plan_sync`, `sync_directory`) and local writes
+    (`download_file`, `download_project_zip`) must stay inside, judged by `realpath`.
+  - `OVERLEAF_ALLOWED_EFFECTS`, which of `overleaf-read`, `overleaf-write`, `overleaf-delete`,
+    `project-lifecycle`, `compile`, `local-read`, `local-write`, and `unchecked-replace` an
+    operation may have. An operation checks every effect it will use before it starts, the reads
+    a write makes afterwards included, so a refusal never lands after a change.
+
+  A relative or missing root, an unknown effect, or an unsafe project id stops the server at
+  startup with `INVALID_ARGUMENT` naming the variable.
+- **`POLICY_DENIED`**, a new error code for a project (`details.parameter`) or effect
+  (`details.effect`) the policy does not allow. Nothing is sent.
+- **`upload_file` takes `overwrite`, `expectedHash`, and `uncheckedDocumentReplace`**, checked
+  inside the upload's queue job after a fresh look at the tree, before anything is sent.
+  `overwrite: false` onto a document or binary file is `CONFIRMATION_MISMATCH`; an `expectedHash`
+  that does not match what is at the path is `REMOTE_DRIFT`. `overwrite: true` or a matching
+  `expectedHash` confirms replacing a binary, and `uncheckedDocumentReplace: true` replacing a text
+  document. `expectedHash` is a preflight, not a compare-and-swap: the upload route takes no
+  expected state.
+- **`upload_file` declares an `outputSchema`** and returns `structuredContent`:
+  `{ entityId?, entityType?, path, replaced, hash?, trackChangesActive, writeMode, deprecations? }`.
+- **`batch_upload` takes `uncheckedDocumentReplace`**, the same opt-in, per file.
+- **`sync_directory` takes `unplanned`**: `true` runs an additive sync without a `planToken` on
+  purpose. With a `planToken` or in mirror mode it is `INVALID_ARGUMENT` before anything is read.
+  The result gains `planned`, whether a `planToken` checked the call.
+- **`deprecations`** in the results of `upload_file`, `batch_upload`, and `sync_directory`:
+  `[{ parameter, message, enforcedIn: "0.6.0" }]` when a call relied on a default that 0.6.0
+  removes.
+- **Diagnostics on stderr.** `serve` writes `{"diagnostic":{"tool":…,"code":…}}` to stderr when a
+  call fails (its error code) or relies on a deprecated default (`DEPRECATED`), and nothing else:
+  no message, path, or text from Overleaf. Library use: `createMcpServer` and `serveOverStdio`
+  take an optional third argument, and `runStdioServer` an option, `onDiagnostic`.
+- Tests that guard the contract: `tools/list` against a committed snapshot, every operation's
+  annotations against its effects, every destructive operation taking a confirm value or an
+  expected state (`stop_compile` excepted), the policy through a real runtime with zero requests
+  on refusal, and a sentinel string fed through every upstream channel that no serialized error
+  may contain. CI imports both built entry points by package name.
+
+### Deprecated
+
+Each of these still works in 0.5.x and lists a `deprecations` entry in its result. From 0.6.0 it
+is refused with nothing sent.
+
+- **`sync_directory` without a `planToken`** (`parameter: "planToken"`). From 0.6.0
+  `CONFIRMATION_MISMATCH` with `details.missing: "planToken"`; an additive sync may pass
+  `unplanned: true` instead.
+- **`upload_file` replacing a binary file without `overwrite: true` or `expectedHash`**
+  (`parameter: "overwrite"`). From 0.6.0 `overwrite` defaults to `false`, and the call is
+  `CONFIRMATION_MISMATCH`.
+- **`upload_file` replacing a text document without `uncheckedDocumentReplace: true`**
+  (`parameter: "uncheckedDocumentReplace"`). From 0.6.0 `INVALID_ARGUMENT`, naming `write_file`
+  with `localPath`.
+- **`batch_upload` replacing a file with `onConflict` omitted** (`parameter: "onConflict"`), or a
+  text document without `uncheckedDocumentReplace: true`. From 0.6.0 no default replaces anything,
+  and the document rule applies to each file.
+- **`COMPILE_FAILED`'s `details.result`**, now reduced to `{ status }`. Removed in 0.6.0, when a
+  failed build returns a parsed summary instead.
+
+### Changed
+
+- **`download_file` is annotated `{ readOnlyHint: false, destructiveHint: true,
+  idempotentHint: false }`** instead of `readOnlyHint: true`: it writes a local file and can
+  replace one.
+- **`upload_file`'s `writeMode` is `tracked`** when a text document replaced a text document while
+  track changes is on for this account, because Overleaf then records the difference as tracked
+  changes. It always read `untracked` before. Its description is rewritten for the new parameters.
+- **`batch_upload`'s `onConflict` has no schema default**, so an omitted value is told apart from
+  an explicit `"overwrite"`. An omitted value still overwrites and is reported as `overwrite` in
+  the result; `tools/list` no longer shows `"default": "overwrite"`.
+- **Path-safe ids.** A `projectId`, `sourceProjectId`, or `threadId` holding `/`, `\`, `.`, `?`,
+  `#`, `%`, or a control character is `INVALID_ARGUMENT` with `details.parameter`, before any
+  request. Every id in a request path is URI-encoded, and a created project's id that is not
+  path-safe is `PROTOCOL_UNSUPPORTED`.
+- **Requests stay on `OVERLEAF_BASE_URL`'s origin.** A request that would leave it is
+  `INVALID_ARGUMENT` before it is sent. A request that changes something no longer follows
+  redirects, since fetch would carry the CSRF token to another origin: a redirect to `/login` is
+  still `AUTH_EXPIRED`, and any other is `REMOTE_ERROR` with `details.status`.
+- **Three refusals apply with no policy variable set**: a download onto the cookie jar, its lock
+  or temporary files, or the browser profile (`PATH_OUTSIDE_ROOT`, `details.kind:
+  "session_files"`); an `.olignore` that links to a file outside its folder, whose patterns a plan
+  would echo back (`PATH_OUTSIDE_ROOT`, `details.kind: "outside_folder"`); and the unsafe ids
+  above.
+- **`PATH_OUTSIDE_ROOT` carries `details.kind`**: `outside_folder`, now also on the existing
+  refusal of a symbolic link out of `localFolderPath`, `outside_read_roots`,
+  `outside_write_roots`, or `session_files`.
+- **A sync upload is checked against the plan.** Just before each upload, `sync_directory` checks
+  that a new path is still empty and a changed binary still has the hash the plan compared;
+  otherwise that file fails with `REMOTE_DRIFT`, which withholds every delete. It used to replace
+  whatever had appeared there.
+- **Error details no longer carry text from Overleaf.**
+  - `COMPILE_FAILED` details are `{ status, rootFilePath, result: { status } }`, with a status that
+    is not a short identifier (`^[a-z][a-z0-9-]{0,63}$`) reported as `unrecognized`. They used to
+    carry the whole compile response under `details.result`.
+  - Socket rejections (`connectionRejected`, still `AUTH_EXPIRED`), failed `joinDoc`, `leaveDoc`,
+    and `applyOtUpdate` acknowledgements, `otUpdateError`, and Socket.IO error packets no longer
+    put the upstream payload in the message; `details.reason` is an identifier for a message this
+    release knows, or `unrecognized`. `otUpdateError`'s `details.message`, which could quote the
+    rejected update, is gone. A raw socket error while joining a project is `REMOTE_ERROR` with a
+    fixed message.
+  - An upload's or zip import's `error` reaches `details.overleafError` only as a short lowercase
+    code.
+  - `manage_entity`'s `create_folder` result has `created: { _id, name }`, not Overleaf's raw
+    folder object.
+  - A response that should be JSON and is not is `PROTOCOL_UNSUPPORTED` with `{ path,
+    contentType }`. It used to be a `REMOTE_ERROR` whose message could quote the body.
+- **The connect-time instructions** are 392 words, down from 445, leaving headroom for 0.6.0 and
+  0.8.0. They now cover confirming replacements, `deprecations`, and `POLICY_DENIED` and
+  `PATH_OUTSIDE_ROOT`, and leave out what the tool descriptions already say.
+- The `sync_directory` and `batch_upload` descriptions describe the transition.
+- Inside the package, tool definitions moved from `src/mcp/tools.ts` to `src/contracts/`, the
+  argument shaping to `src/service/`, and `OverleafToolRuntime` became `OverleafServiceRuntime`.
+  `McpErrorCode` is derived from `ERROR_CODES`. The move itself left `tools/list` unchanged.
+
+### Documentation
+
+- The configuration guide has an access policy section, with the four variables, the effects, and
+  an example. The safety model adds "What changes in 0.6.0", "The access policy is not a
+  sandbox", the id, origin, and redirect rules, how upstream text is kept out of errors, and
+  `POLICY_DENIED` and the `PATH_OUTSIDE_ROOT` kinds in its error table.
+- The tool reference documents the new parameters, a table of what an upload needs by what is at
+  the path in 0.5.x and from 0.6.0, `download_file` as destructive, and `deprecations`. The README
+  tool table gains a Local effect column, and its safety list mentions the policy.
+- The internals page describes the layers (contracts, service, domain engine) and shows
+  `overleaf-web-mcp/core` in use; the development guide covers the interface boundary and the
+  snapshot and contract tests; the private API catalogue covers redirects, non-JSON bodies, and
+  socket error reasons.
+- `AGENTS.md` records the one-minor rule for tightening a default, which parameters count as
+  confirmation, the policy and boundary rules, and that stdout is reserved under `serve`.
+- The roadmap marks v0.5.0 shipped and records how its design settled.
+
 ## [0.4.1] - 2026-10-06
 
 The v0.4.x point release. `batch_upload` sends a list of local files to the project paths given,
@@ -468,6 +627,7 @@ still registers 19 tools. Planned in [ROADMAP.md](https://github.com/mhmdaskari/
 - First release: browser-assisted session capture, project and file management, revision-checked
   and section-level writing, compilation, and review comments.
 
+[0.5.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.5.0
 [0.4.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.4.1
 [0.4.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.4.0
 [0.3.2]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.3.2
