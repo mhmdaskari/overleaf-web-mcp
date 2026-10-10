@@ -2,15 +2,26 @@
 
 The server registers 29 tools. Names are `snake_case`. Every tool except `auth_status`,
 `list_projects`, `create_project`, and `import_project_zip` takes a `projectId` from
-`list_projects` or from one of the tools that create a project. Results are JSON; `auth_status`,
-`list_projects`, the project lifecycle tools, `batch_upload`, `download_project_zip`, and the
-folder sync tools also declare an `outputSchema` and return the same object as
-`structuredContent`. Failures are JSON with `code`, `message`, `retryable`, and optional `details`;
-the codes are listed in the [safety model](safety.md#error-codes). The Overleaf routes behind each
-tool are catalogued in the [private API page](private-api.md).
+`list_projects` or from one of the tools that create a project. An id never contains `/`, `\`,
+`.`, `?`, `#`, or `%`; one that does is refused with `INVALID_ARGUMENT` before anything is sent.
+Results are JSON; `auth_status`, `list_projects`, the project lifecycle tools, `upload_file`,
+`batch_upload`, `download_project_zip`, and the folder sync tools also declare an `outputSchema`
+and return the same object as `structuredContent`. Failures are JSON with `code`, `message`,
+`retryable`, and optional `details`; the codes are listed in the
+[safety model](safety.md#error-codes). The Overleaf routes behind each tool are catalogued in the
+[private API page](private-api.md).
 
-Each tool declares MCP annotations: **read-only** tools change nothing on Overleaf; **destructive**
-tools can replace or remove existing content. Clients may use these to decide when to ask the user.
+Each tool declares MCP annotations: **read-only** tools change nothing on Overleaf and write
+nothing locally; **destructive** tools can replace or remove existing content, on Overleaf or on
+the server's disk. Clients may use these to decide when to ask the user. When the
+[access policy](configuration.md#access-policy) is configured, any tool can be refused with
+`POLICY_DENIED` or `PATH_OUTSIDE_ROOT` before anything is sent.
+
+**Deprecations.** Release 0.6.0 tightens three defaults: an upload that replaces something without
+saying so, a folder sync without a `planToken`, and `batch_upload` without an explicit
+`onConflict`. In 0.5.x such a call still does what it did before, and its result carries
+`deprecations`, a list of `{ parameter, message, enforcedIn: "0.6.0" }` naming what to pass from
+now on. The [safety model](safety.md#what-changes-in-060) lists each one.
 
 ## Account and projects
 
@@ -201,8 +212,8 @@ Create a folder, or rename, move, or delete an existing document, file, or folde
 | `destinationFolderPath` | for `move` | Target folder; `""` is the project root |
 | `confirmPath` | for `delete` | Must equal `path` exactly, else `CONFIRMATION_MISMATCH` |
 
-Returns the `action`, the affected entity `id` (or the created folder), and `trackChangesActive`.
-Deleting a folder removes everything inside it.
+Returns the `action`, the affected entity `id` (or the created folder as `created: { _id, name }`),
+and `trackChangesActive`. Deleting a folder removes everything inside it.
 
 ### `upload_file` <small>destructive</small>
 
@@ -214,6 +225,9 @@ Upload a local file into a project folder.
 | `localPath` | yes | Local file to upload |
 | `destinationFolderPath` | no | Target folder; default `""`, the project root |
 | `destinationName` | no | Name to store the file under; defaults to the local file name |
+| `overwrite` | no | `true` allows replacing a binary file at the path; `false` refuses to replace anything. No default until 0.6.0, when it becomes `false` |
+| `expectedHash` | no | The `hash` `get_project_tree` reported for the binary file being replaced, 40 lowercase hex characters |
+| `uncheckedDocumentReplace` | no | Allow replacing a text document, which has no revision check |
 
 If an entity already exists at the destination path, Overleaf replaces it; otherwise a new entity
 is created. A text document replaced by a text document keeps its entity id. A replaced binary
@@ -223,6 +237,24 @@ reusing the old one. Overleaf, not the caller, decides whether the result is a t
 binary `file`, by extension and UTF-8 validity, so this is a valid way to replace `.tex`, `.bib`,
 and `.bst` documents from disk.
 
+What is at the path decides what the call needs, and every check runs inside the upload's queue
+job, after a fresh look at the tree and before anything is sent:
+
+| At the path | 0.5.x | From 0.6.0 |
+| --- | --- | --- |
+| nothing | uploaded | uploaded |
+| a binary file, with `overwrite: true` or a matching `expectedHash` | replaced | replaced |
+| a binary file, `overwrite` omitted | replaced, with a `deprecations` entry for `overwrite` | `CONFIRMATION_MISMATCH` |
+| a text document, with `uncheckedDocumentReplace: true` | replaced | replaced |
+| a text document, without it | replaced, with a `deprecations` entry for `uncheckedDocumentReplace` | `INVALID_ARGUMENT`, naming `write_file` with `localPath` |
+| a text document or binary file, with `overwrite: false` | `CONFIRMATION_MISMATCH`, nothing sent | the same |
+
+An `expectedHash` that does not match what is at the path, nothing and a text document included,
+fails with `REMOTE_DRIFT` and nothing is sent. It is a preflight, not a compare-and-swap: the
+upload route accepts no expected state, so a replacement that lands between the check and the
+upload is lost. Replacing a text document also needs the `unchecked-replace` effect when the
+access policy limits effects.
+
 Replacing a document this way is a blind write with no revision check. Overleaf compares the new
 text with the old and applies the difference, and records it as tracked changes when track
 changes is already on for this account; otherwise it is untracked. The caller cannot choose
@@ -230,10 +262,12 @@ either way. A new file created by upload is never tracked content. A folder of t
 the destination folder fails the upload with `INVALID_ARGUMENT` (`details.overleafError:
 "duplicate_file_name"`).
 
-Returns `entityId`, `entityType`, `path`, `replaced` (whether something existed at that path), and
-for binary files `hash`, computed locally so it can be checked against `get_project_tree` later.
-The result's `writeMode` always reads `untracked`, even when Overleaf recorded a document
-replacement as tracked changes; v0.5.0 resolves this.
+Returns `entityId`, `entityType`, `path`, `replaced` (whether something existed at that path),
+for binary files `hash`, computed locally so it can be checked against `get_project_tree` later,
+`trackChangesActive`, `writeMode`, and `deprecations` when the call relied on a default 0.6.0
+removes. `writeMode` is `tracked` when a text document replaced a text document while track
+changes is on for this account, because Overleaf then records the difference as tracked changes,
+and `untracked` otherwise: for a binary, a new file, or with track changes off.
 
 ### `batch_upload` <small>destructive</small>
 
@@ -243,7 +277,8 @@ Upload a list of local files, each to its own project path, in one call.
 | --- | :---: | --- |
 | `projectId` | yes | Project id |
 | `files` | yes | 1 to 500 entries `{ localPath, destinationPath }`. `destinationPath` is the full project path, file name included, such as `figures/fig1.pdf` |
-| `onConflict` | no | `overwrite` (default) replaces what is at a path, as `upload_file` does; `skip` leaves it alone and lists it under `skipped` |
+| `onConflict` | no | `overwrite` replaces a binary file at a path, as `upload_file` with `overwrite: true` does; `skip` leaves what is there alone and lists it under `skipped`. Omitted, it overwrites; from 0.6.0 no default replaces anything |
+| `uncheckedDocumentReplace` | no | Allow replacing text documents, which has no revision check |
 | `stopOnError` | no | Stop at the first failure instead of continuing; default `false` |
 
 It is a composition of `upload_file` and `manage_entity`'s `create_folder`, like the
@@ -284,7 +319,9 @@ Overleaf decides whether each file becomes a text `doc` or a binary `file`, as f
 Replacing a document this way is a blind write with no revision check, so a collaborator's
 concurrent edit is lost; Overleaf records the replacement as tracked changes only when track
 changes is already on for this account. For documents someone may be editing, use `write_file`
-with `localPath`, or `plan_sync` and `sync_directory`.
+with `localPath`, or `plan_sync` and `sync_directory`. Each file goes through `upload_file`'s
+checks: a replaced document without `uncheckedDocumentReplace: true`, and any replacement with
+`onConflict` omitted, are listed in `deprecations`, and refused from 0.6.0.
 
 Returns:
 
@@ -301,13 +338,15 @@ Returns:
 - `verified`: `true` when the tree was read back and every completed upload was confirmed in it,
   or when nothing was attempted; `false` when the read-back failed, in which case the entries are
   as the uploads reported them.
+- `deprecations`, when a replacement relied on a default 0.6.0 removes.
 
 Nothing is retried. A client that sends a progress token receives `notifications/progress` as
 each file is uploaded.
 
-### `download_file` <small>read-only</small>
+### `download_file` <small>destructive</small>
 
-Save one document or binary file to a local path.
+Save one document or binary file to a local path. It changes nothing on Overleaf; it is annotated
+destructive, not read-only, because it writes a local file and can replace one.
 
 | Parameter | Required | Meaning |
 | --- | :---: | --- |
@@ -317,7 +356,9 @@ Save one document or binary file to a local path.
 | `overwrite` | no | Replace `localPath` if it exists; default `false` |
 
 Returns `bytes` and `localPath`. Fails with `INVALID_ARGUMENT` when the local file exists and
-`overwrite` is not `true`.
+`overwrite` is not `true`. A `localPath` that is the saved session's cookie jar or browser
+profile, or lies outside `OVERLEAF_LOCAL_WRITE_ROOTS` when that is set, fails with
+`PATH_OUTSIDE_ROOT` before anything is downloaded.
 
 ### `download_project_zip` <small>destructive</small>
 
@@ -331,8 +372,9 @@ archive as Overleaf's "Download as zip".
 | `overwrite` | no | Replace `localPath` if it exists; default `false` |
 | `timeoutMs` | no | How long the whole transfer may take, 1 second to 15 minutes; default 5 minutes |
 
-The local checks run before anything is requested: a missing parent folder is `NOT_FOUND`, a
-folder at `localPath` is `INVALID_ARGUMENT`, and an existing file without `overwrite: true` is
+The local checks run before anything is requested: the saved session's files, and a path outside
+`OVERLEAF_LOCAL_WRITE_ROOTS` when that is set, are `PATH_OUTSIDE_ROOT`, a missing parent folder is
+`NOT_FOUND`, a folder at `localPath` is `INVALID_ARGUMENT`, and an existing file without `overwrite: true` is
 `CONFIRMATION_MISMATCH` (where `download_file` answers `INVALID_ARGUMENT`). The temporary file the
 archive is streamed to is created in the same folder at this point too, so a folder that cannot be
 written fails with `INVALID_ARGUMENT` (`details.errno`, such as `EACCES`) before the request uses
@@ -369,7 +411,7 @@ file existed at `localPath`).
 | --- | --- | :---: | :---: | --- |
 | Small edit, or collaborators may be editing | `write_file` with `content` | yes | optional | inline |
 | Replace a large text file safely | `write_file` with `localPath` | yes | optional | disk |
-| Replace a binary, or push text when nobody else is editing | `upload_file` | no | account setting | disk |
+| Replace a binary, or push text when nobody else is editing | `upload_file` with `overwrite` or `uncheckedDocumentReplace` | no | account setting | disk |
 | Upload a list of files to paths you choose | `batch_upload` | no | account setting | disk |
 | Bring a whole folder up to date | `plan_sync`, then `sync_directory` | yes, for documents | optional | disk |
 
@@ -477,7 +519,8 @@ Make a project folder match a local folder.
 | `localFolderPath` | yes | Local folder on the server's disk |
 | `mode` | yes | `additive` uploads and writes only; `mirror` also deletes what exists only in the project |
 | `destinationFolderPath` | no | As for `plan_sync`; default `""` |
-| `planToken` | no | From `plan_sync`, or from a partial `sync_directory` to resume it |
+| `planToken` | no | From `plan_sync`, or from a partial `sync_directory` to resume it. Omitting it is deprecated; from 0.6.0 it is required unless `unplanned` is set |
+| `unplanned` | no | `true` runs an additive sync without a `planToken` on purpose; refused with a `planToken` or in mirror mode |
 | `confirmDeleteCount` | for `mirror` | The number of entries in `plan_sync`'s `remoteOnly`, each folder counting once |
 | `ignore` | no | As for `plan_sync`; must match the plan's when a `planToken` is given |
 | `writeMode` | no | `untracked` (default) or `tracked` |
@@ -485,8 +528,11 @@ Make a project folder match a local folder.
 
 What happens, in order:
 
-1. The folder and the project are compared again, exactly as `plan_sync` does. With a
-   `planToken`, a sync whose project side or local side differs from the plan fails with
+1. `unplanned: true` with a `planToken`, or in mirror mode, is `INVALID_ARGUMENT` before anything
+   is read. The folder and the project are then compared again, exactly as `plan_sync` does.
+   Without a `planToken` there is nothing to compare them with, so the sync applies what it finds
+   now; that is deprecated and refused from 0.6.0 unless an additive sync passes `unplanned: true`.
+   With a `planToken`, a sync whose project side or local side differs from the plan fails with
    `REMOTE_DRIFT` and changes nothing; `details.changed` is `remote`, `local`, or `both`. The
    token covers every entity in scope, identical ones included, so a collaborator's edit to a
    file the plan called identical stops the sync instead of being overwritten. A token issued
@@ -499,7 +545,9 @@ What happens, in order:
    is replaced with `write_file` semantics against the revision just compared, so a concurrent
    edit fails that one file with `REVISION_CONFLICT` and is never overwritten. A changed binary
    and every new file are uploaded, and Overleaf decides whether a new file is a document or a
-   binary. With `writeMode: "tracked"`, changed documents are written as tracked changes, and
+   binary. The upload checks, just before it is sent, that a new path is still empty and a changed
+   binary still has the hash the plan compared; anything else fails that file with `REMOTE_DRIFT`,
+   which also withholds every delete. With `writeMode: "tracked"`, changed documents are written as tracked changes, and
    new files Overleaf treats as text (`.tex`, `.bib`, `.sty`, `.cls`, `.bst`, `.txt`, and
    similar) are created as documents with tracked content, the way `create_file` does, since a
    new file created by upload is never tracked content; binaries are uploaded as usual.
@@ -513,8 +561,9 @@ What happens, in order:
 Nothing is retried automatically. Returns `status` (`complete`, or `partial` when anything failed
 or was not attempted), `mode`, `completed` (`{ destinationPath, action, entityId? }`), `failed`
 (`{ destinationPath, action, errorCode, message }`), `remaining` (`{ destinationPath, action }`,
-what was not attempted), `identicalCount`, and `planToken`. `action` is `create_folder`,
-`upload`, `write`, `create`, or `delete`.
+what was not attempted), `identicalCount`, `planToken`, `planned` (whether the call was checked
+against a `planToken`), and `deprecations` for a call without a `planToken` or `unplanned: true`.
+`action` is `create_folder`, `upload`, `write`, `create`, or `delete`.
 
 The returned `planToken` describes the state this sync left: what it changed as the project now
 shows it, and everything else as it was planned. Re-running with it resumes a partial sync, and
@@ -602,8 +651,10 @@ Compile the project.
 
 Returns Overleaf's compile response: `status`, `outputFiles` (each with `path`, `url`, `type`, and
 `build`), `rootFilePath` (the document actually compiled), and further fields Overleaf includes
-such as `stats` and `timings`. A status other than `success` fails with `COMPILE_FAILED` carrying
-the full response in `details.result`. A project with no configured root and no `rootFilePath`
+such as `stats` and `timings`. A status other than `success` fails with `COMPILE_FAILED`, with
+`details` `{ status, rootFilePath, result: { status } }`; a status that is not a short lowercase
+identifier is reported as `unrecognized`. `details.result` is deprecated and goes in 0.6.0, when
+a failed build returns a parsed summary instead. A project with no configured root and no `rootFilePath`
 fails with `INVALID_ARGUMENT`. Compiles use the account's compile allowance; `timeoutMs` bounds
 only the wait.
 

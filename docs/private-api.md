@@ -98,3 +98,18 @@ The HTTP client maps statuses before any tool sees them: 401 or a redirect to `/
 `RATE_LIMITED` with `retryAfterMs` from `Retry-After` when present (the zip download sends
 none), and anything else that is not successful is `REMOTE_ERROR` with `details.status`. Writes
 are never retried on any of these.
+
+Every id in a route is URI-encoded, and a project or thread id containing `/`, `\`, `.`, `?`,
+`#`, or `%` is refused before a request is built. A path that would resolve to another origin
+than `OVERLEAF_BASE_URL`'s is refused before it is sent. Reads follow redirects; a request that
+changes something follows none, because fetch would carry the `x-csrf-token` header to another
+origin: a redirect to `/login` is still `AUTH_EXPIRED`, any other is `REMOTE_ERROR` with the
+status. A body that should be JSON and is not, such as an HTML page, is `PROTOCOL_UNSUPPORTED`
+with `details.path` and `details.contentType`, never quoted. A rejection's `error` field reaches
+`details.overleafError` only when it is a short lowercase code.
+
+Socket errors (`connectionRejected`, a failed `joinDoc`, `leaveDoc`, or `applyOtUpdate`
+acknowledgement, `otUpdateError`, and a Socket.IO error packet) are free text, and
+`otUpdateError` can quote the rejected update. Their text never reaches a caller: a message this
+release recognizes becomes an identifier in `details.reason`, such as `invalid_session` or
+`update_too_large`, and anything else is `unrecognized`.

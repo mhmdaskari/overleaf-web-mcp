@@ -63,9 +63,12 @@ text, and resolve or reopen threads.
   changed underneath.
 - Tracked changes are opt-in and never silently downgraded to plain edits.
 - Deletes require the path, or the number of entries, to be confirmed; downloads, including a
-  whole-project zip, never overwrite a local file unless asked.
+  whole-project zip, never overwrite a local file unless asked, and never touch the saved session.
 - Given the `planToken` from `plan_sync`, a folder sync stops before changing anything if either
-  side changed since the plan.
+  side changed since the plan. A sync without one, and an upload that replaces a file without
+  saying so, still run in 0.5.x and are refused from 0.6.0.
+- An optional [access policy](configuration.md#access-policy) limits which projects, local
+  folders, and kinds of change the server may touch.
 - A write that times out is observed, never resubmitted, so nothing is applied twice.
 - Your session cookie stays on your machine in a file only you can read, and is never returned by
   any tool.

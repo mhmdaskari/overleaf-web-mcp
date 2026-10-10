@@ -78,47 +78,48 @@ Client-by-client steps, self-hosted Overleaf, and troubleshooting, including the
 
 ## Tools
 
-All 29 tools, grouped as in the [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/), which has every parameter and result. Read-only tools change nothing on Overleaf. Destructive tools can replace or remove existing content. Most of them need a value repeated back first: the path, name, or count of what they delete, the revision of the document they replace, or `overwrite: true` for a local file that exists. Four do not: `upload_file` and `batch_upload` replace whatever is at the destination path (unless `batch_upload` is given `onConflict: "skip"`), `stop_compile` stops a running build, and `sync_directory` in additive mode checks against a plan only when it is given a `planToken`.
+All 29 tools, grouped as in the [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/), which has every parameter and result. Read-only tools change nothing on Overleaf and write nothing on your computer. Destructive tools can replace or remove existing content. All but `stop_compile` need a value repeated back first: the path, name, or count of what they delete, the revision of the document they replace, the `planToken` of a folder sync, or `overwrite` for a file that exists. Until 0.6.0, an upload that replaces a file and a folder sync without a `planToken` still run without one and report a deprecation; from 0.6.0 they are refused. The last column shows which tools read or write files on the computer the server runs on.
 
-| Group | Tool | What it does | Annotation |
-| --- | --- | --- | --- |
-| Account | `auth_status` | Verify the saved session and report when it expires | read-only |
-| Account | `list_projects` | List and search projects, newest first | read-only |
-| Project lifecycle | `create_project` | Create a blank or example project | |
-| Project lifecycle | `clone_project` | Copy a project, files and settings included | |
-| Project lifecycle | `import_project_zip` | Create a project from a local `.zip` archive | |
-| Project lifecycle | `manage_project` | Rename, trash, restore, archive, unarchive, or delete a project | destructive |
-| Project lifecycle | `update_project_settings` | Set the root document, TeX engine, TeX Live image, or spell-check language | |
-| Files | `get_project_tree` | Read the file tree with the project's compile settings | read-only |
-| Files | `read_file` | Read a text document and its revision | read-only |
-| Files | `write_file` | Replace a document with a revision-checked, minimal edit | destructive |
-| Files | `create_file` | Create a text document, optionally with content | |
-| Files | `manage_entity` | Create a folder, or rename, move, or delete an entity | destructive |
-| Files | `upload_file` | Upload a local file, replacing whatever is at that path | destructive |
-| Files | `batch_upload` | Upload a list of local files to the paths given, creating missing folders | destructive |
-| Files | `download_file` | Save a document or binary file locally | read-only |
-| Files | `download_project_zip` | Save the whole project locally as one zip archive | destructive |
-| Folder sync | `plan_sync` | Compare a local folder with the project and show what a sync would do | read-only |
-| Folder sync | `sync_directory` | Upload what changed, and in mirror mode delete what is gone locally | destructive |
-| Folder sync | `delete_entities` | Delete several files or folders in one confirmed call | destructive |
-| Sections | `get_sections` | Parse the section headings of one file | read-only |
-| Sections | `get_section_content` | Read one section's body | read-only |
-| Sections | `write_section` | Replace one section's body, revision-checked | destructive |
-| Compilation | `compile_project` | Compile the project | |
-| Compilation | `stop_compile` | Stop the active compile | destructive |
-| Review | `list_comments` | List review threads with their locations | read-only |
-| Review | `reply_to_comment` | Reply in an existing thread | |
-| Review | `add_comment` | Add a comment anchored to exact text | |
-| Review | `set_comment_status` | Resolve or reopen a thread | destructive |
-| History | `monitor_project_history` | Poll recent project history with a cursor | read-only |
+| Group | Tool | What it does | Annotation | Local effect |
+| --- | --- | --- | --- | --- |
+| Account | `auth_status` | Verify the saved session and report when it expires | read-only | |
+| Account | `list_projects` | List and search projects, newest first | read-only | |
+| Project lifecycle | `create_project` | Create a blank or example project | | |
+| Project lifecycle | `clone_project` | Copy a project, files and settings included | | |
+| Project lifecycle | `import_project_zip` | Create a project from a local `.zip` archive | | reads |
+| Project lifecycle | `manage_project` | Rename, trash, restore, archive, unarchive, or delete a project | destructive | |
+| Project lifecycle | `update_project_settings` | Set the root document, TeX engine, TeX Live image, or spell-check language | | |
+| Files | `get_project_tree` | Read the file tree with the project's compile settings | read-only | |
+| Files | `read_file` | Read a text document and its revision | read-only | |
+| Files | `write_file` | Replace a document with a revision-checked, minimal edit | destructive | reads |
+| Files | `create_file` | Create a text document, optionally with content | | |
+| Files | `manage_entity` | Create a folder, or rename, move, or delete an entity | destructive | |
+| Files | `upload_file` | Upload a local file, replacing what is at that path when confirmed | destructive | reads |
+| Files | `batch_upload` | Upload a list of local files to the paths given, creating missing folders | destructive | reads |
+| Files | `download_file` | Save a document or binary file locally | destructive | writes |
+| Files | `download_project_zip` | Save the whole project locally as one zip archive | destructive | writes |
+| Folder sync | `plan_sync` | Compare a local folder with the project and show what a sync would do | read-only | reads |
+| Folder sync | `sync_directory` | Upload what changed, and in mirror mode delete what is gone locally | destructive | reads |
+| Folder sync | `delete_entities` | Delete several files or folders in one confirmed call | destructive | |
+| Sections | `get_sections` | Parse the section headings of one file | read-only | |
+| Sections | `get_section_content` | Read one section's body | read-only | |
+| Sections | `write_section` | Replace one section's body, revision-checked | destructive | |
+| Compilation | `compile_project` | Compile the project | | |
+| Compilation | `stop_compile` | Stop the active compile | destructive | |
+| Review | `list_comments` | List review threads with their locations | read-only | |
+| Review | `reply_to_comment` | Reply in an existing thread | | |
+| Review | `add_comment` | Add a comment anchored to exact text | | |
+| Review | `set_comment_status` | Resolve or reopen a thread | destructive | |
+| History | `monitor_project_history` | Poll recent project history with a cursor | read-only | |
 
 ## How it keeps your project safe
 
 - Text edits require the revision from a prior read and fail with a conflict if the document changed underneath.
 - Tracked changes are opt-in and never silently downgraded to plain edits.
-- Deleting a file requires its path to be confirmed, deleting several requires their count, and trashing or deleting a project requires its name. Projects go to the trash first; permanent deletion only works from there. Downloads, including a whole-project zip, never overwrite a local file unless asked.
+- Deleting a file requires its path to be confirmed, deleting several requires their count, and trashing or deleting a project requires its name. Projects go to the trash first; permanent deletion only works from there. Downloads, including a whole-project zip, never overwrite a local file unless asked, and never write over the saved session.
 - A write that times out is observed, never resubmitted, so nothing is applied twice. The same holds for each file in a batch upload.
-- Given the `planToken` from `plan_sync`, a folder sync stops before changing anything if the project or the folder changed since the plan. Without one there is nothing to compare against. It deletes only in mirror mode, only with the delete count confirmed, and never after a failed upload.
+- Given the `planToken` from `plan_sync`, a folder sync stops before changing anything if the project or the folder changed since the plan. Without one there is nothing to compare against, which 0.6.0 will refuse. It deletes only in mirror mode, only with the delete count confirmed, and never after a failed upload.
+- Optionally, you can limit which projects, which folders on your computer, and which kinds of change the server may touch ([access policy](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/#access-policy)). It keeps an assistant inside what you gave it; it is not a sandbox.
 - Your session cookie stays on your machine in a file only you can read, and is never returned by any tool.
 - While a project is open, up to 90 seconds after the last call, you may appear online to collaborators.
 
@@ -174,7 +175,7 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | [Using it](https://mhmdaskari.github.io/overleaf-web-mcp/using/) | Example prompts and what happens underneath |
 | [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 29 tools with parameters and results |
 | [Safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) | Revisions, tracked changes, confirmations, error codes |
-| [Configuration](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/) | Environment variables, proxies, where the session is stored, and keeping it alive |
+| [Configuration](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/) | Environment variables, the access policy, proxies, where the session is stored, and keeping it alive |
 | [Internals](https://mhmdaskari.github.io/overleaf-web-mcp/internals/) | Protocol notes, reliability guarantees, related projects |
 | [Roadmap](https://mhmdaskari.github.io/overleaf-web-mcp/roadmap/) and [Changelog](https://mhmdaskari.github.io/overleaf-web-mcp/changelog/) | Where this is going and what changed |
 

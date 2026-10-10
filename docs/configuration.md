@@ -25,6 +25,10 @@ server, for example in the `env` block of the client's MCP configuration. Defaul
 | `HTTPS_PROXY`, `https_proxy` | Unset | Proxy for an `https://` base URL; see [behind a proxy](#behind-a-proxy) |
 | `HTTP_PROXY`, `http_proxy` | Unset | Proxy for an `http://` base URL |
 | `NO_PROXY`, `no_proxy` | Unset | Hosts reached directly, bypassing the proxy |
+| `OVERLEAF_ALLOWED_PROJECTS` | Unset, every project | Comma-separated project ids the server may touch; see [access policy](#access-policy) |
+| `OVERLEAF_LOCAL_READ_ROOTS` | Unset, anywhere | Absolute folders local reads must stay inside, separated by `:` (`;` on Windows) |
+| `OVERLEAF_LOCAL_WRITE_ROOTS` | Unset, anywhere but the session | Absolute folders local writes must stay inside, separated the same way |
+| `OVERLEAF_ALLOWED_EFFECTS` | Unset, every effect | Comma-separated effects operations may have |
 
 An `ol-maxDocLength` value advertised by the Overleaf deployment takes precedence over the
 fallback. Content at or above the limit returns `DOC_TOO_LARGE`; an oversized serialized update
@@ -162,6 +166,66 @@ proxy support, so it works on Node 20 and needs no `NODE_USE_ENV_PROXY`.
 
 `login` signs in through Chrome, which applies its own proxy settings. The check that follows
 sign-in uses the proxy above, as `serve` and `keepalive` do.
+
+## Access policy
+
+Four variables limit what the server may touch. Each one is unset by default, which allows
+everything of its kind, and the server checks every operation against all four before it sends
+anything, so a refused call costs no request. A misconfigured value, such as a relative root or a
+root that does not exist, stops the server at startup with `INVALID_ARGUMENT` naming the
+variable.
+
+| Variable | Limits | Refusal |
+| --- | --- | --- |
+| `OVERLEAF_ALLOWED_PROJECTS` | Which projects any tool may read or change, by id. `list_projects` and `auth_status` show and count only these. A project created by this process (`create_project`, `clone_project`, `import_project_zip`) is allowed for the rest of the process. | `POLICY_DENIED` |
+| `OVERLEAF_LOCAL_READ_ROOTS` | Which local files and folders may be read: `write_file` and `upload_file` with `localPath`, `batch_upload`, `import_project_zip`, `plan_sync`, and `sync_directory`. | `PATH_OUTSIDE_ROOT`, `details.kind: "outside_read_roots"` |
+| `OVERLEAF_LOCAL_WRITE_ROOTS` | Where `download_file` and `download_project_zip` may write. | `PATH_OUTSIDE_ROOT`, `details.kind: "outside_write_roots"` |
+| `OVERLEAF_ALLOWED_EFFECTS` | Which kinds of change any operation may make. | `POLICY_DENIED`, `details.effect` |
+
+Roots are resolved with `realpath` when the server starts, and a path is judged by where it
+leads, so a symbolic link inside a root that points outside it is refused. Whatever the policy,
+a download never writes over the cookie jar, its lock and temporary files, or the browser
+profile `login` uses (`PATH_OUTSIDE_ROOT`, `details.kind: "session_files"`).
+
+The effects are:
+
+| Effect | What it covers |
+| --- | --- |
+| `overleaf-read` | Reading project data |
+| `overleaf-write` | Changing content, comments, or the tree without removing anything |
+| `overleaf-delete` | Removing an entity, or permanently deleting a project |
+| `project-lifecycle` | Creating, cloning, importing, renaming, trashing, archiving, or configuring a project |
+| `compile` | Starting or stopping a compile |
+| `local-read` | Reading a file or folder on the server's disk |
+| `local-write` | Creating or replacing a file on the server's disk |
+| `unchecked-replace` | Replacing a text document with no revision check, by `upload_file` or `batch_upload` |
+
+Nearly every operation reads project data, writes included, so `overleaf-read` belongs in any
+useful list. An operation that reads after it changes something, such as `create_project`
+reading the new project's tree, needs every effect it will use before it starts, so a refusal
+never lands after the change.
+
+For example, an assistant that may only read one project and save copies of its files into one folder:
+
+```json
+{
+  "mcpServers": {
+    "overleaf": {
+      "command": "npx",
+      "args": ["-y", "overleaf-web-mcp", "serve"],
+      "env": {
+        "OVERLEAF_ALLOWED_PROJECTS": "64b7f1c2e4b0a1b2c3d4e5f6",
+        "OVERLEAF_ALLOWED_EFFECTS": "overleaf-read,local-write",
+        "OVERLEAF_LOCAL_WRITE_ROOTS": "/home/me/overleaf-drafts"
+      }
+    }
+  }
+}
+```
+
+The policy keeps an assistant inside what it was given; it is not a sandbox against a malicious
+process on the same machine. The [safety model](safety.md#the-access-policy-is-not-a-sandbox)
+says exactly where it stops.
 
 ## Presence
 

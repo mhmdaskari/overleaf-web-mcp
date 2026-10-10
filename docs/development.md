@@ -24,6 +24,26 @@ midway (no delete runs, and the returned token resumes), a remote or local chang
 sync (`REMOTE_DRIFT`, nothing applied), and a collaborator's edit during the sync
 (`REVISION_CONFLICT` for that file only).
 
+Other tests guard the shape of the code. `test/server.test.ts` compares `tools/list` with the
+committed snapshot in `test/__snapshots__/list-tools.json`, so a change to a tool's name,
+description, schema, or annotations shows up in review; update it with `npx vitest run -u` only
+for a change listed in `CHANGELOG.md`. `test/contracts/operations.test.ts` checks every
+operation's annotations against its effects. The access policy is tested through a real runtime
+over an injected fetcher and connection factory, counting requests, and error sanitization by
+feeding a sentinel string through every upstream channel and checking no serialized error holds
+it.
+
+## Layout and boundaries
+
+`src/contracts/` defines every operation once, `src/service/` shapes arguments for the domain
+engine in `src/overleaf/`, `src/protocol/`, and `src/http/`, and `src/mcp/` is one adapter over the
+service; the [internals page](internals.md#layers) describes the layers. ESLint enforces the
+boundary: only `src/mcp/`, `src/server.ts`, `src/cli.ts`, and `src/index.ts` may import the MCP
+SDK or the adapter, type imports included, so `src/sdk.ts`, the `overleaf-web-mcp/core` entry,
+works without it. `console` is refused everywhere in `src/`, and `process.stdout` and
+`process.stderr` outside `src/cli.ts` and `src/server.ts`. CI imports both built entry points by
+package name after the build.
+
 ## Live tests
 
 Live tests are disabled by default and must target a disposable project you own:

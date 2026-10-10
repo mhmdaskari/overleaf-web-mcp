@@ -161,10 +161,13 @@ To remove several entities without a sync, `delete_entities` takes a list of pat
 
 To upload a list of files to paths you choose, without comparing folders, `batch_upload` takes
 `{ localPath, destinationPath }` pairs, where `destinationPath` includes the file name. It checks
-every entry before sending anything, creates missing folders, and by default replaces what is at
-a path, as `upload_file` does; `onConflict: "skip"` leaves existing files alone. Replacing a text
-document this way has no revision check, so for documents a collaborator may be editing, a sync
-or `write_file` is the safer route. A file that fails does not undo the ones before it; the
+every entry before sending anything and creates missing folders. Pass `onConflict`:
+`"overwrite"` replaces a binary file at a path, and `"skip"` leaves existing files alone; left
+out, it still overwrites in 0.5.x, with a deprecation in the result, and from 0.6.0 nothing is
+replaced by default. Replacing a text document this way has no revision check and also needs
+`uncheckedDocumentReplace: true`, so for documents a collaborator may be editing, a sync or
+`write_file` is the safer route. `upload_file` follows the same rules for one file, with
+`overwrite: true`, or `expectedHash` from `get_project_tree`, for a binary. A file that fails does not undo the ones before it; the
 result lists `completed`, `skipped`, `failed`, and `remaining`. Overleaf allows about 500 uploads
 per project in 15 minutes, and the call stops at the first `RATE_LIMITED` rather than send the
 rest.
