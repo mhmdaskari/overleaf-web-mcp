@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 
 import { McpError } from '../core/errors.js'
 import { encodeEventPacket, parseSocketPacket } from './socketio09-codec.js'
+import { upstreamReason } from './upstream-reason.js'
 
 export interface WebSocketPeer extends EventEmitter {
   readyState: number
@@ -90,7 +91,11 @@ export class SocketIo09Peer extends EventEmitter {
     } else if (packet.type === 'disconnect') {
       this.close()
     } else if (packet.type === 'error') {
-      this.#failProtocol(new McpError('REMOTE_ERROR', packet.reason))
+      this.#failProtocol(
+        new McpError('REMOTE_ERROR', 'Overleaf sent a Socket.IO error packet.', {
+          details: { reason: upstreamReason(packet.reason) },
+        })
+      )
     } else if (packet.type === 'connect') {
       super.emit('connect')
     }

@@ -4,7 +4,8 @@ import { McpServer, type Transport } from '@modelcontextprotocol/server'
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio'
 
 import { SERVER_INSTRUCTIONS } from './mcp/instructions.js'
-import { registerOverleafTools, ToolActivity, type OverleafToolRuntime } from './mcp/tools.js'
+import type { OverleafServiceRuntime } from './contracts/service.js'
+import { registerOverleafTools, ToolActivity, type ToolRegistrationOptions } from './mcp/tools.js'
 import { SERVER_NAME, SERVER_VERSION } from './version.js'
 
 export { SERVER_INSTRUCTIONS } from './mcp/instructions.js'
@@ -22,7 +23,11 @@ export const STDIN_CLOSE_GRACE_MS = 1500
  * 2026-07-28, so clients that surface them give the model the safety contract without reading the
  * documentation.
  */
-export function createMcpServer(runtime: OverleafToolRuntime, activity?: ToolActivity): McpServer {
+export function createMcpServer(
+  runtime: OverleafServiceRuntime,
+  activity?: ToolActivity,
+  options: ToolRegistrationOptions = {}
+): McpServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { instructions: SERVER_INSTRUCTIONS }
@@ -30,7 +35,8 @@ export function createMcpServer(runtime: OverleafToolRuntime, activity?: ToolAct
   registerOverleafTools(
     server as unknown as Parameters<typeof registerOverleafTools>[0],
     runtime,
-    activity
+    activity,
+    options
   )
   return server
 }
@@ -48,10 +54,14 @@ export interface StdioConnection {
  * SDK builds server instances from createMcpServer as it needs them. The runtime is shared; the
  * caller closes it.
  */
-export function serveOverStdio(runtime: OverleafToolRuntime, transport?: Transport): StdioConnection {
+export function serveOverStdio(
+  runtime: OverleafServiceRuntime,
+  transport?: Transport,
+  options: ToolRegistrationOptions = {}
+): StdioConnection {
   const activity = new ToolActivity()
   const handle = serveStdio(
-    () => createMcpServer(runtime, activity),
+    () => createMcpServer(runtime, activity, options),
     transport === undefined ? {} : { transport }
   )
   return {
@@ -67,6 +77,8 @@ export interface StdioServerOptions {
   stdinCloseGraceMs?: number
   /** Defaults to process.exit. */
   exit?: (code: number) => void
+  /** Receives `{ tool, code }` notices for failed or deprecated calls; the CLI writes them to stderr. */
+  onDiagnostic?: ToolRegistrationOptions['onDiagnostic']
 }
 
 /**
@@ -76,7 +88,7 @@ export interface StdioServerOptions {
  * shutdown(), used for signals, closes at once.
  */
 export function runStdioServer(
-  runtime: OverleafToolRuntime & { close(): Promise<void> },
+  runtime: OverleafServiceRuntime & { close(): Promise<void> },
   options: StdioServerOptions = {}
 ): { shutdown(): Promise<void> } {
   const input = options.input ?? process.stdin
@@ -84,7 +96,8 @@ export function runStdioServer(
   const graceMs = options.stdinCloseGraceMs ?? STDIN_CLOSE_GRACE_MS
   const connection = serveOverStdio(
     runtime,
-    new StdioServerTransport(input, options.output ?? process.stdout)
+    new StdioServerTransport(input, options.output ?? process.stdout),
+    { onDiagnostic: options.onDiagnostic }
   )
   let closed: Promise<void> | undefined
   const close = (waitMs: number): Promise<void> =>

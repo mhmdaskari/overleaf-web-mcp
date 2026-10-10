@@ -2,15 +2,18 @@ import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { posix } from 'node:path'
 
+import type { ProgressReporter } from '../contracts/context.js'
+import { addDeprecation, type Deprecation } from '../contracts/deprecations.js'
 import { asMcpError, McpError, type McpErrorCode } from '../core/errors.js'
 import { gitBlobHash, gitBlobHashFile } from '../core/hash.js'
 import { loadSyncIgnoreRules } from '../core/ignore-rules.js'
 import { decodeUtf8Text } from '../core/local-file.js'
+import { AccessPolicy } from '../core/policy.js'
 import { scanLocalFolder, type IgnoredLocalEntry, type LocalFile } from '../core/local-folder.js'
 import { decodeRevision } from '../core/revision.js'
 import { normalizeLf } from '../core/text.js'
 import type { ReadFileResult, WriteFileResult, WriteMode } from './documents.js'
-import type { EntityAction, UploadFileOptions } from './entities.js'
+import type { EntityAction, SkippedUpload, UploadedFile, UploadFileOptions } from './entities.js'
 import {
   normalizeProjectPath,
   parentPath,
@@ -43,18 +46,19 @@ export interface SyncDependencies {
     destinationFolderPath: string,
     destinationName: string,
     options?: UploadFileOptions
-  ): Promise<Record<string, unknown>>
+  ): Promise<UploadedFile | SkippedUpload>
   manageEntity(projectId: string, action: EntityAction): Promise<Record<string, unknown>>
   /** Tracked writes need the signed-in user's id; without it a tracked sync is refused. */
   currentUserId?: string | undefined
+  /** Defaults to allowing everything but ids that are not path-safe. */
+  policy?: AccessPolicy | undefined
 }
 
 export type SyncMode = 'additive' | 'mirror'
 export type SyncAction = 'create_folder' | 'upload' | 'write' | 'create' | 'delete'
 export type ConflictReason = 'local_file_remote_folder' | 'local_folder_remote_file' | 'not_utf8_text'
 
-/** Reports progress to a client that asked for it; failures to deliver are ignored. */
-export type ProgressReporter = (progress: number, total: number, message: string) => Promise<void>
+export type { ProgressReporter }
 
 export interface PlannedUpload {
   localPath: string
@@ -114,6 +118,9 @@ export interface SyncDirectoryResult {
   identicalCount: number
   /** Resume or re-check with this; absent when the result could not be re-read. */
   planToken?: string
+  /** Whether the call was checked against a plan token before anything changed. */
+  planned: boolean
+  deprecations?: Deprecation[]
 }
 
 export interface DeleteEntitiesResult {
@@ -152,10 +159,14 @@ export interface BatchUploadResult {
   remaining: Array<{ destinationPath: string; action: BatchUploadAction }>
   /** Whether the tree was read back and confirmed every completed entry; true when nothing was sent. */
   verified: boolean
+  deprecations?: Deprecation[]
 }
 
 export interface BatchUploadOptions {
+  /** Omitted, it overwrites, which is deprecated when something is replaced. */
   onConflict?: BatchUploadConflict | undefined
+  /** Confirms replacing text documents, which has no revision check. */
+  uncheckedDocumentReplace?: boolean | undefined
   stopOnError?: boolean | undefined
   onProgress?: ProgressReporter | undefined
 }
@@ -174,6 +185,8 @@ export interface SyncDirectoryOptions {
   mode: SyncMode
   destinationFolderPath?: string | undefined
   planToken?: string | undefined
+  /** Says an additive sync runs without a plan on purpose; never with a token or in mirror mode. */
+  unplanned?: boolean | undefined
   confirmDeleteCount?: number | undefined
   ignore?: readonly string[] | undefined
   writeMode?: WriteMode | undefined
@@ -362,6 +375,11 @@ function actionFor(work: UploadWork, writeMode: WriteMode): SyncAction {
   return 'upload'
 }
 
+const UNPLANNED_DEPRECATION =
+  'sync_directory without a planToken compares against no plan, so nothing checks that the project and the folder are as plan_sync showed them. From 0.6.0 it fails with CONFIRMATION_MISMATCH: pass the planToken from plan_sync, or, for an additive sync, unplanned: true.'
+const ON_CONFLICT_DEPRECATION =
+  'batch_upload replaced an existing file because onConflict defaults to overwrite. From 0.6.0 no default replaces anything: pass onConflict explicitly.'
+
 const ACTION_VERBS: Record<SyncAction, string> = {
   create_folder: 'Created folder',
   upload: 'Uploaded',
@@ -383,9 +401,11 @@ const ACTION_VERBS: Record<SyncAction, string> = {
  */
 export class SyncApi {
   readonly #deps: SyncDependencies
+  readonly #policy: AccessPolicy
 
   constructor(dependencies: SyncDependencies) {
     this.#deps = dependencies
+    this.#policy = dependencies.policy ?? AccessPolicy.permissive
   }
 
   async planSync(
@@ -393,6 +413,8 @@ export class SyncApi {
     localFolderPath: string,
     options: PlanSyncOptions = {}
   ): Promise<PlanSyncResult> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('local-read', 'overleaf-read')
     const plan = await this.#plan(projectId, localFolderPath, options)
     const limit = options.verbose === true ? Number.POSITIVE_INFINITY : PLAN_LISTING_LIMIT
     return {
@@ -423,7 +445,19 @@ export class SyncApi {
     localFolderPath: string,
     options: SyncDirectoryOptions
   ): Promise<SyncDirectoryResult> {
+    this.#policy.assertProject(projectId)
+    // Every effect the sync may need is checked first, so a refusal never leaves it half applied.
+    this.#policy.assertEffect('local-read', 'overleaf-read', 'overleaf-write')
+    if (options.mode === 'mirror') this.#policy.assertEffect('overleaf-delete')
     const writeMode = options.writeMode ?? 'untracked'
+    if (options.unplanned === true && (options.planToken !== undefined || options.mode === 'mirror')) {
+      throw new McpError(
+        'INVALID_ARGUMENT',
+        options.mode === 'mirror'
+          ? 'unplanned is only for an additive sync; a mirror sync deletes, so it needs the planToken from plan_sync.'
+          : 'Pass either planToken or unplanned: true, not both.'
+      )
+    }
     if (writeMode === 'tracked' && this.#deps.currentUserId === undefined) {
       throw new McpError(
         'PROTOCOL_UNSUPPORTED',
@@ -481,7 +515,7 @@ export class SyncApi {
       )
     }
 
-    return await this.#apply(
+    const result = await this.#apply(
       plan,
       options.mode,
       writeMode,
@@ -490,6 +524,15 @@ export class SyncApi {
         ? undefined
         : async (progress, total, message) => await onProgress(read + progress, read + total, message)
     )
+    const deprecations: Deprecation[] = []
+    if (token === undefined && options.unplanned !== true) {
+      addDeprecation(deprecations, 'planToken', UNPLANNED_DEPRECATION)
+    }
+    return {
+      ...result,
+      planned: token !== undefined,
+      ...(deprecations.length === 0 ? {} : { deprecations }),
+    }
   }
 
   async deleteEntities(
@@ -498,6 +541,8 @@ export class SyncApi {
     confirmCount: number,
     options: DeleteEntitiesOptions = {}
   ): Promise<DeleteEntitiesResult> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read', 'overleaf-delete')
     const normalized = paths.map(path => {
       const folder = normalizeFolderPath(path)
       if (folder === '') throw new McpError('INVALID_ARGUMENT', 'The project root cannot be deleted.')
@@ -564,7 +609,11 @@ export class SyncApi {
     files: readonly BatchUploadFile[],
     options: BatchUploadOptions = {}
   ): Promise<BatchUploadResult> {
+    this.#policy.assertProject(projectId)
+    // The tree is read before and after the uploads, so both reads are allowed before any upload.
+    this.#policy.assertEffect('local-read', 'overleaf-read', 'overleaf-write')
     const onConflict = options.onConflict ?? 'overwrite'
+    const deprecations: Deprecation[] = []
     if (files.length === 0 || files.length > BATCH_UPLOAD_LIMIT) {
       throw new McpError('INVALID_ARGUMENT', `files must list between 1 and ${BATCH_UPLOAD_LIMIT} entries.`)
     }
@@ -603,7 +652,7 @@ export class SyncApi {
       }
     }
     for (const { localPath } of entries) {
-      const local = await stat(localPath).catch((error: unknown) => {
+      const local = await stat(await this.#policy.resolveLocalRead(localPath)).catch((error: unknown) => {
         throw localReadFailure(error, localPath)
       })
       if (!local.isFile()) throw new McpError('INVALID_ARGUMENT', `${localPath} is not a regular file.`)
@@ -686,9 +735,12 @@ export class SyncApi {
             })
           }
         } else {
-          await this.#batchUploadOne(projectId, entry, existing, onConflict, {
+          await this.#batchUploadOne(projectId, entry, existing, onConflict, options.uncheckedDocumentReplace, {
             onAttempt: () => {
               attempts += 1
+            },
+            onReplaced: uploaded => {
+              for (const entry of uploaded) addDeprecation(deprecations, entry.parameter, entry.message)
             },
             onHashed: hash => localHashes.set(destinationPath, hash),
             onSkipped: entityType => result.skipped.push({ destinationPath, localPath, entityType }),
@@ -717,6 +769,11 @@ export class SyncApi {
       if (after !== undefined) this.#verifyBatch(result, after, before, localHashes, timedOut)
     }
     if (result.failed.length > 0 || result.remaining.length > 0) result.status = 'partial'
+    // Counted after the read-back, so a replacement recovered after a timeout is included.
+    if (options.onConflict === undefined && result.completed.some(entry => entry.action === 'upload' && entry.replaced === true)) {
+      addDeprecation(deprecations, 'onConflict', ON_CONFLICT_DEPRECATION)
+    }
+    if (deprecations.length > 0) result.deprecations = deprecations.sort((left, right) => (left.parameter < right.parameter ? -1 : 1))
     return result
   }
 
@@ -725,8 +782,11 @@ export class SyncApi {
     entry: BatchUploadFile,
     existing: ProjectEntity | undefined,
     onConflict: BatchUploadConflict,
+    uncheckedDocumentReplace: boolean | undefined,
     hooks: {
       onAttempt(): void
+      /** A replacement happened, with the deprecated defaults the upload itself relied on. */
+      onReplaced(deprecations: Deprecation[]): void
       onHashed(hash: string): void
       onSkipped(entityType: 'doc' | 'file'): void
       onUploaded(outcome: BatchUploadOutcome): void
@@ -742,24 +802,33 @@ export class SyncApi {
       })).hash
       hooks.onHashed(localHash)
       hooks.onAttempt()
+      // onConflict decides whether a binary may be replaced; documents also need their own opt-in.
       const uploaded = await this.#deps.uploadFile(
         projectId,
         localPath,
         parentPath(destinationPath),
         posix.basename(destinationPath),
-        { ifExists: onConflict === 'skip' ? 'skip' : 'replace' }
+        onConflict === 'skip'
+          ? { ifExists: 'skip' }
+          : {
+              ifExists: 'replace',
+              overwrite: true,
+              ...(uncheckedDocumentReplace === undefined ? {} : { uncheckedDocumentReplace }),
+            }
       )
-      const entityType = uploadedEntityType(uploaded.entityType)
-      if (uploaded.skipped === true) {
-        hooks.onSkipped(entityType ?? 'file')
+      if ('skipped' in uploaded) {
+        hooks.onSkipped(uploaded.entityType)
         return
       }
+      const entityType = uploadedEntityType(uploaded.entityType)
+      const replaced = typeof uploaded.replaced === 'boolean' ? uploaded.replaced : existing !== undefined
+      if (replaced) hooks.onReplaced(uploaded.deprecations ?? [])
       hooks.onUploaded({
         destinationPath,
         action: 'upload',
         ...(typeof uploaded.entityId === 'string' ? { entityId: uploaded.entityId } : {}),
         ...(entityType === undefined ? {} : { entityType }),
-        replaced: typeof uploaded.replaced === 'boolean' ? uploaded.replaced : existing !== undefined,
+        replaced,
       })
     } catch (error) {
       // The file can vanish between the hash and the upload's own read.
@@ -900,8 +969,10 @@ export class SyncApi {
   async #plan(projectId: string, localFolderPath: string, options: PlanSyncOptions): Promise<Plan> {
     const destination = normalizeFolderPath(options.destinationFolderPath)
     const extraIgnore = options.ignore ?? []
-    const rules = await loadSyncIgnoreRules(localFolderPath, extraIgnore)
-    const scan = await scanLocalFolder(localFolderPath, rules)
+    // A folder that holds the saved session is refused whole, since a sync would upload it.
+    const folder = await this.#policy.resolveLocalRead(localFolderPath, { folder: true })
+    const rules = await loadSyncIgnoreRules(folder, extraIgnore)
+    const scan = await scanLocalFolder(folder, rules)
     const tree = await this.#deps.getProjectTree(projectId)
 
     const byPath = new Map(tree.entities.map(entity => [entity.path, entity]))
@@ -1092,7 +1163,7 @@ export class SyncApi {
     writeMode: WriteMode,
     stopOnError: boolean,
     onProgress: ProgressReporter | undefined
-  ): Promise<SyncDirectoryResult> {
+  ): Promise<Omit<SyncDirectoryResult, 'planned' | 'deprecations'>> {
     const { projectId } = plan
     let completed: SyncOutcome[] = []
     const failed: SyncFailure[] = []
@@ -1255,12 +1326,29 @@ export class SyncApi {
       if (revision !== undefined) writtenRevisions.set(path, revision)
       return undefined
     }
-    const uploaded = await this.#deps.uploadFile(
-      projectId,
-      work.file.absolutePath,
-      parentPath(path),
-      posix.basename(path)
-    )
+    // A new path must still be empty and a changed binary still hold what the plan compared,
+    // checked inside the upload's queue job; either refusal is drift, which withholds deletes.
+    let uploaded: UploadedFile | SkippedUpload
+    try {
+      uploaded = await this.#deps.uploadFile(
+        projectId,
+        work.file.absolutePath,
+        parentPath(path),
+        posix.basename(path),
+        work.reason === 'new'
+          ? { overwrite: false }
+          : { overwrite: true, ...(work.remote?.hash === undefined ? {} : { expectedHash: work.remote.hash }) }
+      )
+    } catch (error) {
+      if (error instanceof McpError && error.code === 'CONFIRMATION_MISMATCH') {
+        throw new McpError(
+          'REMOTE_DRIFT',
+          `Something appeared at ${path} after the plan, so it was not replaced. Run plan_sync again.`,
+          { details: { changed: 'remote' }, cause: error }
+        )
+      }
+      throw error
+    }
     uploadedHashes.set(path, work.file.hash)
     return typeof uploaded.entityId === 'string' ? uploaded.entityId : undefined
   }

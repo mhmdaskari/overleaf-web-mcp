@@ -1,21 +1,7 @@
-export type McpErrorCode =
-  | 'AUTH_EXPIRED'
-  | 'PERMISSION_DENIED'
-  | 'NOT_FOUND'
-  | 'REVISION_CONFLICT'
-  | 'PROTOCOL_UNSUPPORTED'
-  | 'UPDATE_TOO_LARGE'
-  | 'DOC_TOO_LARGE'
-  | 'TIMEOUT'
-  | 'OUTCOME_UNKNOWN'
-  | 'COMPILE_FAILED'
-  | 'PARTIAL_CLEANUP'
-  | 'INVALID_ARGUMENT'
-  | 'CONFIRMATION_MISMATCH'
-  | 'RATE_LIMITED'
-  | 'REMOTE_DRIFT'
-  | 'PATH_OUTSIDE_ROOT'
-  | 'REMOTE_ERROR'
+import type { ErrorCode } from '../contracts/error-codes.js'
+
+/** One of `ERROR_CODES`. */
+export type McpErrorCode = ErrorCode
 
 export const AUTH_LOGIN_INSTRUCTION =
   'Run `npx overleaf-web-mcp login` and sign in again.'

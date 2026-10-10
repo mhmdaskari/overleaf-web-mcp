@@ -68,6 +68,11 @@ describe('MCP tool registration', () => {
 
     expect(badge).toBe(String(TOOL_NAMES.length))
     expect(prose).toBe(String(TOOL_NAMES.length))
+    // The tool-list sentence and the Documentation table row, plus the comparison's Tools cell.
+    const allCounts = [...readme.matchAll(/All (\d+) tools/gu)].map(match => match[1])
+    expect(allCounts).toHaveLength(2)
+    expect(allCounts).toEqual([String(TOOL_NAMES.length), String(TOOL_NAMES.length)])
+    expect(/^\| Tools \| (\d+) \|/mu.exec(readme)?.[1]).toBe(String(TOOL_NAMES.length))
     // The README's tool table must name every registered tool, or it rots like the count would.
     for (const name of TOOL_NAMES) expect(readme).toContain(`| \`${name}\` |`)
   })
@@ -490,11 +495,10 @@ describe('MCP tool registration', () => {
       expect(batch.config.description).toContain(term)
     }
     const input = batch.config.inputSchema as { parse: (value: unknown) => Record<string, unknown> }
-    // The default matches upload_file, which replaces whatever is at the path.
-    expect(input.parse({ projectId: 'p', files: [{ localPath: '/a.png', destinationPath: 'a.png' }] })).toMatchObject({
-      onConflict: 'overwrite',
-      stopOnError: false,
-    })
+    // onConflict has no schema default, so an omitted value (deprecated) stays distinct from an explicit one.
+    const parsed = input.parse({ projectId: 'p', files: [{ localPath: '/a.png', destinationPath: 'a.png' }] })
+    expect(parsed).toMatchObject({ stopOnError: false })
+    expect(parsed).not.toHaveProperty('onConflict')
     expect(() => input.parse({ projectId: 'p', files: [] })).toThrow()
 
     const zip = registered.get('download_project_zip')!

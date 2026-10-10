@@ -8,6 +8,7 @@ import { USER_AGENT } from '../version.js'
 import { ProjectConnection, type JoinProjectData } from './project-connection.js'
 import { SocketIo09Peer, type WebSocketPeer } from './socketio09-client.js'
 import { parseHandshake } from './socketio09-codec.js'
+import { upstreamReason } from './upstream-reason.js'
 
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>
 type WebSocketFactory = (
@@ -122,13 +123,20 @@ export async function openProjectConnection(
     peer.once('connectionRejected', (value: unknown) =>
       finish(() =>
         reject(
-          new McpError('AUTH_EXPIRED', `Overleaf rejected the socket connection: ${JSON.stringify(value)}`)
+          new McpError('AUTH_EXPIRED', `Overleaf rejected the socket connection. ${AUTH_LOGIN_INSTRUCTION}`, {
+            details: { reason: upstreamReason(value) },
+          })
         )
       )
     )
+    // The socket's own error text is not passed on; this server's typed errors are.
     peer.once('error', error =>
       finish(() =>
-        reject(error instanceof Error ? error : new McpError('REMOTE_ERROR', 'Socket failed.'))
+        reject(
+          error instanceof McpError
+            ? error
+            : new McpError('REMOTE_ERROR', 'The Overleaf socket failed while joining the project.', { cause: error })
+        )
       )
     )
     peer.once('disconnect', () =>

@@ -1,0 +1,45 @@
+import type { OperationName } from '../../src/contracts/operations.js'
+
+const position = { line: 1, column: 1 }
+
+/** A minimal valid input for every operation. */
+export const INPUTS: Record<OperationName, Record<string, unknown>> = {
+  auth_status: {},
+  list_projects: {},
+  create_project: { name: 'Paper' },
+  clone_project: { sourceProjectId: 's', name: 'Copy' },
+  import_project_zip: { localZipPath: '/tmp/paper.zip' },
+  manage_project: { projectId: 'p', action: 'trash', confirmName: 'Paper' },
+  update_project_settings: { projectId: 'p', compiler: 'xelatex' },
+  get_project_tree: { projectId: 'p' },
+  read_file: { projectId: 'p', filePath: 'main.tex' },
+  write_file: { projectId: 'p', filePath: 'main.tex', revision: 'r', content: 'text' },
+  create_file: { projectId: 'p', filePath: 'new.tex' },
+  manage_entity: { projectId: 'p', action: 'delete', path: 'old.tex', confirmPath: 'old.tex' },
+  upload_file: { projectId: 'p', localPath: '/tmp/a.png' },
+  batch_upload: { projectId: 'p', files: [{ localPath: '/tmp/a.png', destinationPath: 'a.png' }] },
+  download_file: { projectId: 'p', filePath: 'a.png', localPath: '/tmp/a.png' },
+  download_project_zip: { projectId: 'p', localPath: '/tmp/p.zip' },
+  plan_sync: { projectId: 'p', localFolderPath: '/tmp/paper' },
+  sync_directory: { projectId: 'p', localFolderPath: '/tmp/paper', mode: 'additive', planToken: 't' },
+  delete_entities: { projectId: 'p', paths: ['a.png'], confirmCount: 1 },
+  get_sections: { projectId: 'p', filePath: 'main.tex' },
+  get_section_content: { projectId: 'p', filePath: 'main.tex', sectionId: 's' },
+  write_section: { projectId: 'p', filePath: 'main.tex', revision: 'r', sectionId: 's', content: 'x' },
+  compile_project: { projectId: 'p' },
+  stop_compile: { projectId: 'p' },
+  list_comments: { projectId: 'p' },
+  reply_to_comment: { projectId: 'p', threadId: 't', content: 'Thanks' },
+  add_comment: {
+    projectId: 'p',
+    filePath: 'main.tex',
+    revision: 'r',
+    start: position,
+    end: position,
+    expectedText: 'x',
+    content: 'Why?',
+  },
+  set_comment_status: { projectId: 'p', filePath: 'main.tex', revision: 'r', threadId: 't', status: 'resolved' },
+  monitor_project_history: { projectId: 'p' },
+}
+

@@ -43,6 +43,21 @@ describe('sync ignore rules', () => {
     // A folder pattern only matches folders.
     expect(rules.match('drafts', false)).toBeUndefined()
   })
+
+  test('refuse an .olignore that links outside the folder, since its patterns are echoed back', async () => {
+    const elsewhere = await folder({ 'private.txt': 'not for the plan\n' })
+    const root = await folder({ 'notes/real.olignore': '*.pdf\n' })
+    await symlink(join(elsewhere, 'private.txt'), join(root, '.olignore'))
+    await expect(loadSyncIgnoreRules(root)).rejects.toMatchObject({
+      code: 'PATH_OUTSIDE_ROOT',
+      details: { kind: 'outside_folder' },
+    })
+
+    // A link that stays inside the folder is read as before.
+    const inside = await folder({ 'notes/real.olignore': '*.pdf\n' })
+    await symlink(join(inside, 'notes', 'real.olignore'), join(inside, '.olignore'))
+    await expect(loadSyncIgnoreRules(inside)).resolves.toMatchObject({ olignore: '*.pdf\n' })
+  })
 })
 
 describe('local folder scan', () => {

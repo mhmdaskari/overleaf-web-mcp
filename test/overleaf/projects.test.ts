@@ -295,13 +295,20 @@ describe('download_project_zip', () => {
     http.getStream.mockResolvedValueOnce({ body: streamOf([zip.slice(0, 2), zip.slice(2)]), contentType: 'application/zip' })
     const dir = await folder()
 
-    await expect(api.downloadProjectZip('p/1', join(dir, 'backup.zip'))).resolves.toEqual({
-      projectId: 'p/1',
+    // An id that could step into another route is refused before anything is sent.
+    await expect(api.downloadProjectZip('p/1', join(dir, 'backup.zip'))).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      details: { parameter: 'projectId' },
+    })
+    expect(http.getStream).not.toHaveBeenCalled()
+
+    await expect(api.downloadProjectZip('p 1', join(dir, 'backup.zip'))).resolves.toEqual({
+      projectId: 'p 1',
       localPath: join(dir, 'backup.zip'),
       bytes: zip.byteLength,
       replaced: false,
     })
-    expect(http.getStream).toHaveBeenCalledWith('/Project/p%2F1/download/zip', { timeoutMs: 300_000 })
+    expect(http.getStream).toHaveBeenCalledWith('/Project/p%201/download/zip', { timeoutMs: 300_000 })
     expect(new Uint8Array(await readFile(join(dir, 'backup.zip')))).toEqual(zip)
     expect(await readdir(dir)).toEqual(['backup.zip'])
 

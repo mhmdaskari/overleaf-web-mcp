@@ -101,6 +101,17 @@ describe('MCP server', () => {
     await server.close()
   })
 
+  test('keeps tools/list identical to the committed snapshot', async () => {
+    // Names, descriptions, schemas, and annotations are the public contract; a change must be
+    // deliberate, reviewed in this file's diff, and listed in CHANGELOG.md.
+    const { server, client } = await connectedPair()
+    const { tools } = await client.listTools()
+
+    await expect(`${JSON.stringify(tools, null, 2)}\n`).toMatchFileSnapshot('__snapshots__/list-tools.json')
+    await client.close()
+    await server.close()
+  })
+
   test('returns structuredContent that satisfies the declared outputSchema over the transport', async () => {
     const runtime = fakeRuntime()
     const listing = {

@@ -1,6 +1,6 @@
 {
   "name": "overleaf-web-mcp",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Unofficial MCP server for browsing, tracked writing, organizing, syncing local folders, compiling, reviewing, and monitoring version history in Overleaf projects through an authenticated web session.",
   "author": "Mohammad Askari",
   "license": "MIT",
@@ -19,6 +19,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/sdk.d.ts",
+      "import": "./dist/sdk.js"
     }
   },
   "bin": {

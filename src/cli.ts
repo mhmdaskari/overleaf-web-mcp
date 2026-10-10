@@ -10,7 +10,12 @@ import { runStdioServer } from './server.js'
 
 async function serve(): Promise<void> {
   const runtime = await OverleafRuntime.create(readConfig())
-  const server = runStdioServer(runtime)
+  // stdout carries only MCP frames; a notice names the tool and a code, never content.
+  const server = runStdioServer(runtime, {
+    onDiagnostic: diagnostic => {
+      process.stderr.write(`${JSON.stringify({ diagnostic })}\n`)
+    },
+  })
   const shutdown = (): void => {
     void server.shutdown()
   }

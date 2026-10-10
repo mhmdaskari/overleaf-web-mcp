@@ -9,6 +9,7 @@ import {
   type RawFolder,
 } from '../overleaf/tree.js'
 import { historyVisibleContent, type HistorySnapshot } from './ot.js'
+import { upstreamReason } from './upstream-reason.js'
 
 export interface SocketPeerLike {
   on(event: string, listener: (...args: any[]) => void): this
@@ -288,7 +289,9 @@ export class ProjectConnection {
     )
     const [error, rawLines, rawVersion, , ranges, rawType = 'sharejs-text-ot'] = args
     if (error) {
-      throw new McpError('REMOTE_ERROR', `joinDoc failed: ${JSON.stringify(error)}`)
+      throw new McpError('REMOTE_ERROR', 'Overleaf refused to open the document.', {
+        details: { event: 'joinDoc', reason: upstreamReason(error) },
+      })
     }
     if (!Number.isInteger(rawVersion)) {
       throw new McpError('PROTOCOL_UNSUPPORTED', 'joinDoc returned an invalid version.')
@@ -314,7 +317,9 @@ export class ProjectConnection {
     }
 
     if (rawType !== 'sharejs-text-ot' && rawType !== 'sharejs') {
-      throw new McpError('PROTOCOL_UNSUPPORTED', `Unsupported document protocol ${String(rawType)}.`)
+      // Named only when it is a short identifier; anything else came from Overleaf as free text.
+      const name = typeof rawType === 'string' && /^[a-z][a-z0-9-]{0,63}$/u.test(rawType) ? rawType : 'unrecognized'
+      throw new McpError('PROTOCOL_UNSUPPORTED', `Unsupported document protocol ${name}.`)
     }
     if (!Array.isArray(rawLines) || rawLines.some(line => typeof line !== 'string')) {
       throw new McpError('PROTOCOL_UNSUPPORTED', 'Invalid ShareJS snapshot.')
@@ -332,7 +337,11 @@ export class ProjectConnection {
 
   async leaveDocument(docId: string): Promise<void> {
     const [error] = await this.peer.call('leaveDoc', [docId], this.#callTimeoutMs)
-    if (error) throw new McpError('REMOTE_ERROR', `leaveDoc failed: ${JSON.stringify(error)}`)
+    if (error) {
+      throw new McpError('REMOTE_ERROR', 'Overleaf refused to close the document.', {
+        details: { event: 'leaveDoc', reason: upstreamReason(error) },
+      })
+    }
   }
 
   async submitUpdate(docId: string, update: Record<string, unknown>): Promise<void> {
@@ -365,9 +374,10 @@ export class ProjectConnection {
         const metadata = message as { doc_id?: unknown } | undefined
         if (metadata?.doc_id !== undefined && metadata.doc_id !== docId) return
         cleanup()
+        // The event can quote the rejected update, document text included, so only a reason is kept.
         reject(
-          new McpError('REMOTE_ERROR', `Overleaf rejected the OT update: ${String(error)}`, {
-            details: { message },
+          new McpError('REMOTE_ERROR', 'Overleaf rejected the OT update.', {
+            details: { reason: upstreamReason(error) },
           })
         )
       }
@@ -387,7 +397,9 @@ export class ProjectConnection {
         this.#applyTimeoutMs
       )
       if (error) {
-        throw new McpError('REMOTE_ERROR', `applyOtUpdate failed: ${JSON.stringify(error)}`)
+        throw new McpError('REMOTE_ERROR', 'Overleaf refused the OT update.', {
+          details: { event: 'applyOtUpdate', reason: upstreamReason(error) },
+        })
       }
       await applied
     } catch (error) {

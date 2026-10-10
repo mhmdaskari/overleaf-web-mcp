@@ -50,5 +50,19 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Import the built entry points by package name
+        run: |
+          node --input-type=module <<'EOF'
+          const root = await import('overleaf-web-mcp')
+          const core = await import('overleaf-web-mcp/core')
+          const rootNames = ['readConfig', 'McpError', 'OverleafRuntime', 'createMcpServer', 'SERVER_INSTRUCTIONS', 'SERVER_NAME', 'SERVER_VERSION', 'serveOverStdio']
+          const missing = rootNames.filter(name => !(name in root))
+          if (missing.length > 0) throw new Error(`The root entry no longer exports ${missing.join(', ')}`)
+          if (typeof core.createOverleafService !== 'function') throw new Error('overleaf-web-mcp/core has no createOverleafService')
+          if (core.McpError !== root.McpError) throw new Error('overleaf-web-mcp/core exports a different McpError')
+          if (!Array.isArray(core.ERROR_CODES) || !Array.isArray(core.OPERATION_NAMES)) throw new Error('overleaf-web-mcp/core lacks the contracts')
+          if ('ProjectConnection' in core || 'createMcpServer' in core) throw new Error('overleaf-web-mcp/core exports an internal or MCP name')
+          EOF
+
       - name: Verify packed contents
         run: npm pack --dry-run

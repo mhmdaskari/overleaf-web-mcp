@@ -68,6 +68,15 @@ describe('entity API', () => {
     expect(connections.invalidate).toHaveBeenCalledWith('project')
   })
 
+  test('reduces a created folder to its id and name', async () => {
+    const { api, http } = harness()
+    http.postJson.mockResolvedValueOnce({ _id: 'f2', name: 'figures', docs: [], owner: 'someone' } as never)
+
+    const result = await api.manageEntity('project', { action: 'create_folder', path: 'figures' })
+
+    expect(result.created).toEqual({ _id: 'f2', name: 'figures' })
+  })
+
   test('requires exact confirmPath before deleting', async () => {
     const { api, http } = harness()
 

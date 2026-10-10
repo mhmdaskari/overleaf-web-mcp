@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 
 import { McpError } from './errors.js'
+import { AccessPolicy } from './policy.js'
 
 export interface TextContentSource {
   content?: string | undefined
@@ -41,7 +42,10 @@ function decodeUtf8(bytes: Uint8Array, localPath: string): string {
  * update limits are far larger than the practical argument budget, so file size alone is
  * rarely the reason to choose one over the other.
  */
-export async function resolveTextContent(source: TextContentSource): Promise<string> {
+export async function resolveTextContent(
+  source: TextContentSource,
+  policy: AccessPolicy = AccessPolicy.permissive
+): Promise<string> {
   const hasContent = source.content !== undefined
   const hasLocalPath = source.localPath !== undefined && source.localPath !== ''
   if (hasContent && hasLocalPath) {
@@ -55,9 +59,10 @@ export async function resolveTextContent(source: TextContentSource): Promise<str
   }
   if (hasContent) return source.content!
   const localPath = source.localPath!
+  const readPath = await policy.resolveLocalRead(localPath)
   let bytes: Uint8Array
   try {
-    bytes = await readFile(localPath)
+    bytes = await readFile(readPath)
   } catch (error) {
     throw new McpError('NOT_FOUND', `Local file could not be read: ${localPath}`, {
       cause: error,

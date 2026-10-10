@@ -17,6 +17,41 @@ Two channels are used, both through the same saved web session:
 
 No Overleaf Git integration is involved.
 
+## Layers
+
+Every operation is defined once and reached through one engine, whichever interface calls it.
+
+- **Contracts** (`src/contracts/`): for each operation, its input and output schemas, its
+  description, its MCP annotations, and its effects, plus the error codes and the
+  `OperationContext` an interface passes in (progress, cancellation, diagnostics). Tests check
+  that the annotations agree with the effects and that every destructive operation takes a
+  confirm value or an expected state.
+- **Service** (`src/service/operations.ts`): `createOverleafService(runtime)` returns one function
+  per operation. Each one shapes its arguments for the domain engine and nothing else; the MCP
+  handlers in `src/mcp/tools.ts` make one service call each.
+- **Domain engine** (`src/overleaf/`, `src/protocol/`, `src/http/`): every public method checks
+  the [access policy](configuration.md#access-policy) for the project and each effect it
+  performs before any request, so a direct call through the exported runtime is held to the same
+  rules as a tool call. The per-project queue, revision checks, write verification, and timeout
+  recovery live here.
+
+The engine is published without MCP as `overleaf-web-mcp/core`, which exports `OverleafRuntime`,
+`readConfig`, `createOverleafService`, `McpError`, `ERROR_CODES`, and the contract types, and
+never loads the MCP SDK. Until v0.7.0 documents its stable surface, it follows the same 0.5.x
+deprecations as the MCP server.
+
+```ts
+import { createOverleafService, OverleafRuntime, readConfig } from 'overleaf-web-mcp/core'
+
+const runtime = await OverleafRuntime.create(readConfig())
+try {
+  const service = createOverleafService(runtime)
+  const { content, revision } = await service.read_file({ projectId, filePath: 'main.tex' })
+} finally {
+  await runtime.close()
+}
+```
+
 ## Protocol and reliability notes
 
 - ShareJS text OT and history-OT are normalized behind one document interface. Tracked ShareJS
@@ -97,8 +132,9 @@ revision checks entirely. Web-session peers such as `@netique/overleaf-mcp` shar
 connection model and also offer tracked changes; what sets this project apart is the project
 lifecycle tools, the verified-write guarantees described above, and folder sync that, given the
 `planToken` from `plan_sync`, stops when either side drifted from the plan. The
-[roadmap](roadmap.md) plans compile-log and PDF access, a command line and TypeScript library over
-the same engine, tracked-change review, and multi-file documents.
+[roadmap](roadmap.md) plans compile-log and PDF access, a command line and a TypeScript client
+over the same engine `overleaf-web-mcp/core` already exposes, tracked-change review, and
+multi-file documents.
 
 Review-range investigation was informed by
 [Overleaf Comment Exporter](https://github.com/salokr/overleaf-comment-exporter). Real-time

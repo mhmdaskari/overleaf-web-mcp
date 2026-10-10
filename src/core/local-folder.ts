@@ -123,7 +123,7 @@ export async function scanLocalFolder(
         throw new McpError(
           'PATH_OUTSIDE_ROOT',
           `${path} is a symbolic link that resolves outside localFolderPath. Remove it, or ignore it with a pattern.`,
-          { details: { localPath: path } }
+          { details: { localPath: path, kind: 'outside_folder' } }
         )
       }
 

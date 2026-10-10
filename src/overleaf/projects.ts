@@ -5,6 +5,8 @@ import { z } from 'zod'
 
 import { McpError } from '../core/errors.js'
 import { prepareLocalDownload, writeDownload } from '../core/local-download.js'
+import { AccessPolicy, isPathSafeId } from '../core/policy.js'
+import { ERROR_CODE_PATTERN } from '../http/client.js'
 import type { EntityType, ProjectEntity, ProjectTree } from './tree.js'
 
 interface ProjectsHttp {
@@ -26,6 +28,8 @@ export interface ProjectsApiOptions {
   getProjectTree(projectId: string): Promise<ProjectTree>
   /** Drops the cached project socket, whose join snapshot holds the settings and name. */
   invalidate(projectId: string): Promise<void>
+  /** Defaults to allowing everything but ids that are not path-safe. */
+  policy?: AccessPolicy | undefined
 }
 
 export const COMPILERS = ['pdflatex', 'latex', 'xelatex', 'lualatex'] as const
@@ -130,7 +134,8 @@ function endsLikeZip(tail: Uint8Array): boolean {
 
 const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]{1,64}$/u
 
-function zipFailure(code: string | undefined): McpError {
+function zipFailure(error: unknown): McpError {
+  const code = typeof error === 'string' && ERROR_CODE_PATTERN.test(error) ? error : undefined
   const detail = code === undefined ? undefined : ZIP_ERRORS[code]
   return new McpError(
     'INVALID_ARGUMENT',
@@ -148,9 +153,11 @@ function zipFailure(code: string | undefined): McpError {
  */
 export class ProjectsApi {
   readonly #options: ProjectsApiOptions
+  readonly #policy: AccessPolicy
 
   constructor(options: ProjectsApiOptions) {
     this.#options = options
+    this.#policy = options.policy ?? AccessPolicy.permissive
   }
 
   #projectUrl(projectId: string): string {
@@ -158,8 +165,9 @@ export class ProjectsApi {
   }
 
   #parseCreated(response: unknown, what: string): string {
+    let projectId: string
     try {
-      return createdProjectSchema.parse(response).project_id
+      projectId = createdProjectSchema.parse(response).project_id
     } catch (error) {
       throw new McpError(
         'PROTOCOL_UNSUPPORTED',
@@ -167,6 +175,12 @@ export class ProjectsApi {
         { cause: error }
       )
     }
+    if (!isPathSafeId(projectId)) {
+      throw new McpError('PROTOCOL_UNSUPPORTED', `Overleaf returned an unsupported project id from ${what}.`)
+    }
+    // A project this process created stays reachable for the rest of it, allowlist or not.
+    this.#policy.allowProject(projectId)
+    return projectId
   }
 
   /**
@@ -175,6 +189,8 @@ export class ProjectsApi {
    * `updateProjectSettings` or delete the stub.
    */
   async createProject(name: string, template: ProjectTemplate = 'blank'): Promise<CreatedProject> {
+    // The new project's tree is read afterwards, so that read is allowed before anything is created.
+    this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
     validateProjectName(name)
     const response = await this.#options.http.postJson('/project/new', {
       projectName: name,
@@ -201,6 +217,8 @@ export class ProjectsApi {
   }
 
   async cloneProject(sourceProjectId: string, name: string): Promise<CreatedProject> {
+    this.#policy.assertProject(sourceProjectId, 'sourceProjectId')
+    this.#policy.assertEffect('project-lifecycle')
     validateProjectName(name)
     const response = await this.#options.http.postJson(
       `/Project/${encodeURIComponent(sourceProjectId)}/clone`,
@@ -221,7 +239,9 @@ export class ProjectsApi {
     }
     const projectName = name ?? fileName.replace(/\.zip$/iu, '')
     validateProjectName(projectName)
-    const bytes = await readFile(localZipPath).catch((error: unknown) => {
+    this.#policy.assertEffect('project-lifecycle')
+    const readPath = await this.#policy.resolveLocalRead(localZipPath)
+    const bytes = await readFile(readPath).catch((error: unknown) => {
       throw new McpError('NOT_FOUND', `Local file could not be read: ${localZipPath}`, {
         cause: error,
       })
@@ -248,7 +268,7 @@ export class ProjectsApi {
       }
       throw error
     }
-    const body = response as { success?: boolean; error?: string } | null
+    const body = response as { success?: boolean; error?: unknown } | null
     if (body?.success === false) throw zipFailure(body.error)
     const projectId = this.#parseCreated(response, 'project import')
     return { projectId, name: projectName, url: this.#projectUrl(projectId) }
@@ -264,7 +284,12 @@ export class ProjectsApi {
     localPath: string,
     options: DownloadProjectZipOptions = {}
   ): Promise<DownloadedProjectZip> {
-    const target = await prepareLocalDownload(localPath, options.overwrite === true)
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read')
+    const target = await prepareLocalDownload(
+      await this.#policy.resolveLocalWrite(localPath),
+      options.overwrite === true
+    )
     let response: { body: ReadableStream<Uint8Array>; contentType?: string }
     try {
       response = await this.#options.http.getStream(
@@ -307,6 +332,9 @@ export class ProjectsApi {
     projectId: string,
     input: ProjectAction
   ): Promise<{ action: ProjectAction['action']; projectId: string; name: string }> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
+    if (input.action === 'delete') this.#policy.assertEffect('overleaf-delete')
     const project = await this.#options.findProject(projectId)
     const id = encodeURIComponent(projectId)
     let name = project.name
@@ -360,6 +388,9 @@ export class ProjectsApi {
     projectId: string,
     settings: ProjectSettingsInput
   ): Promise<ProjectSettings> {
+    this.#policy.assertProject(projectId)
+    // The settings are re-read afterwards, so that read is allowed before anything is changed.
+    this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
     const body: Record<string, string> = {}
     if (settings.rootFilePath !== undefined) {
       body.rootDocId = (await this.#options.resolvePath(projectId, settings.rootFilePath, 'doc')).id
