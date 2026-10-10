@@ -80,8 +80,9 @@ is refused with nothing sent.
   `CONFIRMATION_MISMATCH` with `details.missing: "planToken"`; an additive sync may pass
   `unplanned: true` instead.
 - **`upload_file` replacing a binary file without `overwrite: true` or `expectedHash`**
-  (`parameter: "overwrite"`). From 0.6.0 `overwrite` defaults to `false`, and the call is
-  `CONFIRMATION_MISMATCH`.
+  (`parameter: "overwrite"`). From 0.6.0 that call is `CONFIRMATION_MISMATCH`. A document's
+  replacement is governed by `uncheckedDocumentReplace` instead; only an explicit
+  `overwrite: false` refuses one.
 - **`upload_file` replacing a text document without `uncheckedDocumentReplace: true`**
   (`parameter: "uncheckedDocumentReplace"`). From 0.6.0 `INVALID_ARGUMENT`, naming `write_file`
   with `localPath`.
@@ -110,11 +111,14 @@ is refused with nothing sent.
   `INVALID_ARGUMENT` before it is sent. A request that changes something no longer follows
   redirects, since fetch would carry the CSRF token to another origin: a redirect to `/login` is
   still `AUTH_EXPIRED`, and any other is `REMOTE_ERROR` with `details.status`.
-- **Three refusals apply with no policy variable set**: a download onto the cookie jar, its lock
-  or temporary files, or the browser profile (`PATH_OUTSIDE_ROOT`, `details.kind:
-  "session_files"`); an `.olignore` that links to a file outside its folder, whose patterns a plan
-  would echo back (`PATH_OUTSIDE_ROOT`, `details.kind: "outside_folder"`); and the unsafe ids
-  above.
+- **Four refusals apply with no policy variable set**: a download onto the cookie jar, its lock
+  or temporary files, or the browser profile, and a local read of any of them, a folder sync of a
+  folder that holds them included, since an upload or a sync would put the session into a project
+  (`PATH_OUTSIDE_ROOT`, `details.kind: "session_files"`); an `.olignore` that links to a file
+  outside its folder, whose patterns a plan would echo back (`PATH_OUTSIDE_ROOT`, `details.kind:
+  "outside_folder"`); and the unsafe ids above. A local path is judged the way the file system
+  resolves it, a symbolic link before the `..` that follows it, and a dangling link by where it
+  leads.
 - **`PATH_OUTSIDE_ROOT` carries `details.kind`**: `outside_folder`, now also on the existing
   refusal of a symbolic link out of `localFolderPath`, `outside_read_roots`,
   `outside_write_roots`, or `session_files`.

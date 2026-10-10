@@ -1,4 +1,4 @@
-import { realpath } from 'node:fs/promises'
+import { readlink, realpath } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import type { Effect } from '../contracts/effects.js'
@@ -33,9 +33,9 @@ export interface AccessPolicyConfig {
   localReadRoots?: readonly string[] | undefined
   localWriteRoots?: readonly string[] | undefined
   allowedEffects?: readonly Effect[] | undefined
-  /** The saved session's cookie jar; no local write may touch it, its lock, or its temporary files. */
+  /** The saved session's cookie jar; no local read or write may touch it, its lock, or its temporary files. */
   cookieJarFile?: string | undefined
-  /** The browser profile `login` signs in with; no local write may land inside it. */
+  /** The browser profile `login` signs in with; no local read or write may reach inside it. */
   browserProfileDir?: string | undefined
 }
 
@@ -47,16 +47,52 @@ function isInside(folder: string, target: string): boolean {
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
 }
 
-/** The real path of `path`, or of its nearest existing ancestor with the rest appended. */
-async function realOrNearest(path: string): Promise<string> {
-  const absolute = resolve(path)
+const WINDOWS = process.platform === 'win32'
+
+/** Most links a path may pass through, as the operating system's own limit is about this. */
+const MAX_LINKS = 40
+
+/**
+ * Splits off the last name of an absolute path as text, without normalizing it, or returns
+ * `undefined` for a root.
+ */
+function splitLast(path: string): { parent: string; name: string } | undefined {
+  const trimmed = path.replace(WINDOWS ? /[\\/]+$/u : /\/+$/u, '')
+  const at = WINDOWS ? Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\')) : trimmed.lastIndexOf('/')
+  if (at < 0 || trimmed === '') return undefined
+  let parent = trimmed.slice(0, at)
+  // The parent of "/name" is "/", and of "C:\\name" is "C:\\".
+  if (parent === '' || (WINDOWS && /^[A-Za-z]:$/u.test(parent))) parent = trimmed.slice(0, at + 1)
+  return { parent, name: trimmed.slice(at + 1) }
+}
+
+/**
+ * Where the file system takes `path`, whether or not it exists yet: its real path, or the real
+ * path of its nearest existing ancestor with the rest appended. The path is never normalized as
+ * text first, since `link/..` is the link's parent folder, not the folder holding the link, and a
+ * dangling link is followed to where it would create a file.
+ */
+async function realOrNearest(path: string, links = 0): Promise<string> {
+  // Joined as text, not with join() or resolve(), which would collapse `..` before links are followed.
+  const absolute = isAbsolute(path) ? path : `${process.cwd()}${sep}${path}`
   try {
     return await realpath(absolute)
   } catch {
-    const parent = dirname(absolute)
-    if (parent === absolute) return absolute
-    return join(await realOrNearest(parent), basename(absolute))
+    // Not there yet, or a link to something that is not.
   }
+  const split = splitLast(absolute)
+  if (split === undefined) return resolve(absolute)
+  const target = await readlink(absolute).catch(() => undefined)
+  if (target !== undefined) {
+    if (links >= MAX_LINKS) {
+      throw new McpError('INVALID_ARGUMENT', `${path} leads through too many symbolic links.`)
+    }
+    return await realOrNearest(isAbsolute(target) ? target : `${split.parent}${sep}${target}`, links + 1)
+  }
+  const real = await realOrNearest(split.parent, links)
+  // What lies past the nearest existing folder does not exist, so it holds no links to follow.
+  if (split.name === '' || split.name === '.') return real
+  return split.name === '..' ? dirname(real) : join(real, split.name)
 }
 
 async function realRoots(roots: readonly string[] | undefined, variable: string): Promise<string[] | undefined> {
@@ -167,18 +203,25 @@ export class AccessPolicy {
   }
 
   /**
-   * The path a local read should open: its real path when read roots are set and it lies
-   * inside one, else `PATH_OUTSIDE_ROOT`. Without read roots the path is returned as given, so
-   * a missing file still fails where it is read.
+   * The path a local read should open, refused with `PATH_OUTSIDE_ROOT` when it is the saved
+   * session's cookie jar or browser profile, or, for a folder, holds either, or lies outside
+   * every read root. A path that is a symbolic link is judged by where it leads. A missing file
+   * is not refused here; it fails where it is read.
    */
-  async resolveLocalRead(localPath: string): Promise<string> {
+  async resolveLocalRead(localPath: string, options: { folder?: boolean } = {}): Promise<string> {
     this.assertEffect('local-read')
-    if (this.#readRoots === undefined) return localPath
     const target = await realOrNearest(localPath)
-    if (!this.#readRoots.some(root => isInside(root, target))) {
+    if (this.#touchesSessionFiles(target) || (options.folder === true && this.#holdsSessionFiles(target))) {
+      throw new McpError(
+        'PATH_OUTSIDE_ROOT',
+        `${localPath} is or holds the saved Overleaf session, which is never read; nothing was done.`,
+        { details: { kind: 'session_files' satisfies LocalRefusal } }
+      )
+    }
+    if (this.#readRoots !== undefined && !this.#readRoots.some(root => isInside(root, target))) {
       throw outside(localPath, 'outside_read_roots', 'OVERLEAF_LOCAL_READ_ROOTS')
     }
-    return target
+    return await friendlyPath(localPath, target)
   }
 
   /**
@@ -199,8 +242,11 @@ export class AccessPolicy {
     if (this.#writeRoots !== undefined && !this.#writeRoots.some(root => isInside(root, target))) {
       throw outside(localPath, 'outside_write_roots', 'OVERLEAF_LOCAL_WRITE_ROOTS')
     }
-    // Without write roots the caller's path is kept, so messages and results name what it gave.
-    return this.#writeRoots === undefined ? localPath : target
+    return await friendlyPath(localPath, target)
+  }
+
+  #holdsSessionFiles(folder: string): boolean {
+    return [this.#cookieJarFile, this.#browserProfileDir].some(path => path !== undefined && isInside(folder, path))
   }
 
   #touchesSessionFiles(target: string): boolean {
@@ -216,6 +262,15 @@ export class AccessPolicy {
     }
     return this.#browserProfileDir !== undefined && isInside(this.#browserProfileDir, target)
   }
+}
+
+/**
+ * The path to open: the caller's, made absolute, when it leads to the file that was checked, and
+ * otherwise the checked real path, so whatever opens it reaches exactly what the policy judged.
+ */
+async function friendlyPath(localPath: string, checked: string): Promise<string> {
+  const absolute = resolve(localPath)
+  return absolute === checked || (await realOrNearest(absolute)) === checked ? absolute : checked
 }
 
 function outside(localPath: string, kind: LocalRefusal, variable: string): McpError {

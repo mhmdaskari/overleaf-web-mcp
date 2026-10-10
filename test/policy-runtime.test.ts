@@ -61,6 +61,26 @@ describe('local roots through the real runtime', () => {
     }
   })
 
+  test('never reads the saved session, nor syncs a folder that holds it', async () => {
+    const { runtime, fetches, connectionFactory, cookiePath, directory } = await createTestRuntime()
+    const service = createOverleafService(runtime)
+    try {
+      await expect(
+        service.write_file({ projectId: 'p', filePath: 'main.tex', revision: 'r', localPath: cookiePath })
+      ).rejects.toMatchObject({ code: 'PATH_OUTSIDE_ROOT', details: { kind: 'session_files' } })
+      await expect(service.upload_file({ projectId: 'p', localPath: cookiePath })).rejects.toMatchObject({
+        details: { kind: 'session_files' },
+      })
+      await expect(service.plan_sync({ projectId: 'p', localFolderPath: directory })).rejects.toMatchObject({
+        details: { kind: 'session_files' },
+      })
+      expect(fetches).toEqual([])
+      expect(connectionFactory).not.toHaveBeenCalled()
+    } finally {
+      await runtime.close()
+    }
+  })
+
   test('never downloads onto the cookie jar, even with no roots set', async () => {
     const { runtime, fetches, connectionFactory, cookiePath, directory } = await createTestRuntime({
       root: { _id: 'root', name: 'rootFolder', docs: [{ _id: 'd1', name: 'main.tex' }], fileRefs: [], folders: [] },
@@ -200,6 +220,9 @@ describe('effects a write needs for its own reads', () => {
       await expect(service.reply_to_comment({ projectId: 'p', threadId: 't', content: 'Hi' })).rejects.toMatchObject({
         code: 'POLICY_DENIED',
       })
+      await expect(
+        service.set_comment_status({ projectId: 'p', filePath: 'main.tex', revision: 'r', threadId: 't', status: 'resolved' })
+      ).rejects.toMatchObject({ code: 'POLICY_DENIED' })
       expect(fetches).toEqual([])
       expect(socketCalls).toEqual([])
     } finally {

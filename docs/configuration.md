@@ -183,9 +183,11 @@ variable.
 | `OVERLEAF_ALLOWED_EFFECTS` | Which kinds of change any operation may make. | `POLICY_DENIED`, `details.effect` |
 
 Roots are resolved with `realpath` when the server starts, and a path is judged by where it
-leads, so a symbolic link inside a root that points outside it is refused. Whatever the policy,
-a download never writes over the cookie jar, its lock and temporary files, or the browser
-profile `login` uses (`PATH_OUTSIDE_ROOT`, `details.kind: "session_files"`).
+leads, the way the file system resolves it: a symbolic link inside a root that points outside it
+is refused, a link is followed before the `..` after it, and a link to a file that does not exist
+yet is judged by where it would create one. Whatever the policy, no tool reads or writes the
+cookie jar, its lock and temporary files, or the browser profile `login` uses, and a folder that
+holds them cannot be synced (`PATH_OUTSIDE_ROOT`, `details.kind: "session_files"`).
 
 The effects are:
 

@@ -626,7 +626,8 @@ export class CommentsApi {
   }> {
     this.#policy.assertProject(input.projectId)
     assertPathSafeId(input.threadId, 'threadId')
-    this.#policy.assertEffect('overleaf-write')
+    // The thread is read afterwards to confirm the status, so that read is allowed first.
+    this.#policy.assertEffect('overleaf-write', 'overleaf-read')
     const resolved = input.status === 'resolved'
     const submission = await this.#connections.withConnection(input.projectId, async connection =>
       await connection.queue.run(async () => {

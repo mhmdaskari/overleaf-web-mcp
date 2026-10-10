@@ -740,7 +740,6 @@ export class SyncApi {
               attempts += 1
             },
             onReplaced: uploaded => {
-              if (options.onConflict === undefined) addDeprecation(deprecations, 'onConflict', ON_CONFLICT_DEPRECATION)
               for (const entry of uploaded) addDeprecation(deprecations, entry.parameter, entry.message)
             },
             onHashed: hash => localHashes.set(destinationPath, hash),
@@ -770,7 +769,11 @@ export class SyncApi {
       if (after !== undefined) this.#verifyBatch(result, after, before, localHashes, timedOut)
     }
     if (result.failed.length > 0 || result.remaining.length > 0) result.status = 'partial'
-    if (deprecations.length > 0) result.deprecations = deprecations
+    // Counted after the read-back, so a replacement recovered after a timeout is included.
+    if (options.onConflict === undefined && result.completed.some(entry => entry.action === 'upload' && entry.replaced === true)) {
+      addDeprecation(deprecations, 'onConflict', ON_CONFLICT_DEPRECATION)
+    }
+    if (deprecations.length > 0) result.deprecations = deprecations.sort((left, right) => (left.parameter < right.parameter ? -1 : 1))
     return result
   }
 
@@ -966,7 +969,8 @@ export class SyncApi {
   async #plan(projectId: string, localFolderPath: string, options: PlanSyncOptions): Promise<Plan> {
     const destination = normalizeFolderPath(options.destinationFolderPath)
     const extraIgnore = options.ignore ?? []
-    const folder = await this.#policy.resolveLocalRead(localFolderPath)
+    // A folder that holds the saved session is refused whole, since a sync would upload it.
+    const folder = await this.#policy.resolveLocalRead(localFolderPath, { folder: true })
     const rules = await loadSyncIgnoreRules(folder, extraIgnore)
     const scan = await scanLocalFolder(folder, rules)
     const tree = await this.#deps.getProjectTree(projectId)

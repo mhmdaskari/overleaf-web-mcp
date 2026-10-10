@@ -98,8 +98,9 @@ it, a file that appeared at `localPath` in the meantime is not replaced. The tem
 removed on every failure, and neither the archive nor the names inside it are logged.
 
 **Your session stays yours.** Cookies are saved in a file only your user can read, are never
-returned by any tool, and are never logged. No download writes over the cookie jar, its lock and
-temporary files, or the browser profile `login` uses, whatever the access policy says. The server
+returned by any tool, and are never logged. No tool reads or writes the cookie jar, its lock and
+temporary files, or the browser profile `login` uses as a local file, and no folder sync takes a
+folder that holds them, whatever the access policy says. The server
 logs no document content, diffs, filenames, quoted context, or review-message bodies. `serve`
 reserves stdout for MCP protocol frames; the diagnostics it writes to stderr name a tool and an
 error code, nothing else.
@@ -182,6 +183,8 @@ repeats this notice.
 - Every operation with a destructive effect takes a confirm value or an expected state
   (`confirmPath`, `confirmName`, `confirmCount`, `confirmDeleteCount`, `overwrite`, `onConflict`,
   `revision`, or `planToken`), except `stop_compile`. A test enforces it.
+- An operation checks every effect it will use, a read after a write included, before it sends
+  anything, so a `POLICY_DENIED` never follows a change.
 - Compiles use the account's compile allowance. `compile_project.timeoutMs` bounds only how long
   the call waits.
 
@@ -233,8 +236,9 @@ limit which projects (`OVERLEAF_ALLOWED_PROJECTS`), which local folders
 (`OVERLEAF_LOCAL_READ_ROOTS`, `OVERLEAF_LOCAL_WRITE_ROOTS`), and which kinds of change
 (`OVERLEAF_ALLOWED_EFFECTS`) the server may touch. Every operation is checked against them before
 anything is sent, through the MCP server and through the exported runtime alike. With all four
-unset, everything is allowed except three refusals: a download onto the saved session's files,
-an `.olignore` that links outside its folder, and an id that is not path-safe.
+unset, everything is allowed except four refusals: a download onto the saved session's files, a
+local read of them (a folder sync of a folder that holds them included), an `.olignore` that
+links outside its folder, and an id that is not path-safe.
 
 The policy stops an assistant, perhaps steered by text it read in a project, from reaching beyond
 what it was given. It does not contain a malicious process: a path is checked with `realpath`

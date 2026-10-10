@@ -317,7 +317,9 @@ export class ProjectConnection {
     }
 
     if (rawType !== 'sharejs-text-ot' && rawType !== 'sharejs') {
-      throw new McpError('PROTOCOL_UNSUPPORTED', `Unsupported document protocol ${String(rawType)}.`)
+      // Named only when it is a short identifier; anything else came from Overleaf as free text.
+      const name = typeof rawType === 'string' && /^[a-z][a-z0-9-]{0,63}$/u.test(rawType) ? rawType : 'unrecognized'
+      throw new McpError('PROTOCOL_UNSUPPORTED', `Unsupported document protocol ${name}.`)
     }
     if (!Array.isArray(rawLines) || rawLines.some(line => typeof line !== 'string')) {
       throw new McpError('PROTOCOL_UNSUPPORTED', 'Invalid ShareJS snapshot.')

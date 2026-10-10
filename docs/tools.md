@@ -225,7 +225,7 @@ Upload a local file into a project folder.
 | `localPath` | yes | Local file to upload |
 | `destinationFolderPath` | no | Target folder; default `""`, the project root |
 | `destinationName` | no | Name to store the file under; defaults to the local file name |
-| `overwrite` | no | `true` allows replacing a binary file at the path; `false` refuses to replace anything. No default until 0.6.0, when it becomes `false` |
+| `overwrite` | no | `true` allows replacing a binary file at the path; `false` refuses to replace anything. Omitted, replacing a binary is deprecated, and refused from 0.6.0; a document is governed by `uncheckedDocumentReplace` |
 | `expectedHash` | no | The `hash` `get_project_tree` reported for the binary file being replaced, 40 lowercase hex characters |
 | `uncheckedDocumentReplace` | no | Allow replacing a text document, which has no revision check |
 
@@ -358,7 +358,8 @@ destructive, not read-only, because it writes a local file and can replace one.
 Returns `bytes` and `localPath`. Fails with `INVALID_ARGUMENT` when the local file exists and
 `overwrite` is not `true`. A `localPath` that is the saved session's cookie jar or browser
 profile, or lies outside `OVERLEAF_LOCAL_WRITE_ROOTS` when that is set, fails with
-`PATH_OUTSIDE_ROOT` before anything is downloaded.
+`PATH_OUTSIDE_ROOT` before anything is downloaded. The same goes for a `localPath` that leads
+there through a symbolic link, or through a `..` after one.
 
 ### `download_project_zip` <small>destructive</small>
 

@@ -643,7 +643,7 @@ export const OPERATIONS = {
       status: z.enum(['open', 'resolved']),
     }),
     annotations: { destructiveHint: true, idempotentHint: true },
-    effects: ['overleaf-write'],
+    effects: ['overleaf-write', 'overleaf-read'],
   },
   monitor_project_history: {
     description:

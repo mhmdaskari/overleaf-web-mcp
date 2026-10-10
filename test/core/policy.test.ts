@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -101,6 +101,62 @@ describe('access policy', () => {
     await expect(rooted.resolveLocalWrite(join(base, 'out.pdf'))).rejects.toMatchObject({
       details: { kind: 'outside_write_roots' },
     })
+  })
+
+  test('judges a path the way the file system resolves it, a link before the .. after it', async () => {
+    const { base } = await folders()
+    await mkdir(join(base, 'a', 'b'), { recursive: true })
+    await mkdir(join(base, 'a', 'session'))
+    const jar = join(base, 'a', 'session', 'cookies.txt')
+    await writeFile(jar, 'secret')
+    await symlink(join(base, 'a', 'b'), join(base, 'link'))
+    const policy = await AccessPolicy.create({ cookieJarFile: jar })
+
+    // Text-wise this is base/session/cookies.txt; the file system reaches the jar through the link.
+    const throughLink = join(base, 'link') + '/../session/cookies.txt'
+    await expect(policy.resolveLocalWrite(throughLink)).rejects.toMatchObject({ details: { kind: 'session_files' } })
+    await expect(policy.resolveLocalRead(throughLink)).rejects.toMatchObject({ details: { kind: 'session_files' } })
+
+    // The reverse: text-wise the jar, but the file system goes elsewhere, so that is where it writes.
+    await mkdir(join(base, 'c', 'd'), { recursive: true })
+    await symlink(join(base, 'c', 'd'), join(base, 'x'))
+    const textuallyTheJar = join(base, 'x') + '/../a/session/cookies.txt'
+    const written = await policy.resolveLocalWrite(textuallyTheJar)
+    expect(written).toBe(join(await realpath(join(base, 'c')), 'a', 'session', 'cookies.txt'))
+    // Two steps up from the link does reach the jar, and is refused.
+    await expect(policy.resolveLocalWrite(join(base, 'x') + '/../../a/session/cookies.txt')).rejects.toMatchObject({
+      details: { kind: 'session_files' },
+    })
+  })
+
+  test('judges a dangling link by where it leads', async () => {
+    const { inside, outside } = await folders()
+    await symlink(join(outside, 'not-yet.txt'), join(inside, 'out.pdf'))
+    const policy = await AccessPolicy.create({ localWriteRoots: [inside], localReadRoots: [inside] })
+    await expect(policy.resolveLocalWrite(join(inside, 'out.pdf'))).rejects.toMatchObject({
+      details: { kind: 'outside_write_roots' },
+    })
+    await symlink(join(inside, 'loop-b'), join(inside, 'loop-a'))
+    await symlink(join(inside, 'loop-a'), join(inside, 'loop-b'))
+    await expect(policy.resolveLocalWrite(join(inside, 'loop-a'))).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+  })
+
+  test('never reads the saved session, nor a folder that holds it', async () => {
+    const { base, inside } = await folders()
+    const auth = join(base, 'auth')
+    const jar = join(auth, 'cookies.txt')
+    await mkdir(join(auth, 'chrome-profile'), { recursive: true })
+    await writeFile(jar, 'secret')
+    await symlink(jar, join(inside, 'jar-link.txt'))
+    const policy = await AccessPolicy.create({ cookieJarFile: jar, browserProfileDir: join(auth, 'chrome-profile') })
+
+    for (const path of [jar, join(inside, 'jar-link.txt'), join(auth, 'chrome-profile', 'Default', 'Cookies')]) {
+      await expect(policy.resolveLocalRead(path), path).rejects.toMatchObject({ details: { kind: 'session_files' } })
+    }
+    await expect(policy.resolveLocalRead(auth, { folder: true })).rejects.toMatchObject({ details: { kind: 'session_files' } })
+    await expect(policy.resolveLocalRead(base, { folder: true })).rejects.toMatchObject({ details: { kind: 'session_files' } })
+    await expect(policy.resolveLocalRead(inside, { folder: true })).resolves.toBe(inside)
+    await expect(policy.resolveLocalRead(join(inside, 'main.tex'))).resolves.toBe(join(inside, 'main.tex'))
   })
 
   test('fails at startup for a root that does not exist', async () => {

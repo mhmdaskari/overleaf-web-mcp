@@ -846,6 +846,19 @@ describe('batch_upload during the transition', () => {
     expect(defaulted.deprecations?.map(entry => entry.parameter)).toEqual(['onConflict', 'uncheckedDocumentReplace'])
     expect(defaulted.status).toBe('complete')
   })
+
+  test('counts a replacement recovered after a timeout as relying on the default', async () => {
+    const project = new FakeProject({ 'fig.png': png(1) })
+    const root = await localFolder({ 'fig.png': png(2) })
+    project.timeoutUploads.set('fig.png', 'landed')
+
+    const result = await new SyncApi(project.deps()).batchUpload(PROJECT, [
+      { localPath: join(root, 'fig.png'), destinationPath: 'fig.png' },
+    ])
+
+    expect(result.completed).toEqual([expect.objectContaining({ destinationPath: 'fig.png', recoveredAfterTimeout: true, replaced: true })])
+    expect(result.deprecations?.map(entry => entry.parameter)).toEqual(['onConflict'])
+  })
 })
 
 describe('delete_entities', () => {
