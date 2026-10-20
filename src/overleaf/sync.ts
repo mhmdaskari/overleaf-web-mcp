@@ -1342,8 +1342,14 @@ export class SyncApi {
       try {
         created = await this.#deps.createFile(projectId, path, text, text === '' ? 'untracked' : 'tracked')
       } catch (error) {
-        if (error instanceof McpError && error.details?.created === true) leftovers.set(path, normalizeLf(text))
-        throw error
+        if (!(error instanceof McpError) || error.details?.created !== true) throw error
+        leftovers.set(path, normalizeLf(text))
+        // The returned planToken pins the leftover as it is now, so writing it by hand would drift.
+        throw new McpError(
+          error.code,
+          `${error.message} Do not create or write it yourself: resume with the planToken this result returns, which writes it or finds it already in place, or run plan_sync again if none is returned.`,
+          { retryable: error.retryable, details: error.details, cause: error }
+        )
       }
       const revision = revisionOf(created)
       if (revision !== undefined) writtenRevisions.set(path, revision)

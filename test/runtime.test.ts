@@ -261,4 +261,81 @@ describe('folder sync through the real runtime', () => {
       await runtime.close()
     }
   })
+
+  test('tells a sync to resume a create that left a document behind, not to write it by hand', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-runtime-sync-'))
+    const cookiePath = join(directory, 'cookies.txt')
+    await writeFile(
+      cookiePath,
+      '# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t2147483647\toverleaf.sid\tsession\n'
+    )
+    if (process.platform !== 'win32') await chmod(cookiePath, 0o600)
+    const local = await mkdtemp(join(tmpdir(), 'overleaf-runtime-local-'))
+    await writeFile(join(local, 'intro.tex'), 'intro\n')
+    const root: RawFolder = { _id: 'root', name: 'rootFolder', docs: [] }
+
+    const runtime = await OverleafRuntime.create(
+      readConfig({ OVERLEAF_COOKIE_JAR_FILE: cookiePath, OVERLEAF_BASE_URL: 'https://overleaf.test' }),
+      {
+        fetcher: async (input, init) => {
+          const url = new URL(String(input))
+          const method = init?.method ?? 'GET'
+          if (method === 'GET' && url.pathname === '/project') {
+            return new Response('<meta name="ol-csrfToken" content="csrf"><meta name="ol-user_id" content="user">')
+          }
+          if (method === 'POST' && url.pathname === '/project/p/doc') {
+            root.docs!.push({ _id: 'd1', name: 'intro.tex' })
+            return new Response(JSON.stringify({ _id: 'd1', name: 'intro.tex' }), {
+              headers: { 'content-type': 'application/json' },
+            })
+          }
+          throw new Error(`unexpected ${method} ${url.pathname}`)
+        },
+        connectionFactory: async projectId => {
+          const peer = {
+            on() {
+              return peer
+            },
+            once() {
+              return peer
+            },
+            removeListener() {
+              return peer
+            },
+            call: async (name: string) => {
+              if (name === 'joinDoc') return [null, [''], 1, null, {}, 'sharejs-text-ot']
+              return name === 'applyOtUpdate' ? [{ message: 'refused' }] : [null]
+            },
+            close() {},
+          }
+          return new ProjectConnection({
+            projectId,
+            peer,
+            join: {
+              publicId: 'public',
+              project: { _id: projectId, rootFolder: [structuredClone(root)] },
+              permissionsLevel: 'owner',
+              protocolVersion: 2,
+            },
+            supportedProtocolVersions: [2],
+          })
+        },
+      }
+    )
+
+    try {
+      const result = await runtime.sync.syncDirectory('p', local, {
+        mode: 'additive',
+        unplanned: true,
+        writeMode: 'tracked',
+      })
+      expect(result.failed).toHaveLength(1)
+      expect(result.failed[0]).toMatchObject({ action: 'create', errorCode: 'REMOTE_ERROR', details: { created: true } })
+      expect(result.failed[0]!.message).toContain('planToken')
+      expect(result.failed[0]!.message).not.toContain('read_file')
+      expect(result.planToken).toBeDefined()
+    } finally {
+      await runtime.close()
+    }
+  })
 })

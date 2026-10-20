@@ -20,6 +20,63 @@ import { ProjectConnectionCache } from './protocol/connection-cache.js'
 import { openProjectConnection } from './protocol/connect.js'
 import type { ProjectConnection } from './protocol/project-connection.js'
 
+/**
+ * `nextStep` ends the message of a failure after the document was created. Sync leaves it out
+ * and gives its own, since a hand-written leftover would drift from the planToken it returns.
+ */
+async function createDocument(
+  runtime: Pick<OverleafRuntime, 'policy' | 'entities' | 'documents' | 'userId'>,
+  projectId: string,
+  filePath: string,
+  content: string,
+  writeMode: WriteMode,
+  nextStep = ''
+): Promise<unknown> {
+  // The new document is read back after it is created, so that read is allowed first.
+  runtime.policy.assertProject(projectId)
+  runtime.policy.assertEffect('overleaf-write', 'overleaf-read')
+  if (writeMode === 'tracked' && content === '') {
+    throw new McpError(
+      'INVALID_ARGUMENT',
+      'Tracked file creation requires non-empty initial content.'
+    )
+  }
+  if (writeMode === 'tracked' && runtime.userId === undefined) {
+    throw new McpError(
+      'PROTOCOL_UNSUPPORTED',
+      'Tracked writes require an authenticated Overleaf user ID from the project bootstrap.'
+    )
+  }
+  await runtime.entities.createEmptyFile(projectId, filePath)
+  try {
+    const created = await runtime.documents.readFile(projectId, filePath)
+    if (content !== '') {
+      return await runtime.documents.writeFile(
+        projectId,
+        filePath,
+        created.revision,
+        content,
+        writeMode
+      )
+    }
+    return {
+      revision: created.revision,
+      protocol: created.protocol,
+      trackChangesActive: created.trackChangesActive,
+      writeMode: 'untracked' as const,
+    }
+  } catch (error) {
+    // The document exists from here on and is never deleted unasked, so the error says so
+    // and keeps the write's own classification. Creating it again would fail, so not retryable.
+    const failure = asMcpError(error)
+    throw new McpError(
+      failure.code,
+      `${failure.message} The document was created and now exists at the requested path, possibly still empty.${nextStep}`,
+      { retryable: false, details: { ...failure.details, created: true }, cause: error }
+    )
+  }
+}
+
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 export interface RuntimeDependencies {
@@ -204,7 +261,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       writeFile: async (projectId, filePath, revision, content, writeMode) =>
         await documents.writeFile(projectId, filePath, revision, content, writeMode),
       createFile: async (projectId, filePath, content, writeMode) =>
-        await created.runtime!.createFile(projectId, filePath, content, writeMode),
+        await createDocument(created.runtime!, projectId, filePath, content, writeMode),
       uploadFile: async (projectId, localPath, destinationFolderPath, destinationName, options) =>
         await entities.uploadFile(projectId, localPath, destinationFolderPath, destinationName, options),
       manageEntity: async (projectId, action) => await entities.manageEntity(projectId, action),
@@ -268,49 +325,14 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     content = '',
     writeMode: WriteMode = 'untracked'
   ): Promise<unknown> {
-    // The new document is read back after it is created, so that read is allowed first.
-    this.policy.assertProject(projectId)
-    this.policy.assertEffect('overleaf-write', 'overleaf-read')
-    if (writeMode === 'tracked' && content === '') {
-      throw new McpError(
-        'INVALID_ARGUMENT',
-        'Tracked file creation requires non-empty initial content.'
-      )
-    }
-    if (writeMode === 'tracked' && this.userId === undefined) {
-      throw new McpError(
-        'PROTOCOL_UNSUPPORTED',
-        'Tracked writes require an authenticated Overleaf user ID from the project bootstrap.'
-      )
-    }
-    await this.entities.createEmptyFile(projectId, filePath)
-    try {
-      const created = await this.documents.readFile(projectId, filePath)
-      if (content !== '') {
-        return await this.documents.writeFile(
-          projectId,
-          filePath,
-          created.revision,
-          content,
-          writeMode
-        )
-      }
-      return {
-        revision: created.revision,
-        protocol: created.protocol,
-        trackChangesActive: created.trackChangesActive,
-        writeMode: 'untracked' as const,
-      }
-    } catch (error) {
-      // The document exists from here on and is never deleted unasked, so the error says so
-      // and keeps the write's own classification. Creating it again would fail, so not retryable.
-      const failure = asMcpError(error)
-      throw new McpError(
-        failure.code,
-        `${failure.message} The document was created and now exists at the requested path, possibly still empty. Do not create it again: read it with read_file and write its content with write_file.`,
-        { retryable: false, details: { ...failure.details, created: true }, cause: error }
-      )
-    }
+    return await createDocument(
+      this,
+      projectId,
+      filePath,
+      content,
+      writeMode,
+      ' Do not create it again: read it with read_file and write its content with write_file.'
+    )
   }
 
   async close(): Promise<void> {

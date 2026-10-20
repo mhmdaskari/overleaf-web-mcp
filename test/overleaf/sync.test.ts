@@ -662,7 +662,8 @@ describe('sync_directory', () => {
         destinationPath: 'intro.tex',
         action: 'create',
         errorCode: 'REMOTE_ERROR',
-        message: 'Overleaf refused the OT update.',
+        message:
+          'Overleaf refused the OT update. Do not create or write it yourself: resume with the planToken this result returns, which writes it or finds it already in place, or run plan_sync again if none is returned.',
         details: { event: 'applyOtUpdate', reason: 'unrecognized', created: true },
       },
     ])
