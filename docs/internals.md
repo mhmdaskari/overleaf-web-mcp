@@ -62,6 +62,8 @@ try {
   sockets disconnect after 90 seconds. A socket Overleaf or a protocol error closed is dropped when
   the next call takes it, and that call opens a fresh one. A call on a closed socket sends nothing
   and fails with a retryable `REMOTE_ERROR`; a read whose socket closes before the reply does too.
+  Freeing a slot wakes every call waiting for one, a recovery waiting to drop a socket included,
+  and each checks again whether it can proceed.
 - All document sessions and tree mutations in a project share one FIFO queue, because Overleaf's
   join/leave epoch is socket-wide. A document is joined for one queued operation and then left.
 - A write succeeds only after acknowledgement, a matching `otUpdateApplied`, a leave and rejoin,
@@ -72,17 +74,24 @@ try {
   reported as a conflict. The write is never submitted again automatically.
 - ShareJS sends each line as the latin1 string of its UTF-8 bytes. A line is decoded only when
   those bytes are valid UTF-8, so a real U+FFFD in the text, which Overleaf stores for an emoji
-  typed into its legacy editor, reads back exactly. Writes to a ShareJS document refuse characters
-  outside the Basic Multilingual Plane that the document does not already hold, since Overleaf
-  would store each as U+FFFD and the write could never verify.
-- A comment is created as a REST thread and then attached through OT. Timed-out attachment
-  recovery checks the new thread id and exact range; orphan cleanup happens only after the
-  unchanged document proves attachment did not apply.
+  typed into its legacy editor, reads back exactly. A ShareJS write never sends a character
+  outside the Basic Multilingual Plane, since Overleaf would store each as U+FFFD and the write
+  could never verify. An edit that spans one the document already holds is split into several
+  components that step around it; text that adds one, adds another copy, or reorders them is
+  refused before anything is sent.
+- A comment is created as a REST thread and then attached through OT. An attachment that timed
+  out, lost its socket after it was sent, or whose verification read failed is recovered by
+  checking the new thread id and exact range; orphan cleanup happens only after the unchanged
+  document proves attachment did not apply, and never for an attachment Overleaf acknowledged.
 - A reply is identified as the one message that was not in the thread before it was posted, with
   the current author and exact normalized content. A timed-out reply is accepted only when exactly
-  one such message, within the request-time window, is in the refreshed thread.
+  one such message, within the request-time window, is in the refreshed thread. The project's
+  track-changes state is read before the reply is posted, so a failed join never follows a post.
 - ShareJS comment status uses the dedicated REST action. History-OT comment status is part of the
-  document operation and snapshot.
+  document operation and snapshot, and is verified from the snapshot, where Overleaf writes
+  `resolved: true` for a resolved comment and leaves the key out for an open one. A status change
+  Overleaf accepted is never reported as not applied; if the requested state is not seen, the
+  result is `OUTCOME_UNKNOWN`.
 - Folder sync is a composition, not a second implementation: `sync_directory` calls the same
   document write, upload, folder creation, and delete that the single-file tools use, one at a
   time through the project queue, and each upload or delete re-opens the project so the next
