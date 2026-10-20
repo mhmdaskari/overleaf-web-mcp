@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
+import { chmod, link, lstat, mkdtemp, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -244,6 +244,59 @@ describe('entity API', () => {
     await expect(
       api.downloadFile('project', 'chapters/old.tex', target, true)
     ).resolves.toMatchObject({ bytes: 3 })
+  })
+
+  test('with overwrite, replaces an existing file through a new one instead of truncating it', async () => {
+    const { api } = harness()
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
+    const target = join(directory, 'existing.tex')
+    await writeFile(target, 'old text')
+    await chmod(target, 0o640)
+    // A second name for the old file: an in-place write would change it too.
+    await link(target, join(directory, 'alias.tex'))
+
+    await expect(api.downloadFile('project', 'chapters/old.tex', target, true)).resolves.toEqual({
+      bytes: 3,
+      localPath: target,
+    })
+    await expect(readFile(target)).resolves.toEqual(Buffer.from([1, 2, 3]))
+    await expect(readFile(join(directory, 'alias.tex'), 'utf8')).resolves.toBe('old text')
+    // The new file keeps the old one's permissions.
+    expect((await lstat(target)).mode & 0o777).toBe(0o640)
+    expect((await readdir(directory)).sort()).toEqual(['alias.tex', 'existing.tex'])
+  })
+
+  test('with overwrite, replaces the file a symbolic link leads to and keeps the link', async () => {
+    const { api } = harness()
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
+    const real = join(directory, 'real.tex')
+    const linked = join(directory, 'linked.tex')
+    await writeFile(real, 'old text')
+    await symlink(real, linked)
+
+    await api.downloadFile('project', 'chapters/old.tex', linked, true)
+
+    expect((await lstat(linked)).isSymbolicLink()).toBe(true)
+    await expect(readFile(real)).resolves.toEqual(Buffer.from([1, 2, 3]))
+    expect((await readdir(directory)).sort()).toEqual(['linked.tex', 'real.tex'])
+  })
+
+  test.skipIf(process.getuid?.() === 0)('with overwrite, refuses an unwritable folder before fetching and keeps the file', async () => {
+    const { api, http } = harness()
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
+    const target = join(directory, 'existing.tex')
+    await writeFile(target, 'old text')
+    await chmod(directory, 0o500)
+    try {
+      await expect(api.downloadFile('project', 'chapters/old.tex', target, true)).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+        details: { errno: 'EACCES' },
+      })
+      expect(http.getBytes).not.toHaveBeenCalled()
+      await expect(readFile(target, 'utf8')).resolves.toBe('old text')
+    } finally {
+      await chmod(directory, 0o700)
+    }
   })
 
   test('refuses a folder at the local path before fetching, even with overwrite', async () => {

@@ -1,10 +1,10 @@
 import { constants } from 'node:fs'
-import { access, lstat, readFile, stat, writeFile } from 'node:fs/promises'
+import { access, lstat, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, posix } from 'node:path'
 
 import { McpError } from '../core/errors.js'
 import { gitBlobHash } from '../core/hash.js'
-import { localFileFailure } from '../core/local-download.js'
+import { localFileFailure, replaceFileAtomically } from '../core/local-download.js'
 import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
 import { ERROR_CODE_PATTERN } from '../http/client.js'
@@ -472,9 +472,19 @@ export class EntitiesApi {
       throw new McpError('INVALID_ARGUMENT', `${localPath} is a folder; name the file to write.`)
     }
     if (existing !== undefined && !overwrite) throw localFileExists(localPath)
-    if (existing === undefined) {
+    // An existing file is replaced through a new one beside it, never truncated in place. A link
+    // is replaced at the file it leads to, which is where the policy judged the write.
+    let replaced: string | undefined
+    if (followed?.isFile() === true) {
+      replaced = existing?.isSymbolicLink() === true
+        ? await realpath(writePath).catch((error: unknown) => {
+          throw localFileFailure(error, 'written')
+        })
+        : writePath
+    }
+    if (existing === undefined || replaced !== undefined) {
       // The folder must exist and be writable; the write below stays the final word.
-      await access(dirname(writePath), constants.W_OK).catch((error: unknown) => {
+      await access(dirname(replaced ?? writePath), constants.W_OK).catch((error: unknown) => {
         throw localFileFailure(error, 'written')
       })
     }
@@ -493,10 +503,13 @@ export class EntitiesApi {
       })
     )
     try {
+      if (replaced !== undefined) await replaceFileAtomically(replaced, bytes, followed?.mode)
       // 'wx' fails rather than truncating a file that appeared since the check above.
-      await writeFile(writePath, bytes, overwrite ? undefined : { flag: 'wx' })
+      else await writeFile(writePath, bytes, overwrite ? undefined : { flag: 'wx' })
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw localFileExists(localPath, error)
+      if (replaced === undefined && (error as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw localFileExists(localPath, error)
+      }
       throw localFileFailure(error, 'written')
     }
     return { bytes: bytes.byteLength, localPath }
