@@ -133,15 +133,17 @@ const createdProjectSchema = z.object({
 
 const commentAuthorSchema = z.object({ id: z.string(), displayName: z.string() })
 
+const commentMessageSchema = z.object({
+  id: z.string().optional(),
+  author: commentAuthorSchema.nullable(),
+  content: z.string(),
+  timestamp: z.string().optional(),
+})
+
 const commentThreadSchema = z.object({
   id: z.string(),
   status: z.enum(['open', 'resolved']),
-  messages: z.array(z.object({
-    id: z.string().optional(),
-    author: commentAuthorSchema.nullable(),
-    content: z.string(),
-    timestamp: z.string().optional(),
-  })),
+  messages: z.array(commentMessageSchema),
   resolvedAt: z.string().optional(),
   resolvedBy: commentAuthorSchema.optional(),
 })
@@ -715,8 +717,20 @@ export const OPERATIONS = {
     effects: ['overleaf-read'],
   },
   reply_to_comment: {
-    description: 'Reply to an existing Overleaf review thread with timeout deduplication.',
-    inputSchema: z.object({ projectId, threadId: z.string().min(1), content: z.string().min(1) }),
+    description:
+      'Reply to an existing review thread. An unknown threadId fails with NOT_FOUND and posts nothing. Returns threadId and the created message (id, author { id, displayName }, content, ISO timestamp), plus trackChangesActive and writeMode. A timed-out reply is never resubmitted: it returns recoveredAfterTimeout when the thread shows exactly one new matching message from this account, else OUTCOME_UNKNOWN; do not retry it blindly.',
+    inputSchema: z.object({
+      projectId,
+      threadId: z.string().min(1).describe('Existing thread id from list_comments'),
+      content: z.string().min(1),
+    }),
+    outputSchema: z.object({
+      threadId: z.string(),
+      message: commentMessageSchema,
+      trackChangesActive: z.boolean(),
+      writeMode: z.literal('untracked'),
+      recoveredAfterTimeout: z.literal(true).optional(),
+    }),
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['overleaf-write', 'overleaf-read'],
   },

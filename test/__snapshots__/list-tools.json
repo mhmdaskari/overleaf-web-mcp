@@ -2346,7 +2346,7 @@
   },
   {
     "name": "reply_to_comment",
-    "description": "Reply to an existing Overleaf review thread with timeout deduplication.",
+    "description": "Reply to an existing review thread. An unknown threadId fails with NOT_FOUND and posts nothing. Returns threadId and the created message (id, author { id, displayName }, content, ISO timestamp), plus trackChangesActive and writeMode. A timed-out reply is never resubmitted: it returns recoveredAfterTimeout when the thread shows exactly one new matching message from this account, else OUTCOME_UNKNOWN; do not retry it blindly.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2357,7 +2357,8 @@
         },
         "threadId": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Existing thread id from list_comments"
         },
         "content": {
           "type": "string",
@@ -2370,6 +2371,75 @@
         "content"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string"
+        },
+        "message": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "author": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "displayName"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "content": {
+              "type": "string"
+            },
+            "timestamp": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "author",
+            "content"
+          ],
+          "additionalProperties": false
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "writeMode": {
+          "type": "string",
+          "const": "untracked"
+        },
+        "recoveredAfterTimeout": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "threadId",
+        "message",
+        "trackChangesActive",
+        "writeMode"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "destructiveHint": false,

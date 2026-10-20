@@ -389,17 +389,32 @@ export class CommentsApi {
     content: string
   ): Promise<{
     threadId: string
-    thread: CommentThread
+    message: CommentMessage
     trackChangesActive: boolean
     writeMode: 'untracked'
     recoveredAfterTimeout?: boolean
   }> {
     this.#policy.assertProject(projectId)
     assertPathSafeId(threadId, 'threadId')
-    // The thread is read back afterwards, so that read is allowed before anything is posted.
+    // The thread is read before and after posting, so that read is allowed before anything is posted.
     this.#policy.assertEffect('overleaf-write', 'overleaf-read')
     const normalized = normalizeLf(content)
+    // Overleaf creates any thread a message is posted to, so an unknown id would start a new thread.
+    const before = (await this.getThreads(projectId))[threadId]
+    if (!before) {
+      throw new McpError('NOT_FOUND', 'No comment thread has this threadId.', { details: { threadId } })
+    }
+    const earlier = new Set((before.messages ?? []).map(message => message.id))
     const started = this.#now()
+    // A reply is identified as the one new message in the thread from this account with this content.
+    const created = (thread: ThreadData | undefined): ThreadMessage[] =>
+      (thread?.messages ?? []).filter(message =>
+        typeof message.id === 'string' &&
+        !earlier.has(message.id) &&
+        message.content === normalized &&
+        (this.#currentUserId === undefined ||
+          mapAuthor(message.user_id, message.user)?.id === this.#currentUserId)
+      )
     try {
       await this.#http.postJson(`/project/${encodeURIComponent(projectId)}/thread/${encodeURIComponent(threadId)}/messages`, {
         content: normalized,
@@ -408,21 +423,16 @@ export class CommentsApi {
       if (!(error instanceof McpError) || !['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(error.code)) {
         throw error
       }
-      const thread = (await this.getThreads(projectId))[threadId]
       // A timed-out POST is accepted only when author, content, and request window identify one reply.
-      const matched = thread?.messages?.some(message => {
-        const timestamp = new Date(message.timestamp ?? 0).getTime()
-        return (
-          this.#currentUserId !== undefined &&
-          message.user_id === this.#currentUserId &&
-          message.content === normalized &&
-          timestamp >= started - 1_000 &&
-          timestamp <= this.#now() + 60_000
-        )
-      })
-      if (thread && matched) {
+      const matched = this.#currentUserId === undefined
+        ? []
+        : created((await this.getThreads(projectId))[threadId]).filter(message => {
+          const timestamp = new Date(message.timestamp ?? 0).getTime()
+          return timestamp >= started - 1_000 && timestamp <= this.#now() + 60_000
+        })
+      if (matched.length === 1) {
         const disclosure = await this.#mutationDisclosure(projectId)
-        return { threadId, thread: mapThread(threadId, thread), ...disclosure, recoveredAfterTimeout: true }
+        return { threadId, message: mapMessage(matched[0]!), ...disclosure, recoveredAfterTimeout: true }
       }
       throw new McpError(
         'OUTCOME_UNKNOWN',
@@ -430,9 +440,15 @@ export class CommentsApi {
         { details: { threadId } }
       )
     }
-    const thread = (await this.getThreads(projectId))[threadId]
-    if (!thread) throw new McpError('OUTCOME_UNKNOWN', 'Reply succeeded but the thread could not be refreshed.')
-    return { threadId, thread: mapThread(threadId, thread), ...await this.#mutationDisclosure(projectId) }
+    const replies = created((await this.getThreads(projectId))[threadId])
+    if (replies.length !== 1) {
+      throw new McpError(
+        'OUTCOME_UNKNOWN',
+        'Overleaf accepted the reply but it could not be read back. Do not retry it.',
+        { details: { threadId } }
+      )
+    }
+    return { threadId, message: mapMessage(replies[0]!), ...await this.#mutationDisclosure(projectId) }
   }
 
   async #mutationDisclosure(projectId: string): Promise<{

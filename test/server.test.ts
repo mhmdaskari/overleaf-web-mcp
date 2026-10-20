@@ -216,6 +216,36 @@ describe('MCP server', () => {
     await server.close()
   })
 
+  test('validates reply_to_comment structuredContent against its output schema over the transport', async () => {
+    const runtime = fakeRuntime()
+    const reply = {
+      threadId: 't1',
+      message: {
+        id: 'm2',
+        author: { id: 'u1', displayName: 'Ada Lovelace' },
+        content: 'Done',
+        timestamp: '2026-01-01T00:00:00.000Z',
+      },
+      trackChangesActive: false,
+      writeMode: 'untracked',
+      recoveredAfterTimeout: true,
+    }
+    runtime.comments.replyToComment.mockResolvedValue(reply)
+    const server = createMcpServer(runtime)
+    const client = new Client({ name: 'smoke-client', version: '1.0.0' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+
+    const result = await client.callTool({
+      name: 'reply_to_comment',
+      arguments: { projectId: 'p', threadId: 't1', content: 'Done' },
+    })
+    expect(result.isError).toBeFalsy()
+    expect(result.structuredContent).toEqual(reply)
+    await client.close()
+    await server.close()
+  })
+
   test('validates auth_status structuredContent against its output schema over the transport', async () => {
     const runtime = fakeRuntime()
     const status = {

@@ -249,24 +249,72 @@ describe('review comments API', () => {
     expect(connection.leaveDocument).toHaveBeenCalledOnce()
   })
 
+  function reply(id: string, timestamp: number) {
+    return {
+      id,
+      content: 'My reply',
+      user_id: 'user',
+      user: { id: 'user', first_name: 'Ada', last_name: 'Lovelace', email: 'ada@example.test' },
+      timestamp,
+    }
+  }
+
+  test('returns the created reply message, not the whole thread', async () => {
+    const now = Date.UTC(2026, 0, 1)
+    const http = {
+      postJson: vi.fn(async () => undefined),
+      getJson: vi.fn()
+        .mockResolvedValueOnce(threads)
+        .mockResolvedValueOnce({
+          ...threads,
+          open: { messages: [...threads.open.messages, reply('m2', now)] },
+        }),
+      deleteJson: vi.fn(),
+    }
+    const { connections } = connectionHarness([])
+    const api = new CommentsApi(http, connections, { currentUserId: 'user', now: () => now })
+
+    const result = await api.replyToComment('project', 'open', 'My reply')
+
+    expect(http.postJson).toHaveBeenCalledWith('/project/project/thread/open/messages', { content: 'My reply' })
+    expect(result).toEqual({
+      threadId: 'open',
+      message: {
+        id: 'm2',
+        author: { id: 'user', displayName: 'Ada Lovelace' },
+        content: 'My reply',
+        timestamp: '2026-01-01T00:00:00.000Z',
+      },
+      trackChangesActive: false,
+      writeMode: 'untracked',
+    })
+  })
+
+  test('refuses a reply to a thread that does not exist before posting anything', async () => {
+    const http = {
+      postJson: vi.fn(),
+      getJson: vi.fn(async () => threads),
+      deleteJson: vi.fn(),
+    }
+    const { connections } = connectionHarness([])
+    const api = new CommentsApi(http, connections, { currentUserId: 'user' })
+
+    await expect(api.replyToComment('project', 'missing', 'My reply')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      details: { threadId: 'missing' },
+    })
+    expect(http.postJson).not.toHaveBeenCalled()
+  })
+
   test('recovers a timed-out reply by matching the current user, content, and time window', async () => {
     const now = Date.now()
     const http = {
       postJson: vi.fn(async () => {
         throw new McpError('TIMEOUT', 'request timed out')
       }),
-      getJson: vi.fn(async () => ({
-        open: {
-          messages: [
-            {
-              id: 'new-message',
-              content: 'My reply',
-              user_id: 'user',
-              timestamp: new Date(now + 1).toISOString(),
-            },
-          ],
-        },
-      })),
+      getJson: vi.fn()
+        .mockResolvedValueOnce({ open: { messages: [] } })
+        .mockResolvedValueOnce({ open: { messages: [reply('new-message', now + 1)] } }),
       deleteJson: vi.fn(),
     }
     const { connections } = connectionHarness([])
@@ -276,10 +324,30 @@ describe('review comments API', () => {
     })
 
     await expect(api.replyToComment('project', 'open', 'My reply')).resolves.toMatchObject({
+      message: { id: 'new-message', content: 'My reply' },
       recoveredAfterTimeout: true,
       trackChangesActive: false,
       writeMode: 'untracked',
     })
+  })
+
+  test('does not take an identical earlier reply as proof that a timed-out reply applied', async () => {
+    const now = Date.now()
+    const earlier = { open: { messages: [reply('earlier', now)] } }
+    const http = {
+      postJson: vi.fn(async () => {
+        throw new McpError('TIMEOUT', 'request timed out')
+      }),
+      getJson: vi.fn(async () => earlier),
+      deleteJson: vi.fn(),
+    }
+    const { connections } = connectionHarness([])
+    const api = new CommentsApi(http, connections, { currentUserId: 'user', now: () => now })
+
+    await expect(api.replyToComment('project', 'open', 'My reply')).rejects.toMatchObject({
+      code: 'OUTCOME_UNKNOWN',
+    })
+    expect(http.postJson).toHaveBeenCalledOnce()
   })
 
   test('creates a thread, attaches its range, and returns the verified revision', async () => {
