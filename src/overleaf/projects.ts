@@ -253,7 +253,8 @@ export class ProjectsApi {
     }
     const projectName = name ?? fileName.replace(/\.zip$/iu, '')
     validateProjectName(projectName)
-    this.#policy.assertEffect('project-lifecycle')
+    // The stored name is read back afterwards, so that read is allowed before anything is uploaded.
+    this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
     const readPath = await this.#policy.resolveLocalRead(localZipPath)
     const bytes = await readFile(readPath).catch((error: unknown) => {
       throw new McpError('NOT_FOUND', `Local file could not be read: ${localZipPath}`, {
@@ -285,7 +286,19 @@ export class ProjectsApi {
     const body = response as { success?: boolean; error?: unknown } | null
     if (body?.success === false) throw zipFailure(body.error)
     const projectId = this.#parseCreated(response, 'project import')
-    return { projectId, name: projectName, url: this.#projectUrl(projectId) }
+    // Overleaf names the project after the root document's \title when it has one, and adds
+    // " (n)" to a name the account already uses, so only a read-back tells the stored name.
+    let stored: { name: string }
+    try {
+      stored = await this.#options.findProject(projectId)
+    } catch (error) {
+      throw new McpError(
+        'REMOTE_ERROR',
+        'The project was imported but its name could not be read. Call list_projects or get_project_tree with the projectId in details.',
+        { details: { projectId }, cause: error }
+      )
+    }
+    return { projectId, name: stored.name, url: this.#projectUrl(projectId) }
   }
 
   /**

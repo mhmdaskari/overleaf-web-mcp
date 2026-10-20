@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
 
 import { McpError } from '../../src/core/errors.js'
+import { AccessPolicy } from '../../src/core/policy.js'
 import { ProjectsApi } from '../../src/overleaf/projects.js'
 import type { ProjectEntity, ProjectTree } from '../../src/overleaf/tree.js'
 
@@ -16,7 +17,9 @@ const rootDoc: ProjectEntity = {
   parentFolderId: 'root',
 }
 
-function harness(overrides: { name?: string; trashed?: boolean; archived?: boolean } = {}) {
+function harness(
+  overrides: { name?: string; trashed?: boolean; archived?: boolean; policy?: AccessPolicy } = {}
+) {
   const calls: string[] = []
   const http = {
     postJson: vi.fn(async () => ({ project_id: 'new' })),
@@ -51,6 +54,7 @@ function harness(overrides: { name?: string; trashed?: boolean; archived?: boole
     invalidate: vi.fn(async () => {
       calls.push('invalidate')
     }),
+    policy: overrides.policy,
   }
   return { api: new ProjectsApi(options), http, options, calls }
 }
@@ -110,7 +114,7 @@ describe('projects API', () => {
 
   describe('zip import', () => {
     test('uploads the archive as multipart with the project name defaulting to the file name', async () => {
-      const { api, http } = harness()
+      const { api, http, options } = harness({ name: 'My Paper' })
       const dir = await mkdtemp(join(tmpdir(), 'olzip-'))
       const zipPath = join(dir, 'My Paper.zip')
       await writeFile(zipPath, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
@@ -124,6 +128,46 @@ describe('projects API', () => {
       expect(path).toBe('/project/new/upload')
       expect(form.get('name')).toBe('My Paper')
       expect((form.get('qqfile') as File).name).toBe('My Paper.zip')
+      expect(options.findProject).toHaveBeenCalledWith('imported')
+    })
+
+    test('reports the name Overleaf stored, which may come from the root document title', async () => {
+      const { api } = harness({ name: 'A Study of Things (1)' })
+      const dir = await mkdtemp(join(tmpdir(), 'olzip-'))
+      const zipPath = join(dir, 'paper.zip')
+      await writeFile(zipPath, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+
+      await expect(api.importProjectZip(zipPath, 'Requested')).resolves.toMatchObject({
+        projectId: 'imported',
+        name: 'A Study of Things (1)',
+      })
+    })
+
+    test('hands back the new projectId when the stored name cannot be read after the import', async () => {
+      const { api, options } = harness()
+      options.findProject.mockRejectedValue(new McpError('TIMEOUT', 'slow'))
+      const dir = await mkdtemp(join(tmpdir(), 'olzip-'))
+      const zipPath = join(dir, 'paper.zip')
+      await writeFile(zipPath, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+
+      await expect(api.importProjectZip(zipPath)).rejects.toMatchObject({
+        code: 'REMOTE_ERROR',
+        details: { projectId: 'imported' },
+      })
+    })
+
+    test('refuses an import whose name read-back the policy forbids, before uploading', async () => {
+      const policy = await AccessPolicy.create({ allowedEffects: ['project-lifecycle', 'local-read'] })
+      const { api, http } = harness({ policy })
+      const dir = await mkdtemp(join(tmpdir(), 'olzip-'))
+      const zipPath = join(dir, 'paper.zip')
+      await writeFile(zipPath, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
+
+      await expect(api.importProjectZip(zipPath)).rejects.toMatchObject({
+        code: 'POLICY_DENIED',
+        details: { effect: 'overleaf-read' },
+      })
+      expect(http.postForm).not.toHaveBeenCalled()
     })
 
     test('rejects a non-zip path before reading it and reports a missing file as NOT_FOUND', async () => {
