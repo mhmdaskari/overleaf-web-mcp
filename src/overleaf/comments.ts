@@ -575,7 +575,20 @@ export class CommentsApi {
           }
           throw asMcpError(submitError)
         }
-        const live = await connection.joinDocument(entity.id)
+        let live: JoinedDocument
+        try {
+          live = await connection.joinDocument(entity.id)
+        } catch (error) {
+          // The attachment applied, so a failed verification read is settled by observation, never a resend.
+          return {
+            entity,
+            before,
+            visibleStart,
+            visibleEnd,
+            trackChangesActive: connection.trackChangesActive,
+            submitError: error,
+          }
+        }
         await leaveQuietly(connection, entity.id)
         return {
           entity,
@@ -758,7 +771,13 @@ export class CommentsApi {
           }
         }
         if (submitError) throw asMcpError(submitError)
-        const live = await connection.joinDocument(entity.id)
+        let live: JoinedDocument
+        try {
+          live = await connection.joinDocument(entity.id)
+        } catch (error) {
+          // The change applied, so a failed verification read is settled by observation, never a resend.
+          return { before, entity, trackChangesActive: connection.trackChangesActive, submitError: error }
+        }
         await leaveQuietly(connection, entity.id)
         return { before, entity, live, trackChangesActive: connection.trackChangesActive }
       })
@@ -766,6 +785,7 @@ export class CommentsApi {
 
     let live = submission.live
     let recoveredAfterTimeout = false
+    const timedOut = submission.submitError instanceof McpError && submission.submitError.code === 'TIMEOUT'
     if (!live) {
       await this.#connections.invalidate(input.projectId)
       const deadline = Date.now() + this.#recoveryTimeoutMs
@@ -800,16 +820,16 @@ export class CommentsApi {
       } while (Date.now() <= deadline)
 
       if (!live) {
-        throw new McpError('OUTCOME_UNKNOWN', 'Could not observe comment status after timeout.', {
+        throw new McpError('OUTCOME_UNKNOWN', 'Could not observe the unconfirmed comment status.', {
           cause: observationError,
           details: { threadId: input.threadId },
         })
       }
       if (!(await this.#statusMatches(input.projectId, live, input.threadId, resolved))) {
         throw new McpError(
-          observedUnapplied ? 'TIMEOUT' : 'OUTCOME_UNKNOWN',
-          'The comment status request timed out and the requested state is not live.',
-          { details: { threadId: input.threadId, outcome: 'not_applied' } }
+          observedUnapplied ? (timedOut ? 'TIMEOUT' : 'REMOTE_ERROR') : 'OUTCOME_UNKNOWN',
+          'The comment status change was not confirmed and the requested state is not live.',
+          { retryable: false, details: { threadId: input.threadId, outcome: 'not_applied' } }
         )
       }
       recoveredAfterTimeout = true
