@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -194,19 +194,47 @@ describe('entity API', () => {
   })
 
   test('refuses to replace an existing local file unless overwrite is requested', async () => {
-    const { api } = harness()
+    const { api, http } = harness()
     const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
     const target = `${directory}/existing.tex`
     await writeFile(target, 'do not clobber')
 
     await expect(
       api.downloadFile('project', 'chapters/old.tex', target)
-    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT', message: expect.stringMatching(/already exists/u) })
     await expect(readFile(target, 'utf8')).resolves.toBe('do not clobber')
+    // Refused before the entity is fetched, so the refusal costs no request.
+    expect(http.getBytes).not.toHaveBeenCalled()
 
     await expect(
       api.downloadFile('project', 'chapters/old.tex', target, true)
     ).resolves.toMatchObject({ bytes: 3 })
+  })
+
+  test('refuses a folder at the local path before fetching, even with overwrite', async () => {
+    const { api, http } = harness()
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
+
+    for (const overwrite of [false, true]) {
+      await expect(api.downloadFile('project', 'chapters/old.tex', directory, overwrite)).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+        message: expect.stringMatching(/is a folder/u),
+      })
+    }
+    expect(http.getBytes).not.toHaveBeenCalled()
+  })
+
+  test('refuses a symbolic link at the local path without overwrite, even a dangling one', async () => {
+    const { api, http } = harness()
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
+    const link = join(directory, 'link.tex')
+    await symlink(join(directory, 'missing.tex'), link)
+
+    await expect(api.downloadFile('project', 'chapters/old.tex', link)).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      message: expect.stringMatching(/already exists/u),
+    })
+    expect(http.getBytes).not.toHaveBeenCalled()
   })
 
   test('with ifExists skip, leaves an existing entity untouched and sends nothing', async () => {

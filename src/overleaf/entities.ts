@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { lstat, readFile, writeFile } from 'node:fs/promises'
 import { basename, posix } from 'node:path'
 
 import { McpError } from '../core/errors.js'
@@ -143,6 +143,14 @@ function validateName(name: string): void {
   if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\')) {
     throw new McpError('INVALID_ARGUMENT', `Invalid entity name: ${name}`)
   }
+}
+
+function localFileExists(localPath: string, cause?: unknown): McpError {
+  return new McpError(
+    'INVALID_ARGUMENT',
+    `${localPath} already exists. Pass overwrite: true to replace it.`,
+    cause === undefined ? {} : { cause }
+  )
 }
 
 function resolveFolderId(connection: TreeConnection, path: string): string {
@@ -430,6 +438,15 @@ export class EntitiesApi {
     this.#policy.assertEffect('overleaf-read')
     // Checked before anything is fetched, so a refused path costs no request.
     const writePath = await this.#policy.resolveLocalWrite(localPath)
+    // lstat, so a symbolic link here counts as existing, as it does for the 'wx' write below.
+    const existing = await lstat(writePath).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      throw error
+    })
+    if (existing?.isDirectory() === true) {
+      throw new McpError('INVALID_ARGUMENT', `${localPath} is a folder; name the file to write.`)
+    }
+    if (existing !== undefined && !overwrite) throw localFileExists(localPath)
     const bytes = await this.#connections.withConnection(projectId, async connection =>
       await connection.queue.run(async () => {
         const entity = resolveProjectPath(connection.getTree(), filePath)
@@ -445,16 +462,10 @@ export class EntitiesApi {
       })
     )
     try {
-      // 'wx' fails rather than truncating a file the caller did not mean to replace.
+      // 'wx' fails rather than truncating a file that appeared since the check above.
       await writeFile(writePath, bytes, overwrite ? undefined : { flag: 'wx' })
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-        throw new McpError(
-          'INVALID_ARGUMENT',
-          `${localPath} already exists. Pass overwrite: true to replace it.`,
-          { cause: error }
-        )
-      }
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw localFileExists(localPath, error)
       throw error
     }
     return { bytes: bytes.byteLength, localPath }
