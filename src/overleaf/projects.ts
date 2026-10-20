@@ -147,10 +147,10 @@ function zipFailure(error: unknown): McpError {
   )
 }
 
-/** Keeps the failure's code and details and adds which settings were stored before it. */
 /** Read-back failure codes an import keeps, since each means the same as for any other call. */
 const READ_BACK_CODES_KEPT: ReadonlySet<string> = new Set(['AUTH_EXPIRED', 'POLICY_DENIED', 'TIMEOUT'])
 
+/** Keeps the failure's code and details and adds which settings were stored before it. */
 function partialSettingsFailure(error: unknown, applied: string[], failed: string): McpError {
   const cause = asMcpError(error)
   const stored = applied.length === 0 ? 'No setting was' : `${applied.join(', ')} ${applied.length === 1 ? 'was' : 'were'}`
