@@ -64,6 +64,22 @@ function localWriteFailure(error: unknown, localPath: string): McpError {
 }
 
 /**
+ * A local file-system failure typed by its errno code alone: a missing file or folder is
+ * `NOT_FOUND`, anything else `INVALID_ARGUMENT`. The message never carries the path or the
+ * operating system's text, which names the resolved path.
+ */
+export function localFileFailure(error: unknown, action: 'read' | 'written'): McpError {
+  if (error instanceof McpError) return error
+  const code = errnoCode(error)
+  const known = code !== undefined && ERRNO_PATTERN.test(code)
+  return new McpError(
+    code === 'ENOENT' ? 'NOT_FOUND' : 'INVALID_ARGUMENT',
+    `The local file could not be ${action}${known ? ` (${code})` : ''}.`,
+    { cause: error, ...(known ? { details: { errno: code } } : {}) }
+  )
+}
+
+/**
  * Checks a local destination before any request: its folder must exist and be writable, and an
  * existing file is replaced only with `overwrite`. The temporary file is created here, so a
  * folder that cannot be written fails before anything is sent. Whether the destination exists is

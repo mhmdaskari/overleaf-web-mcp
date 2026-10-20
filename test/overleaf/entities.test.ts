@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -235,6 +235,50 @@ describe('entity API', () => {
       message: expect.stringMatching(/already exists/u),
     })
     expect(http.getBytes).not.toHaveBeenCalled()
+  })
+
+  test('reports a local file that cannot be read by its errno, without the path or the system message', async () => {
+    const { api, http } = harness()
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-upload-'))
+    const missing = join(directory, 'missing.png')
+
+    const notFound = await api.uploadFile('project', missing).catch((error: unknown) => error)
+    expect(notFound).toMatchObject({ code: 'NOT_FOUND', details: { errno: 'ENOENT' } })
+    const isFolder = await api.uploadFile('project', directory, '', 'folder.png').catch((error: unknown) => error)
+    expect(isFolder).toMatchObject({ code: 'INVALID_ARGUMENT', details: { errno: 'EISDIR' } })
+    for (const error of [notFound, isFolder]) {
+      expect((error as McpError).message).not.toContain(directory)
+      expect((error as McpError).message).not.toMatch(/no such file|illegal operation/iu)
+    }
+    expect(http.postForm).not.toHaveBeenCalled()
+  })
+
+  test('reports a local file that cannot be written by its errno, without the path or the system message', async () => {
+    const { api, http } = harness()
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
+
+    const notFound = await api
+      .downloadFile('project', 'chapters/old.tex', join(directory, 'absent', 'old.tex'))
+      .catch((error: unknown) => error)
+    expect(notFound).toMatchObject({ code: 'NOT_FOUND', details: { errno: 'ENOENT' } })
+    expect((notFound as McpError).message).not.toContain(directory)
+    expect((notFound as McpError).message).not.toMatch(/no such file/iu)
+    expect(http.getBytes).not.toHaveBeenCalled()
+  })
+
+  test.skipIf(process.getuid?.() === 0)('reports an unwritable local folder as an argument error', async () => {
+    const { api } = harness()
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
+    await chmod(directory, 0o500)
+    try {
+      const denied = await api
+        .downloadFile('project', 'chapters/old.tex', join(directory, 'old.tex'))
+        .catch((error: unknown) => error)
+      expect(denied).toMatchObject({ code: 'INVALID_ARGUMENT', details: { errno: 'EACCES' } })
+      expect((denied as McpError).message).not.toContain(directory)
+    } finally {
+      await chmod(directory, 0o700)
+    }
   })
 
   test('with ifExists skip, leaves an existing entity untouched and sends nothing', async () => {

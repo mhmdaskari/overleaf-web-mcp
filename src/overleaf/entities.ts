@@ -1,8 +1,9 @@
-import { lstat, readFile, writeFile } from 'node:fs/promises'
-import { basename, posix } from 'node:path'
+import { lstat, readFile, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, posix } from 'node:path'
 
 import { McpError } from '../core/errors.js'
 import { gitBlobHash } from '../core/hash.js'
+import { localFileFailure } from '../core/local-download.js'
 import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
 import { ERROR_CODE_PATTERN } from '../http/client.js'
@@ -321,7 +322,9 @@ export class EntitiesApi {
   ): Promise<UploadedFile | SkippedUpload> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect('overleaf-write')
-    const bytes = await readFile(await this.#policy.resolveLocalRead(localPath))
+    const bytes = await readFile(await this.#policy.resolveLocalRead(localPath)).catch((error: unknown) => {
+      throw localFileFailure(error, 'read')
+    })
     const name = destinationName ?? basename(localPath)
     validateName(name)
     const folderPath = destinationFolderPath === '' ? '' : normalizeProjectPath(destinationFolderPath)
@@ -441,12 +444,17 @@ export class EntitiesApi {
     // lstat, so a symbolic link here counts as existing, as it does for the 'wx' write below.
     const existing = await lstat(writePath).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
-      throw error
+      throw localFileFailure(error, 'written')
     })
     if (existing?.isDirectory() === true) {
       throw new McpError('INVALID_ARGUMENT', `${localPath} is a folder; name the file to write.`)
     }
     if (existing !== undefined && !overwrite) throw localFileExists(localPath)
+    if (existing === undefined) {
+      await stat(dirname(writePath)).catch((error: unknown) => {
+        throw localFileFailure(error, 'written')
+      })
+    }
     const bytes = await this.#connections.withConnection(projectId, async connection =>
       await connection.queue.run(async () => {
         const entity = resolveProjectPath(connection.getTree(), filePath)
@@ -466,7 +474,7 @@ export class EntitiesApi {
       await writeFile(writePath, bytes, overwrite ? undefined : { flag: 'wx' })
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw localFileExists(localPath, error)
-      throw error
+      throw localFileFailure(error, 'written')
     }
     return { bytes: bytes.byteLength, localPath }
   }
