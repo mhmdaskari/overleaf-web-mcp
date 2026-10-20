@@ -92,7 +92,7 @@ export class ProjectConnectionCache<T extends ClosableConnection> {
           // Overleaf closed this socket; a call still holding it finishes on its own, and its release is a no-op.
           if (existing.idleTimer) clearTimeout(existing.idleTimer)
           this.#entries.delete(projectId)
-          // The holder's release will not notify, so a pending invalidate or capacity wait is woken here.
+          // The holder's release will not notify, so pending invalidates and capacity waits are woken here.
           this.#notifySlot()
           await existing.value.close()
         } else if (existing) {
@@ -165,9 +165,12 @@ export class ProjectConnectionCache<T extends ClosableConnection> {
     return new Promise<void>(resolve => this.#slotWaiters.push(resolve))
   }
 
+  // Wakes every waiter: each re-checks under the lock and parks again if it still cannot proceed.
+  // Waking one could hand the wakeup to a waiter that cannot use it and strand the rest.
   #notifySlot(): void {
-    const waiter = this.#slotWaiters.shift()
-    waiter?.()
+    const waiters = this.#slotWaiters
+    this.#slotWaiters = []
+    for (const waiter of waiters) waiter()
   }
 
   async #locked<R>(operation: () => Promise<R> | R): Promise<R> {
