@@ -1,6 +1,6 @@
 import type { AppConfig } from './config.js'
 import type { OverleafServiceRuntime } from './contracts/service.js'
-import { AUTH_LOGIN_INSTRUCTION, McpError } from './core/errors.js'
+import { asMcpError, AUTH_LOGIN_INSTRUCTION, McpError } from './core/errors.js'
 import { AccessPolicy } from './core/policy.js'
 import { parseBootstrapMeta, type BootstrapMeta } from './http/bootstrap.js'
 import { OverleafHttpClient } from './http/client.js'
@@ -284,21 +284,32 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       )
     }
     await this.entities.createEmptyFile(projectId, filePath)
-    const created = await this.documents.readFile(projectId, filePath)
-    if (content !== '') {
-      return await this.documents.writeFile(
-        projectId,
-        filePath,
-        created.revision,
-        content,
-        writeMode
+    try {
+      const created = await this.documents.readFile(projectId, filePath)
+      if (content !== '') {
+        return await this.documents.writeFile(
+          projectId,
+          filePath,
+          created.revision,
+          content,
+          writeMode
+        )
+      }
+      return {
+        revision: created.revision,
+        protocol: created.protocol,
+        trackChangesActive: created.trackChangesActive,
+        writeMode: 'untracked' as const,
+      }
+    } catch (error) {
+      // The document exists from here on and is never deleted unasked, so the error says so
+      // and keeps the write's own classification. Creating it again would fail, so not retryable.
+      const failure = asMcpError(error)
+      throw new McpError(
+        failure.code,
+        `${failure.message} The document was created and now exists at the requested path, possibly still empty. Do not create it again: read it with read_file and write its content with write_file.`,
+        { retryable: false, details: { ...failure.details, created: true }, cause: error }
       )
-    }
-    return {
-      revision: created.revision,
-      protocol: created.protocol,
-      trackChangesActive: created.trackChangesActive,
-      writeMode: 'untracked' as const,
     }
   }
 

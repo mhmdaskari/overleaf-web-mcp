@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
 
 import { readConfig } from '../src/config.js'
+import { McpError } from '../src/core/errors.js'
 import { gitBlobHash } from '../src/core/hash.js'
 import { AccessPolicy } from '../src/core/policy.js'
 import type { RawFolder } from '../src/overleaf/tree.js'
@@ -102,6 +103,39 @@ describe('runtime bootstrap', () => {
       runtime.createFile('project', 'chapter.tex', '', 'tracked')
     ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
     expect(entities.createEmptyFile).not.toHaveBeenCalled()
+  })
+
+  test('says the document now exists when its content write fails after creating it', async () => {
+    const { runtime, entities, documents } = runtimeWithWrites()
+    documents.writeFile.mockRejectedValueOnce(
+      new McpError('TIMEOUT', 'The write timed out and the original revision is still live.', {
+        details: { outcome: 'not_applied' },
+      })
+    )
+
+    const failure = await runtime
+      .createFile('project', 'chapter.tex', 'Tracked content', 'tracked')
+      .catch((error: unknown) => error)
+
+    expect(failure).toMatchObject({
+      code: 'TIMEOUT',
+      retryable: false,
+      details: { outcome: 'not_applied', created: true },
+    })
+    expect((failure as McpError).message).toContain('write_file')
+    expect((failure as McpError).message).not.toContain('chapter.tex')
+    expect(entities.createEmptyFile).toHaveBeenCalledTimes(1)
+  })
+
+  test('says the document now exists when reading it back after creating it fails', async () => {
+    const { runtime, documents } = runtimeWithWrites()
+    documents.readFile.mockRejectedValueOnce(new McpError('OUTCOME_UNKNOWN', 'Overleaf socket is not connected.'))
+
+    await expect(runtime.createFile('project', 'chapter.tex', '')).rejects.toMatchObject({
+      code: 'OUTCOME_UNKNOWN',
+      details: { created: true },
+    })
+    expect(documents.writeFile).not.toHaveBeenCalled()
   })
 
   test('rejects tracked file creation without a user identity before creating an entity', async () => {
