@@ -151,6 +151,8 @@ interface BuildRecord {
   clsiServerId?: string
   /** Every output path, when there were few enough to list. */
   files?: string[]
+  /** BibTeX did not run for this build, so a listed output.blg or output.bbl is an earlier build's. */
+  noBibliography?: true
 }
 
 interface BuildRefPayload extends BuildRecord {
@@ -236,7 +238,8 @@ export function decodeBuildRef(token: string): BuildRecord {
       (payload.files !== undefined &&
         (!Array.isArray(payload.files) ||
           payload.files.length > MAX_LISTED_OUTPUTS ||
-          !payload.files.every(file => typeof file === 'string' && isSafeOutputPath(file))))
+          !payload.files.every(file => typeof file === 'string' && isSafeOutputPath(file)))) ||
+      (payload.noBibliography !== undefined && payload.noBibliography !== true)
     ) {
       throw new Error('invalid fields')
     }
@@ -245,6 +248,7 @@ export function decodeBuildRef(token: string): BuildRecord {
       buildId: payload.buildId,
       ...(payload.clsiServerId === undefined ? {} : { clsiServerId: payload.clsiServerId }),
       ...(payload.files === undefined ? {} : { files: payload.files }),
+      ...(payload.noBibliography === true ? { noBibliography: true } : {}),
     }
   } catch (error) {
     throw new McpError('INVALID_ARGUMENT', 'buildRef is invalid; pass one compile_project returned.', { cause: error })
@@ -369,9 +373,11 @@ export class CompileApi {
     const paths = response.outputFiles.map(file => file.path)
     const bibliography =
       record !== undefined && paths.includes('output.blg') ? await this.#citesBibliography(record, paths) : false
-    // Left over from an earlier build, so the output tools answer as if BibTeX never ran.
-    if (bibliography === false && record?.files !== undefined) {
-      record.files = record.files.filter(file => !BIBLIOGRAPHY_OUTPUTS.has(file))
+    // Left over from an earlier build, so the output tools answer as if BibTeX never ran, also
+    // for a build with too many outputs to list.
+    if (bibliography === false && record !== undefined && paths.some(path => BIBLIOGRAPHY_OUTPUTS.has(path))) {
+      record.noBibliography = true
+      if (record.files !== undefined) record.files = record.files.filter(file => !BIBLIOGRAPHY_OUTPUTS.has(file))
     }
     // An aux file that could not be read keeps the log in, so a build is never reported clean on a guess.
     const bibtexLogs = paths.filter(path => path.endsWith('.blg') && (path !== 'output.blg' || bibliography !== false))
@@ -555,7 +561,8 @@ export class CompileApi {
   }
 
   #assertListed(record: BuildRecord, file: string): void {
-    if (record.files !== undefined && !record.files.includes(file)) {
+    const unlisted = record.files !== undefined && !record.files.includes(file)
+    if (unlisted || (record.noBibliography === true && BIBLIOGRAPHY_OUTPUTS.has(file))) {
       throw new McpError('NOT_FOUND', `Build ${record.buildId} produced no ${file}.`, {
         details: { buildId: record.buildId, file },
       })

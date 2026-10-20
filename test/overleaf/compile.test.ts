@@ -174,6 +174,37 @@ describe('compile_project', () => {
     expect(requests).toHaveLength(3)
   })
 
+  test('a leftover BibTeX log stays out of the output tools for a build with too many outputs to list', async () => {
+    const figures = Array.from({ length: 100 }, (_, index) => `fig${index}.png`)
+    const { api, requests } = harness({
+      compile: {
+        status: 'success',
+        outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg', ...figures),
+      },
+      files: {
+        'output.log': await fixture('clean.log'),
+        'output.aux': await fixture('no-bib.aux'),
+        'output.bbl': '\\begin{thebibliography}{1}\n\\end{thebibliography}\n',
+        'output.blg': await fixture('missing-bib.blg'),
+      },
+    })
+    const { summary, buildRef } = await api.compileProject('p', 'main.tex')
+    expect(summary).toMatchObject({ builtCleanly: true, errorCount: 0, missingFiles: [] })
+    expect(decodeBuildRef(buildRef!).files).toBeUndefined()
+    const before = requests.length
+
+    await expect(api.getCompileLog('p', { kind: 'bibtex' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(api.downloadCompileOutput('p', '/tmp/x.bbl', { file: 'output.bbl' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    expect(requests).toHaveLength(before)
+    await expect(api.getCompileLog('p')).resolves.toMatchObject({ file: 'output.log' })
+
+    const other = harness({ files: { 'output.blg': await fixture('missing-bib.blg') } })
+    await expect(other.api.getCompileLog('p', { kind: 'bibtex', buildRef })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    expect(other.requests).toHaveLength(0)
+    const forged = Buffer.from(JSON.stringify({ format: 1, projectId: 'p', buildId: BUILD, noBibliography: 'no' })).toString('base64url')
+    expect(() => decodeBuildRef(forged)).toThrow(McpError)
+  })
+
   test('a \\citation without \\bibdata does not make a leftover BibTeX log this build\'s', async () => {
     // \cite with no \bibliography writes \citation lines but no \bibdata, so latexmk never runs BibTeX.
     const { api } = harness({
