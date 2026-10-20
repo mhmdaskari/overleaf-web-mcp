@@ -174,6 +174,27 @@ describe('compile_project', () => {
     expect(requests).toHaveLength(3)
   })
 
+  test('a \\citation without \\bibdata does not make a leftover BibTeX log this build\'s', async () => {
+    // \cite with no \bibliography writes \citation lines but no \bibdata, so latexmk never runs BibTeX.
+    const { api } = harness({
+      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg') },
+      files: {
+        'output.log': await fixture('missing-bib.log'),
+        'output.aux': await fixture('citation-only.aux'),
+        'output.blg': await fixture('missing-bib.blg'),
+      },
+    })
+    const { summary } = await api.compileProject('p', 'main.tex')
+    // The LaTeX log's own undefined citations stay; the stale log's missing database does not.
+    expect(summary).toMatchObject({
+      builtCleanly: true,
+      errorCount: 0,
+      missingFiles: [],
+      undefinedCitations: ['knuth84', 'lamport94'],
+    })
+    await expect(api.getCompileLog('p', { kind: 'bibtex' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
   test('a BibTeX log is still merged when the aux file cannot be read, so the build is never reported clean on a guess', async () => {
     const { api } = harness({
       compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.blg') },

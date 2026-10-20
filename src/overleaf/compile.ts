@@ -122,10 +122,12 @@ const MAX_LISTED_OUTPUTS = 100
 const MAX_REMEMBERED_BUILDS = 100
 const MAX_BIBTEX_LOGS = 3
 /**
- * What BibTeX or Biber reads from output.aux: a citation, a database, biblatex's own records, or
- * an \include'd file's aux, which may hold any of them.
+ * What makes latexmk run BibTeX or Biber for output.aux: a database (\bibdata), biblatex's own
+ * records, or an \include'd file's aux, which may hold either. A \citation alone does not: \cite
+ * without \bibliography writes it, and BibTeX is then never run. An \@input line is kept as a
+ * reason to keep the log, since the included aux files are not read.
  */
-const AUX_BIBLIOGRAPHY_LINE = /^\\(?:citation|bibdata|abx@aux@|@input)/mu
+const AUX_BIBLIOGRAPHY_LINE = /^\\(?:bibdata|abx@aux@|@input)/mu
 /** BibTeX's or Biber's outputs for output.aux. */
 const BIBLIOGRAPHY_OUTPUTS = new Set(['output.blg', 'output.bbl'])
 
@@ -595,7 +597,7 @@ export class CompileApi {
   }
 
   /**
-   * Whether this build's output.aux gives BibTeX or Biber anything to read, which ties the listed
+   * Whether this build's output.aux makes latexmk run BibTeX or Biber, which ties the listed
    * output.blg to this build: Overleaf's incremental compile directory keeps an earlier build's
    * .blg and .bbl and lists them again. Undefined when the aux file could not be read in full.
    */
