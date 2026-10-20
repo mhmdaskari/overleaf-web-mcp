@@ -60,6 +60,13 @@ function readBalanced(
   return null
 }
 
+function isEscaped(source: string, index: number): boolean {
+  // `\\` is a complete control symbol, so only an odd run of backslashes escapes the next char.
+  let backslashes = 0
+  while (source[index - 1 - backslashes] === '\\') backslashes += 1
+  return backslashes % 2 === 1
+}
+
 function maskIgnored(source: string): string {
   // Spaces preserve every source offset; newlines preserve line structure for returned ranges.
   const chars = [...source]
@@ -75,7 +82,7 @@ function maskIgnored(source: string): string {
       chars[index] = ' '
       continue
     }
-    if (source[index] === '%' && source[index - 1] !== '\\') {
+    if (source[index] === '%' && !isEscaped(source, index)) {
       lineComment = true
       chars[index] = ' '
       continue

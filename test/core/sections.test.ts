@@ -52,3 +52,33 @@ Body
     expect(result).toContain('\\section{Methods}')
   })
 })
+
+const titles = (input: string): string[] => findSections(input).map(section => section.title)
+
+describe('comment masking', () => {
+  test('treats a percent after a line-break control symbol as a comment', () => {
+    const input = String.raw`\section{A}
+Line break then comment \\% \section{Commented After Linebreak}
+\section{B}
+`
+    expect(titles(input)).toEqual(['A', 'B'])
+    expect(titles('\\section{A}\nx \\\\% \\section{B}')).toEqual(['A'])
+  })
+
+  test('decides an escaped percent by the parity of the backslash run', () => {
+    expect(titles('x \\% \\section{B}')).toEqual(['B'])
+    expect(titles('x \\\\\\% \\section{B}')).toEqual(['B'])
+    expect(titles('x \\\\\\\\% \\section{B}')).toEqual([])
+  })
+
+  test('keeps a section body from ending inside a commented heading line', () => {
+    const input = String.raw`\section{A}
+Line break then comment \\% \section{Hidden}
+\section{B}
+`
+    const [a] = findSections(input)
+    expect(input.slice(a!.bodyStart, a!.end)).toBe(
+      'Line break then comment \\\\% \\section{Hidden}\n'
+    )
+  })
+})
