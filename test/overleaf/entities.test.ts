@@ -26,7 +26,7 @@ const tree: ProjectEntity[] = [
   },
 ]
 
-function harness() {
+function harness(entities: ProjectEntity[] = tree) {
   const http = {
     postJson: vi.fn(async () => ({ _id: 'new-doc', name: 'new.tex' })),
     deleteJson: vi.fn(async () => ({})),
@@ -39,7 +39,7 @@ function harness() {
   }
   const connection = {
     queue: new FifoQueue(),
-    getTree: () => tree,
+    getTree: () => entities,
     rootFolderId: 'root',
     trackChangesActive: false,
     rootDocId: 'doc',
@@ -96,6 +96,40 @@ describe('entity API', () => {
     })
     expect(http.deleteJson).toHaveBeenCalledWith('/project/project/doc/doc')
     expect(result).toMatchObject({ trackChangesActive: false, writeMode: 'untracked' })
+  })
+
+  test('refuses a name already taken in the folder, and a folder moved into itself, before any request', async () => {
+    const entities: ProjectEntity[] = [
+      { id: 'a', name: 'a', path: 'a', type: 'folder', parentFolderId: 'root' },
+      { id: 'b', name: 'b', path: 'a/b', type: 'folder', parentFolderId: 'a' },
+      { id: 'x', name: 'x.tex', path: 'a/x.tex', type: 'doc', parentFolderId: 'a' },
+      { id: 'y', name: 'y.tex', path: 'a/y.tex', type: 'doc', parentFolderId: 'a' },
+      { id: 'top', name: 'x.tex', path: 'x.tex', type: 'doc', parentFolderId: 'root' },
+    ]
+    const { api, http } = harness(entities)
+
+    for (const input of [
+      { action: 'create_folder', path: 'a/b' },
+      { action: 'create_folder', path: 'a/x.tex' },
+      { action: 'rename', path: 'a/y.tex', newName: 'x.tex' },
+      { action: 'rename', path: 'a/b', newName: 'y.tex' },
+      { action: 'rename', path: 'a/y.tex', newName: 'y.tex' },
+      { action: 'move', path: 'x.tex', destinationFolderPath: 'a' },
+      { action: 'move', path: 'a/x.tex', destinationFolderPath: '' },
+      { action: 'move', path: 'a/x.tex', destinationFolderPath: 'a' },
+      { action: 'move', path: 'a', destinationFolderPath: 'a' },
+      { action: 'move', path: 'a', destinationFolderPath: 'a/b' },
+    ] as const) {
+      await expect(api.manageEntity('project', input), JSON.stringify(input)).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
+    }
+    expect(http.postJson).not.toHaveBeenCalled()
+
+    // Names are compared exactly, as Overleaf does.
+    await api.manageEntity('project', { action: 'rename', path: 'a/y.tex', newName: 'X.tex' })
+    await api.manageEntity('project', { action: 'move', path: 'a/b', destinationFolderPath: '' })
+    expect(http.postJson).toHaveBeenCalledTimes(2)
   })
 
   test('uses fileRef routes for binary files and destination folder IDs for moves', async () => {

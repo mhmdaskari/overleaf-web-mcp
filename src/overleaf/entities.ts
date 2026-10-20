@@ -159,6 +159,17 @@ function resolveFolderId(connection: TreeConnection, path: string): string {
   return resolveProjectPath(connection.getTree(), path, 'folder').id
 }
 
+/** Overleaf refuses a second entity with the same name in one folder, comparing names exactly. */
+function assertPathFree(connection: TreeConnection, path: string): void {
+  const taken = connection.getTree().find(entity => entity.path === path)
+  if (taken !== undefined) {
+    throw new McpError(
+      'INVALID_ARGUMENT',
+      `The project already holds a ${describeEntity(taken)} at ${path}, and a folder cannot hold two entities with the same name. Nothing was changed.`
+    )
+  }
+}
+
 export class EntitiesApi {
   readonly #http: EntityHttp
   readonly #connections: EntityConnections
@@ -236,6 +247,7 @@ export class EntitiesApi {
           const name = posix.basename(normalized)
           validateName(name)
           const parentFolderId = resolveFolderId(connection, parentPath(normalized))
+          assertPathFree(connection, normalized)
           const created = await this.#http.postJson(`/project/${project}/folder`, {
             parent_folder_id: parentFolderId,
             name,
@@ -253,6 +265,7 @@ export class EntitiesApi {
         const route = `/project/${project}/${endpointType(entity)}/${encodeURIComponent(entity.id)}`
         if (input.action === 'rename') {
           validateName(input.newName)
+          assertPathFree(connection, posix.join(parentPath(normalized), input.newName))
           await this.#http.postJson(`${route}/rename`, {
             name: input.newName,
           })
@@ -264,12 +277,17 @@ export class EntitiesApi {
           }
         }
         if (input.action === 'move') {
-          const folderId = resolveFolderId(
-            connection,
-            input.destinationFolderPath === ''
-              ? ''
-              : normalizeProjectPath(input.destinationFolderPath)
-          )
+          const destination =
+            input.destinationFolderPath === '' ? '' : normalizeProjectPath(input.destinationFolderPath)
+          const folderId = resolveFolderId(connection, destination)
+          if (entity.type === 'folder' && (destination === normalized || destination.startsWith(`${normalized}/`))) {
+            throw new McpError(
+              'INVALID_ARGUMENT',
+              `${normalized} cannot be moved into itself or one of its own folders. Nothing was changed.`
+            )
+          }
+          // Moving into the folder that already holds it collides with itself, as Overleaf also judges it.
+          assertPathFree(connection, destination === '' ? entity.name : `${destination}/${entity.name}`)
           await this.#http.postJson(`${route}/move`, {
             folder_id: folderId,
           })
