@@ -62,8 +62,13 @@ export class SocketIo09Peer extends EventEmitter {
     if (!this.#closed) this.#socket.close()
   }
 
+  /** True once the socket is closing or closed and cannot carry another call. */
+  get closed(): boolean {
+    return this.#closed || this.#socket.readyState > 1
+  }
+
   #assertOpen(): void {
-    if (this.#closed || this.#socket.readyState > 1) {
+    if (this.closed) {
       throw new McpError('OUTCOME_UNKNOWN', 'Overleaf socket is not connected.')
     }
   }

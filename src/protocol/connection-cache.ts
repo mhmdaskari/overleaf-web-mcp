@@ -1,5 +1,7 @@
 export interface ClosableConnection {
   close(): void | Promise<void>
+  /** True once the connection can carry no further call. */
+  readonly closed?: boolean
 }
 
 interface CacheEntry<T> {
@@ -86,7 +88,12 @@ export class ProjectConnectionCache<T extends ClosableConnection> {
     while (true) {
       const acquired = await this.#locked(async () => {
         const existing = this.#entries.get(projectId)
-        if (existing) {
+        if (existing?.value.closed === true) {
+          // Overleaf closed this socket; a call still holding it finishes on its own, and its release is a no-op.
+          if (existing.idleTimer) clearTimeout(existing.idleTimer)
+          this.#entries.delete(projectId)
+          await existing.value.close()
+        } else if (existing) {
           if (existing.idleTimer) clearTimeout(existing.idleTimer)
           existing.idleTimer = undefined
           existing.active += 1

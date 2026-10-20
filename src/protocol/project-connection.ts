@@ -17,6 +17,7 @@ export interface SocketPeerLike {
   removeListener(event: string, listener: (...args: any[]) => void): this
   call(name: string, args: unknown[], timeoutMs: number): Promise<unknown[]>
   close(): void
+  readonly closed?: boolean
 }
 
 export interface JoinProjectData {
@@ -140,6 +141,7 @@ export class ProjectConnection {
   readonly queue = new FifoQueue()
   readonly #callTimeoutMs: number
   readonly #applyTimeoutMs: number
+  #disconnected = false
 
   constructor(options: ProjectConnectionOptions) {
     if (!options.supportedProtocolVersions.includes(options.join.protocolVersion)) {
@@ -172,6 +174,9 @@ export class ProjectConnection {
     this.#callTimeoutMs = options.callTimeoutMs ?? 30_000
     this.#applyTimeoutMs = options.applyTimeoutMs ?? this.#callTimeoutMs
 
+    this.peer.once('disconnect', () => {
+      this.#disconnected = true
+    })
     // The `recive*` spelling is part of Overleaf's wire protocol and must not be corrected locally.
     this.peer.on('reciveEntityRename', (entityId: unknown, name: unknown) => {
       if (typeof entityId === 'string' && typeof name === 'string') {
@@ -213,6 +218,11 @@ export class ProjectConnection {
         ;(destination.fileRefs ??= []).push(value)
       }
     })
+  }
+
+  /** True once the socket has gone; the cache then opens a fresh connection for the next call. */
+  get closed(): boolean {
+    return this.#disconnected || this.peer.closed === true
   }
 
   get rootFolderId(): string {

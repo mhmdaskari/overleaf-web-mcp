@@ -151,6 +151,25 @@ describe('project connection', () => {
     await expect(pending).resolves.toBeUndefined()
   })
 
+  test('reports itself closed once its socket disconnects', () => {
+    const peer = new FakePeer()
+    const connection = new ProjectConnection({
+      projectId: 'project',
+      peer,
+      join: {
+        publicId: 'P.client',
+        project,
+        permissionsLevel: 'owner',
+        protocolVersion: 2,
+      },
+      supportedProtocolVersions: [2],
+    })
+
+    expect(connection.closed).toBe(false)
+    peer.emit('disconnect')
+    expect(connection.closed).toBe(true)
+  })
+
   test('keeps the cached project tree synchronized with collaborator events', () => {
     const peer = new FakePeer()
     const connection = new ProjectConnection({

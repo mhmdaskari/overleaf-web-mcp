@@ -38,6 +38,25 @@ describe('project connection cache', () => {
     vi.useRealTimers()
   })
 
+  test('replaces a cached connection whose socket has closed', async () => {
+    const connections: Array<{ closed: boolean; close: () => void }> = []
+    const factory = vi.fn(async () => {
+      const connection = { closed: false, close: vi.fn() }
+      connections.push(connection)
+      return connection
+    })
+    const cache = new ProjectConnectionCache({ capacity: 2, idleTtlMs: 90_000, factory })
+
+    await cache.withConnection('project', async () => undefined)
+    connections[0]!.closed = true
+    const used = await cache.withConnection('project', async connection => connection)
+
+    expect(factory).toHaveBeenCalledTimes(2)
+    expect(used).toBe(connections[1])
+    expect(connections[0]!.close).toHaveBeenCalledOnce()
+    await cache.closeAll()
+  })
+
   test('invalidates an idle project before timeout recovery reconnects', async () => {
     const close = vi.fn()
     const factory = vi.fn(async () => ({ close }))

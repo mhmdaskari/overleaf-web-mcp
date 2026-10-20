@@ -275,6 +275,47 @@ describe('document API', () => {
     expect(connection.joinDocument).toHaveBeenCalledTimes(3)
   })
 
+  test('observes a write whose socket closed after sending instead of resubmitting it', async () => {
+    const disconnected = new McpError('OUTCOME_UNKNOWN', 'socket closed')
+    const { api, connection } = createHarness(
+      [shareDocument('old', 3), shareDocument('new', 4)],
+      disconnected
+    )
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: 'old',
+    })
+
+    await expect(api.writeFile('project', 'main.tex', revision, 'new')).resolves.toMatchObject({
+      recoveredAfterTimeout: true,
+    })
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+  })
+
+  test('reports a conflict when a third state is live after the socket closed mid-write', async () => {
+    const disconnected = new McpError('OUTCOME_UNKNOWN', 'socket closed')
+    const { api, connection } = createHarness(
+      [shareDocument('old', 3), shareDocument('collaborator', 4)],
+      disconnected
+    )
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: 'old',
+    })
+
+    await expect(api.writeFile('project', 'main.tex', revision, 'new')).rejects.toMatchObject({
+      code: 'REVISION_CONFLICT',
+      details: expect.objectContaining({ outcome: 'unknown' }),
+    })
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+  })
+
   test('reports an unknown conflict instead of retrying a timed-out write', async () => {
     const timeout = new McpError('TIMEOUT', 'ack timeout')
     const { api, connection } = createHarness(

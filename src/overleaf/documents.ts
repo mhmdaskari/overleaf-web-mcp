@@ -216,7 +216,8 @@ export class DocumentsApi {
           submitError = error
         }
         await safelyLeave(connection, entity.id)
-        if (submitError instanceof McpError && submitError.code === 'TIMEOUT') {
+        // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
+        if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
           return { before, trackChangesActive: connection.trackChangesActive, submitError }
         }
         if (submitError) throw asMcpError(submitError)
@@ -250,6 +251,8 @@ export class DocumentsApi {
     }
 
     // Never retry an ambiguous write: observe whether the target, original, or a third state is live.
+    const timedOut = submitted.submitError instanceof McpError && submitted.submitError.code === 'TIMEOUT'
+    const unconfirmed = timedOut ? 'timed out' : 'lost its socket'
     await this.#connections.invalidate?.(projectId)
     const deadline = Date.now() + this.#recoveryTimeoutMs
     let unchangedRecovery: { live: JoinedDocument; trackChangesActive: boolean } | undefined
@@ -275,7 +278,7 @@ export class DocumentsApi {
           contentHash(recovery.live.content) === contentHash(submitted.before.content)
         if (!unchanged) {
           // Any third state may include concurrent work and must be reported as a conflict.
-          throw new McpError('REVISION_CONFLICT', 'Live content changed after the write timed out.', {
+          throw new McpError('REVISION_CONFLICT', `Live content changed after the write ${unconfirmed}.`, {
             retryable: false,
             details: {
               outcome: 'unknown',
@@ -300,12 +303,13 @@ export class DocumentsApi {
 
     if (unchangedRecovery) {
       // Seeing the original revision through the full recovery window proves no application was observed.
-      throw new McpError('TIMEOUT', 'The write timed out and the original revision is still live.', {
-        retryable: false,
-        details: { outcome: 'not_applied' },
-      })
+      throw new McpError(
+        timedOut ? 'TIMEOUT' : 'REMOTE_ERROR',
+        `The write ${unconfirmed} and the original revision is still live.`,
+        { retryable: false, details: { outcome: 'not_applied' } }
+      )
     }
-    throw new McpError('OUTCOME_UNKNOWN', 'Could not observe live content after a timed-out write.', {
+    throw new McpError('OUTCOME_UNKNOWN', `Could not observe live content after the write ${unconfirmed}.`, {
       cause: observationError,
     })
   }
