@@ -759,7 +759,8 @@ export const OPERATIONS = {
     effects: ['overleaf-write', 'overleaf-read'],
   },
   set_comment_status: {
-    description: 'Resolve or reopen a review thread and verify its resulting document revision.',
+    description:
+      'Resolve or reopen a review thread and verify its resulting document revision. filePath must be the document the thread is anchored in, as list_comments reports it; a thread not anchored there fails with NOT_FOUND and nothing changes. Returns threadId, status, the resulting revision, trackChangesActive, writeMode, and recoveredAfterTimeout when a timed-out change was confirmed.',
     inputSchema: z.object({
       projectId,
       filePath,

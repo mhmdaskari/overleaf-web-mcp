@@ -459,6 +459,67 @@ describe('review comments API', () => {
     expect(http.deleteJson).not.toHaveBeenCalled()
   })
 
+  test('resolves a ShareJS thread anchored in the named document', async () => {
+    const anchored = [{ op: { p: 1, c: 'el', t: 'open' } }]
+    const { connections } = connectionHarness([
+      shareDocument('hello', 1, anchored),
+      shareDocument('hello', 1, anchored),
+    ])
+    const http = {
+      getJson: vi.fn(async () => ({ open: { ...threads.open, resolved: true } })),
+      postJson: vi.fn(async () => undefined),
+      deleteJson: vi.fn(),
+    }
+    const api = new CommentsApi(http, connections)
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc1',
+      protocol: 'sharejs',
+      otVersion: 1,
+      content: 'hello',
+    })
+
+    await expect(api.setCommentStatus({
+      projectId: 'project',
+      filePath: 'main.tex',
+      revision,
+      threadId: 'open',
+      status: 'resolved',
+    })).resolves.toMatchObject({ threadId: 'open', status: 'resolved' })
+    expect(http.postJson).toHaveBeenCalledWith('/project/project/doc/doc1/thread/open/resolve', {})
+  })
+
+  test.each<['sharejs' | 'history-ot', JoinedDocument]>([
+    ['sharejs', shareDocument('hello', 1)],
+    ['history-ot', { ...historyDocument(false, 1), rawSnapshot: { content: 'hello', comments: [], trackedChanges: [] } }],
+  ])('refuses a %s status change for a thread not anchored in filePath', async (protocol, document) => {
+    const { connection, connections } = connectionHarness([document])
+    const http = {
+      getJson: vi.fn(async () => threads),
+      postJson: vi.fn(),
+      deleteJson: vi.fn(),
+    }
+    const api = new CommentsApi(http, connections)
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc1',
+      protocol,
+      otVersion: 1,
+      content: 'hello',
+    })
+
+    await expect(api.setCommentStatus({
+      projectId: 'project',
+      filePath: 'main.tex',
+      revision,
+      threadId: 'open',
+      status: 'resolved',
+    })).rejects.toMatchObject({ code: 'NOT_FOUND', details: { threadId: 'open' } })
+    expect(http.postJson).not.toHaveBeenCalled()
+    expect(connection.submitUpdate).not.toHaveBeenCalled()
+    expect(connection.leaveDocument).toHaveBeenCalledWith('doc1')
+  })
+
   test('recovers a timed-out history-OT status update from the verified live state', async () => {
     const { connections } = connectionHarness(
       [historyDocument(false, 1), historyDocument(true, 2)],

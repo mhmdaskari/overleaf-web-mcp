@@ -251,6 +251,14 @@ function attachment(document: JoinedDocument, threadId: string): LocatedRange | 
   return rangesFromDocument(document).find(range => range.threadId === threadId)
 }
 
+// A history-OT comment whose text was deleted keeps its entry with no range, and is still this document's.
+function anchoredIn(document: JoinedDocument, threadId: string): boolean {
+  if (document.protocol === 'history-ot') {
+    return ((document.rawSnapshot as HistorySnapshot).comments ?? []).some(comment => comment.id === threadId)
+  }
+  return attachment(document, threadId) !== undefined
+}
+
 /**
  * Combines REST thread messages with OT-backed ranges and status metadata.
  * Mutations verify the resulting thread or document state before reporting success.
@@ -707,6 +715,12 @@ export class CommentsApi {
           otVersion: before.version,
           content: before.content,
         })
+        if (!anchoredIn(before, input.threadId)) {
+          await leaveQuietly(connection, entity.id)
+          throw new McpError('NOT_FOUND', 'The comment thread is not anchored in filePath.', {
+            details: { threadId: input.threadId },
+          })
+        }
         let submitError: unknown
         try {
           // History-OT stores status in its snapshot; ShareJS exposes dedicated REST actions.
