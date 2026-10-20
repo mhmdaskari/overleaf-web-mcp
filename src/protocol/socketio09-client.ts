@@ -10,6 +10,14 @@ export interface WebSocketPeer extends EventEmitter {
   close(): void
 }
 
+/** Nothing was sent, so this is an ordinary failure even for a write. */
+export function notConnectedError(): McpError {
+  return new McpError('REMOTE_ERROR', 'Overleaf socket is not connected.', {
+    retryable: true,
+    details: { reason: 'not_connected' },
+  })
+}
+
 interface PendingAck {
   resolve: (args: unknown[]) => void
   reject: (error: unknown) => void
@@ -30,6 +38,7 @@ export class SocketIo09Peer extends EventEmitter {
     socket.on('error', error => this.#failProtocol(error))
     socket.on('close', () => {
       this.#closed = true
+      // The peer cannot tell a read from a write; callers that know it was a read say so.
       this.#failAll(new McpError('OUTCOME_UNKNOWN', 'Overleaf socket disconnected.'))
       super.emit('disconnect')
     })
@@ -41,7 +50,7 @@ export class SocketIo09Peer extends EventEmitter {
   }
 
   call(name: string, args: unknown[], timeoutMs: number): Promise<unknown[]> {
-    this.#assertOpen()
+    if (this.closed) return Promise.reject(notConnectedError())
     const ackId = this.#nextAckId++
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -68,9 +77,7 @@ export class SocketIo09Peer extends EventEmitter {
   }
 
   #assertOpen(): void {
-    if (this.closed) {
-      throw new McpError('OUTCOME_UNKNOWN', 'Overleaf socket is not connected.')
-    }
+    if (this.closed) throw notConnectedError()
   }
 
   #onMessage(raw: unknown): void {

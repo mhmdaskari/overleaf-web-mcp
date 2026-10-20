@@ -9,6 +9,7 @@ import {
   type RawFolder,
 } from '../overleaf/tree.js'
 import { historyVisibleContent, type HistorySnapshot } from './ot.js'
+import { notConnectedError } from './socketio09-client.js'
 import { upstreamReason } from './upstream-reason.js'
 
 export interface SocketPeerLike {
@@ -292,11 +293,7 @@ export class ProjectConnection {
   }
 
   async joinDocument(docId: string): Promise<JoinedDocument> {
-    const args = await this.peer.call(
-      'joinDoc',
-      [docId, { encodeRanges: true, supportsHistoryOT: true }],
-      this.#callTimeoutMs
-    )
+    const args = await this.#read('joinDoc', [docId, { encodeRanges: true, supportsHistoryOT: true }])
     const [error, rawLines, rawVersion, , ranges, rawType = 'sharejs-text-ot'] = args
     if (error) {
       throw new McpError('REMOTE_ERROR', 'Overleaf refused to open the document.', {
@@ -346,7 +343,7 @@ export class ProjectConnection {
   }
 
   async leaveDocument(docId: string): Promise<void> {
-    const [error] = await this.peer.call('leaveDoc', [docId], this.#callTimeoutMs)
+    const [error] = await this.#read('leaveDoc', [docId])
     if (error) {
       throw new McpError('REMOTE_ERROR', 'Overleaf refused to close the document.', {
         details: { event: 'leaveDoc', reason: upstreamReason(error) },
@@ -359,6 +356,7 @@ export class ProjectConnection {
     if (!Number.isInteger(version)) {
       throw new McpError('INVALID_ARGUMENT', 'OT update requires an integer version.')
     }
+    if (this.closed) throw notConnectedError()
 
     let appliedTimer: NodeJS.Timeout | undefined
     let onApplied: ((message: unknown) => void) | undefined
@@ -401,11 +399,18 @@ export class ProjectConnection {
 
     try {
       // The callback acknowledges receipt; only the matching event confirms application.
-      const [error] = await this.peer.call(
-        'applyOtUpdate',
-        [docId, update],
-        this.#applyTimeoutMs
-      )
+      let reply: unknown[]
+      try {
+        reply = await this.peer.call('applyOtUpdate', [docId, update], this.#applyTimeoutMs)
+      } catch (error) {
+        // The socket was open, so the update was sent: any failure but a timeout leaves it unknown.
+        throw error instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(error.code)
+          ? error
+          : new McpError('OUTCOME_UNKNOWN', 'The Overleaf socket failed after the OT update was sent.', {
+            cause: error,
+          })
+      }
+      const [error] = reply
       if (error) {
         throw new McpError('REMOTE_ERROR', 'Overleaf refused the OT update.', {
           details: { event: 'applyOtUpdate', reason: upstreamReason(error) },
@@ -421,5 +426,19 @@ export class ProjectConnection {
 
   close(): void {
     this.peer.close()
+  }
+
+  /** A read changes nothing, so a socket lost before its reply is an ordinary, retryable failure. */
+  async #read(name: string, args: unknown[]): Promise<unknown[]> {
+    try {
+      return await this.peer.call(name, args, this.#callTimeoutMs)
+    } catch (error) {
+      if (!(error instanceof McpError) || error.code !== 'OUTCOME_UNKNOWN') throw error
+      throw new McpError('REMOTE_ERROR', 'The Overleaf socket closed before it answered.', {
+        retryable: true,
+        details: { event: name, reason: 'disconnected' },
+        cause: error,
+      })
+    }
   }
 }

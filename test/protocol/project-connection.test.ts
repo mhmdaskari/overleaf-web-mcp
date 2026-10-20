@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 
 import { describe, expect, test, vi } from 'vitest'
 
+import { McpError } from '../../src/core/errors.js'
 import { ProjectConnection } from '../../src/protocol/project-connection.js'
 
 class FakePeer extends EventEmitter {
@@ -168,6 +169,54 @@ describe('project connection', () => {
     expect(connection.closed).toBe(false)
     peer.emit('disconnect')
     expect(connection.closed).toBe(true)
+  })
+
+  test('reports a read cut off by a closed socket as a retryable failure', async () => {
+    const peer = new FakePeer()
+    peer.call.mockRejectedValueOnce(new McpError('OUTCOME_UNKNOWN', 'Overleaf socket disconnected.'))
+    const connection = new ProjectConnection({
+      projectId: 'project',
+      peer,
+      join: { publicId: 'P.client', project, permissionsLevel: 'owner', protocolVersion: 2 },
+      supportedProtocolVersions: [2],
+    })
+
+    await expect(connection.joinDocument('doc')).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+      retryable: true,
+      details: { event: 'joinDoc', reason: 'disconnected' },
+    })
+  })
+
+  test('refuses an update on a closed socket before sending it', async () => {
+    const peer = new FakePeer()
+    const connection = new ProjectConnection({
+      projectId: 'project',
+      peer,
+      join: { publicId: 'P.client', project, permissionsLevel: 'owner', protocolVersion: 2 },
+      supportedProtocolVersions: [2],
+    })
+    peer.emit('disconnect')
+
+    await expect(
+      connection.submitUpdate('doc', { doc: 'doc', v: 4, op: [{ p: 0, i: 'x' }] })
+    ).rejects.toMatchObject({ code: 'REMOTE_ERROR', retryable: true, details: { reason: 'not_connected' } })
+    expect(peer.call).not.toHaveBeenCalled()
+  })
+
+  test('reports an update whose socket failed after sending as of unknown outcome', async () => {
+    const peer = new FakePeer()
+    peer.call.mockRejectedValueOnce(new McpError('PROTOCOL_UNSUPPORTED', 'Invalid Socket.IO event packet.'))
+    const connection = new ProjectConnection({
+      projectId: 'project',
+      peer,
+      join: { publicId: 'P.client', project, permissionsLevel: 'owner', protocolVersion: 2 },
+      supportedProtocolVersions: [2],
+    })
+
+    await expect(
+      connection.submitUpdate('doc', { doc: 'doc', v: 4, op: [{ p: 0, i: 'x' }] })
+    ).rejects.toMatchObject({ code: 'OUTCOME_UNKNOWN' })
   })
 
   test('keeps the cached project tree synchronized with collaborator events', () => {

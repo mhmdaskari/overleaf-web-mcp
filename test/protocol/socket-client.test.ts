@@ -49,6 +49,20 @@ describe('Socket.IO peer', () => {
     await expect(pending).resolves.toEqual([null, ['line'], 4, [], {}, 'sharejs-text-ot'])
   })
 
+  test('refuses a call on a closed socket as retryable, with nothing sent', async () => {
+    const socket = new FakeWebSocket()
+    const peer = new SocketIo09Peer(socket)
+    socket.close()
+
+    await expect(peer.call('joinDoc', ['DOC', {}], 1_000)).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+      retryable: true,
+      details: { reason: 'not_connected' },
+    })
+    expect(socket.sent).toEqual([])
+    expect(peer.closed).toBe(true)
+  })
+
   test('correlates acknowledgement packets to calls', async () => {
     const socket = new FakeWebSocket()
     const peer = new SocketIo09Peer(socket)

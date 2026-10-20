@@ -60,4 +60,28 @@ describe('project socket bootstrap', () => {
     expect(connection.publicId).toBe('P.client')
     connection.close()
   })
+
+  test('reports a socket closed during the join as a retryable failure', async () => {
+    const socket = new FakeSocket()
+    const fetcher = vi.fn(async () => new Response('SOCKET_SESSION:60:60:websocket'))
+    const webSocketFactory = vi.fn(() => {
+      setTimeout(() => {
+        socket.readyState = 1
+        socket.close()
+      }, 0)
+      return socket
+    })
+
+    await expect(
+      openProjectConnection({
+        baseUrl: 'https://overleaf.test',
+        projectId: 'project',
+        jar: new CookieJar(),
+        supportedProtocolVersions: [2],
+        fetcher,
+        webSocketFactory,
+        timeoutMs: 1_000,
+      })
+    ).rejects.toMatchObject({ code: 'REMOTE_ERROR', retryable: true, details: { reason: 'disconnected' } })
+  })
 })

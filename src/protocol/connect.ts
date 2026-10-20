@@ -140,7 +140,14 @@ export async function openProjectConnection(
       )
     )
     peer.once('disconnect', () =>
-      finish(() => reject(new McpError('OUTCOME_UNKNOWN', 'Socket disconnected during project join.')))
+      finish(() =>
+        reject(
+          new McpError('REMOTE_ERROR', 'Socket disconnected during project join.', {
+            retryable: true,
+            details: { reason: 'disconnected' },
+          })
+        )
+      )
     )
   })
 

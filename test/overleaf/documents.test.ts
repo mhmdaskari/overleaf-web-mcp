@@ -295,6 +295,27 @@ describe('document API', () => {
     expect(connection.submitUpdate).toHaveBeenCalledOnce()
   })
 
+  test('observes a write whose verification read lost its socket', async () => {
+    const { api, connection } = createHarness([shareDocument('old', 3), shareDocument('new', 4)])
+    connection.joinDocument
+      .mockImplementationOnce(async () => shareDocument('old', 3))
+      .mockImplementationOnce(async () => {
+        throw new McpError('REMOTE_ERROR', 'socket closed', { retryable: true })
+      })
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: 'old',
+    })
+
+    await expect(api.writeFile('project', 'main.tex', revision, 'new')).resolves.toMatchObject({
+      recoveredAfterTimeout: true,
+    })
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+  })
+
   test('reports a conflict when a third state is live after the socket closed mid-write', async () => {
     const disconnected = new McpError('OUTCOME_UNKNOWN', 'socket closed')
     const { api, connection } = createHarness(

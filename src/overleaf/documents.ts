@@ -222,7 +222,13 @@ export class DocumentsApi {
         }
         if (submitError) throw asMcpError(submitError)
 
-        const live = await connection.joinDocument(entity.id)
+        let live: JoinedDocument
+        try {
+          live = await connection.joinDocument(entity.id)
+        } catch (error) {
+          // The update applied, so a failed verification read is settled by observation, never a resend.
+          return { before, trackChangesActive: connection.trackChangesActive, submitError: error }
+        }
         await safelyLeave(connection, entity.id)
         return { before, live, trackChangesActive: connection.trackChangesActive }
       })
