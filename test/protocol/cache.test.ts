@@ -57,6 +57,40 @@ describe('project connection cache', () => {
     await cache.closeAll()
   })
 
+  test('wakes a pending invalidate when a closed connection still in use is replaced', async () => {
+    const connection = { closed: false, close: vi.fn() }
+    const factory = vi.fn()
+      .mockResolvedValueOnce(connection)
+      .mockRejectedValue(new Error('reconnect failed'))
+    const cache = new ProjectConnectionCache({ capacity: 4, idleTtlMs: 90_000, factory })
+
+    let finishHolder!: () => void
+    let held!: () => void
+    const isHeld = new Promise<void>(resolve => {
+      held = resolve
+    })
+    const holder = cache.withConnection('project', async () => {
+      held()
+      await new Promise<void>(resolve => {
+        finishHolder = resolve
+      })
+    })
+    await isHeld
+    connection.closed = true
+
+    let invalidated = false
+    const invalidating = cache.invalidate('project').then(() => {
+      invalidated = true
+    })
+    await expect(cache.withConnection('project', async () => undefined)).rejects.toThrow('reconnect failed')
+    finishHolder()
+    await holder
+
+    await vi.waitFor(() => expect(invalidated).toBe(true), { timeout: 200 })
+    await invalidating
+    await cache.closeAll()
+  })
+
   test('invalidates an idle project before timeout recovery reconnects', async () => {
     const close = vi.fn()
     const factory = vi.fn(async () => ({ close }))
