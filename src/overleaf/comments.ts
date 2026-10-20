@@ -44,18 +44,28 @@ interface CommentConnections {
   invalidate(projectId: string): Promise<void>
 }
 
+interface OverleafUser {
+  id?: string
+  first_name?: string
+  last_name?: string
+  [key: string]: unknown
+}
+
 interface ThreadMessage {
   id?: string
   content?: string
   timestamp?: string | number
   user_id?: string
-  user?: { id?: string; name?: string; email?: string; [key: string]: unknown }
+  user?: OverleafUser
   [key: string]: unknown
 }
 
 interface ThreadData {
   messages?: ThreadMessage[]
   resolved?: boolean
+  resolved_at?: string | number
+  resolved_by_user_id?: string
+  resolved_by_user?: OverleafUser
   [key: string]: unknown
 }
 
@@ -70,14 +80,32 @@ interface LocatedRange {
   resolved?: boolean
 }
 
-export interface ListedComment extends ThreadData {
+export interface CommentAuthor {
+  id: string
+  displayName: string
+}
+
+export interface CommentMessage {
+  id?: string
+  author: CommentAuthor | null
+  content: string
+  timestamp?: string
+}
+
+export interface CommentThread {
   id: string
   status: 'open' | 'resolved'
+  messages: CommentMessage[]
+  resolvedAt?: string
+  resolvedBy?: CommentAuthor
+}
+
+export interface ListedComment extends CommentThread {
   filePath?: string
   start?: LineColumn
   end?: LineColumn
   quotedText?: string
-  unlocated?: boolean
+  unlocated?: true
 }
 
 export interface AddCommentInput {
@@ -166,12 +194,49 @@ function projectRanges(value: unknown): LocatedRange[] {
   return output
 }
 
-function authorMatches(thread: ThreadData, filter: string): boolean {
+function isoTimestamp(value: string | number | undefined): string | undefined {
+  if (value === undefined) return undefined
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+}
+
+// Overleaf sends each user's name and email; only the id and display name leave this module.
+function mapAuthor(userId: string | undefined, user: OverleafUser | undefined): CommentAuthor | null {
+  const id = typeof user?.id === 'string' ? user.id : typeof userId === 'string' ? userId : undefined
+  if (id === undefined) return null
+  const names = [user?.first_name, user?.last_name].filter(name => typeof name === 'string')
+  return { id, displayName: names.join(' ').trim() }
+}
+
+function mapMessage(message: ThreadMessage): CommentMessage {
+  const timestamp = isoTimestamp(message.timestamp)
+  return {
+    ...(typeof message.id === 'string' ? { id: message.id } : {}),
+    author: mapAuthor(message.user_id, message.user),
+    content: typeof message.content === 'string' ? message.content : '',
+    ...(timestamp === undefined ? {} : { timestamp }),
+  }
+}
+
+function mapThread(id: string, thread: ThreadData): CommentThread {
+  const resolved = thread.resolved === true
+  const resolvedAt = resolved ? isoTimestamp(thread.resolved_at) : undefined
+  const resolvedBy = resolved ? mapAuthor(thread.resolved_by_user_id, thread.resolved_by_user) : null
+  return {
+    id,
+    status: resolved ? 'resolved' : 'open',
+    messages: (thread.messages ?? []).map(mapMessage),
+    ...(resolvedAt === undefined ? {} : { resolvedAt }),
+    ...(resolvedBy === null ? {} : { resolvedBy }),
+  }
+}
+
+function authorMatches(thread: CommentThread, filter: string): boolean {
   const needle = filter.toLocaleLowerCase()
-  return (thread.messages ?? []).some(message => {
-    const values = [message.user_id, message.user?.id, message.user?.name, message.user?.email]
-    return values.some(value => value?.toLocaleLowerCase().includes(needle))
-  })
+  return thread.messages.some(({ author }) =>
+    author !== null &&
+    (author.id === filter || author.displayName.toLocaleLowerCase().includes(needle))
+  )
 }
 
 async function leaveQuietly(connection: CommentConnection, docId: string): Promise<void> {
@@ -226,12 +291,12 @@ export class CommentsApi {
     this.#policy.assertProject(projectId)
     const threads = await this.getThreads(projectId)
     const status = options.status ?? 'open'
-    const filtered = Object.entries(threads).filter(([, thread]) => {
-      const resolved = thread.resolved === true
-      if (status === 'open' && resolved) return false
-      if (status === 'resolved' && !resolved) return false
-      return options.author ? authorMatches(thread, options.author) : true
-    })
+    const filtered = Object.entries(threads)
+      .map(([id, thread]): [string, CommentThread] => [id, mapThread(id, thread)])
+      .filter(([, thread]) => {
+        if (status !== 'all' && thread.status !== status) return false
+        return options.author ? authorMatches(thread, options.author) : true
+      })
 
     let indexedRanges: LocatedRange[] = []
     let positionsUnavailable = false
@@ -256,12 +321,7 @@ export class CommentsApi {
     if (positionsUnavailable) {
       return {
         positionsUnavailable: true,
-        threads: filtered.map(([id, thread]) => ({
-          ...thread,
-          id,
-          status: thread.resolved === true ? 'resolved' : 'open',
-          unlocated: true,
-        })),
+        threads: filtered.map(([, thread]) => ({ ...thread, unlocated: true })),
       }
     }
 
@@ -303,20 +363,13 @@ export class CommentsApi {
             continue
           }
           if (!range || !live) {
-            listed.push({
-              ...thread,
-              id,
-              status: thread.resolved === true ? 'resolved' : 'open',
-              unlocated: true,
-            })
+            listed.push({ ...thread, unlocated: true })
             continue
           }
           const start = range.start
           const end = range.end
           listed.push({
             ...thread,
-            id,
-            status: thread.resolved === true ? 'resolved' : 'open',
             ...(pathById.get(range.docId) === undefined
               ? {}
               : { filePath: pathById.get(range.docId)! }),
@@ -336,7 +389,7 @@ export class CommentsApi {
     content: string
   ): Promise<{
     threadId: string
-    thread: ThreadData
+    thread: CommentThread
     trackChangesActive: boolean
     writeMode: 'untracked'
     recoveredAfterTimeout?: boolean
@@ -369,7 +422,7 @@ export class CommentsApi {
       })
       if (thread && matched) {
         const disclosure = await this.#mutationDisclosure(projectId)
-        return { threadId, thread, ...disclosure, recoveredAfterTimeout: true }
+        return { threadId, thread: mapThread(threadId, thread), ...disclosure, recoveredAfterTimeout: true }
       }
       throw new McpError(
         'OUTCOME_UNKNOWN',
@@ -379,7 +432,7 @@ export class CommentsApi {
     }
     const thread = (await this.getThreads(projectId))[threadId]
     if (!thread) throw new McpError('OUTCOME_UNKNOWN', 'Reply succeeded but the thread could not be refreshed.')
-    return { threadId, thread, ...await this.#mutationDisclosure(projectId) }
+    return { threadId, thread: mapThread(threadId, thread), ...await this.#mutationDisclosure(projectId) }
   }
 
   async #mutationDisclosure(projectId: string): Promise<{
@@ -396,7 +449,7 @@ export class CommentsApi {
 
   async addComment(input: AddCommentInput): Promise<{
     threadId: string
-    thread?: ThreadData
+    thread?: CommentThread
     revision: string
     protocol: OtProtocol
     trackChangesActive: boolean
@@ -593,7 +646,7 @@ export class CommentsApi {
     const thread = (await this.getThreads(input.projectId))[threadId]
     return {
       threadId,
-      ...(thread === undefined ? {} : { thread }),
+      ...(thread === undefined ? {} : { thread: mapThread(threadId, thread) }),
       revision: createRevision({
         projectId: input.projectId,
         docId: live.docId,

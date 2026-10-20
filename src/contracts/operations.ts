@@ -131,6 +131,21 @@ const createdProjectSchema = z.object({
   url: z.string(),
 })
 
+const commentAuthorSchema = z.object({ id: z.string(), displayName: z.string() })
+
+const commentThreadSchema = z.object({
+  id: z.string(),
+  status: z.enum(['open', 'resolved']),
+  messages: z.array(z.object({
+    id: z.string().optional(),
+    author: commentAuthorSchema.nullable(),
+    content: z.string(),
+    timestamp: z.string().optional(),
+  })),
+  resolvedAt: z.string().optional(),
+  resolvedBy: commentAuthorSchema.optional(),
+})
+
 const projectActionSchema = z.enum(['rename', 'trash', 'restore', 'archive', 'unarchive', 'delete'])
 
 export const OPERATIONS = {
@@ -679,12 +694,22 @@ export const OPERATIONS = {
   },
   list_comments: {
     description:
-      'List reviewer-thread messages and lazily resolve document ranges. Defaults to open threads.',
+      'List review comment threads and lazily resolve their document positions. Defaults to open threads. author keeps threads with a message whose author display name contains it (case-insensitive) or whose author id equals it. Returns threads, each with id, status, messages (id, author { id, displayName } or null, content, ISO timestamp), resolvedAt and resolvedBy when resolved, and when located filePath, start, end (1-based line, UTF-16 column), and quotedText; a thread without a document range has unlocated: true. Without filePath, positionsUnavailable: true means the deployment has no project-wide range index and every thread is unlocated.',
     inputSchema: z.object({
       projectId,
-      filePath: z.string().min(1).optional(),
+      filePath: z.string().min(1).optional().describe('Only threads anchored in this document'),
       status: z.enum(['open', 'resolved', 'all']).default('open'),
-      author: z.string().min(1).optional(),
+      author: z.string().min(1).optional().describe('Author display name substring, or exact author id'),
+    }),
+    outputSchema: z.object({
+      threads: z.array(commentThreadSchema.extend({
+        filePath: z.string().optional(),
+        start: position.optional(),
+        end: position.optional(),
+        quotedText: z.string().optional(),
+        unlocated: z.literal(true).optional(),
+      })),
+      positionsUnavailable: z.boolean(),
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
@@ -697,7 +722,7 @@ export const OPERATIONS = {
   },
   add_comment: {
     description:
-      'Add and verify an anchored review comment using UTF-16 positions and expectedText.',
+      'Add and verify an anchored review comment using UTF-16 positions and expectedText. Returns threadId, the created thread (id, status, messages with author { id, displayName }, content, and ISO timestamp) when it could be read back, the resulting document revision and protocol, trackChangesActive, writeMode, and recoveredAfterTimeout when a timed-out attachment was confirmed.',
     inputSchema: z.object({
       projectId,
       filePath,
@@ -706,6 +731,15 @@ export const OPERATIONS = {
       end: position,
       expectedText: z.string().min(1),
       content: z.string().min(1),
+    }),
+    outputSchema: z.object({
+      threadId: z.string(),
+      thread: commentThreadSchema.optional(),
+      revision: z.string(),
+      protocol: z.enum(['sharejs', 'history-ot']),
+      trackChangesActive: z.boolean(),
+      writeMode: z.literal('untracked'),
+      recoveredAfterTimeout: z.literal(true).optional(),
     }),
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['overleaf-write', 'overleaf-read'],

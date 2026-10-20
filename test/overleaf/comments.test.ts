@@ -23,20 +23,24 @@ const tree = [
   },
 ]
 
+// The shape Overleaf's /threads route sends: names and emails, and millisecond timestamps.
 const threads = {
   open: {
     messages: [
       {
         id: 'm1',
         content: 'Please revise',
-        timestamp: '2026-01-01T00:00:00.000Z',
+        timestamp: Date.UTC(2026, 0, 1),
         user_id: 'reviewer',
-        user: { id: 'reviewer', name: 'Reviewer', email: 'r@example.test' },
+        user: { id: 'reviewer', first_name: 'Ada', last_name: 'Lovelace', email: 'ada@example.test' },
       },
     ],
   },
   resolved: {
     resolved: true,
+    resolved_at: '2026-01-02T00:00:00.000Z',
+    resolved_by_user_id: 'owner',
+    resolved_by_user: { id: 'owner', first_name: 'Grace', last_name: 'Hopper', email: 'grace@example.test' },
     messages: [],
   },
 }
@@ -149,6 +153,65 @@ describe('review comments API', () => {
     expect(connection.joinDocument).toHaveBeenCalledWith('doc1')
   })
 
+  test('maps threads to authors with display names and never returns an email', async () => {
+    const http = {
+      getJson: vi.fn(async (path: string) => {
+        if (path.endsWith('/threads')) return threads
+        throw new McpError('NOT_FOUND', 'no ranges')
+      }),
+      postJson: vi.fn(),
+      deleteJson: vi.fn(),
+    }
+    const { connections } = connectionHarness([])
+    const api = new CommentsApi(http, connections)
+
+    const result = await api.listComments('project', { status: 'all' })
+
+    expect(result.threads).toEqual([
+      {
+        id: 'open',
+        status: 'open',
+        messages: [{
+          id: 'm1',
+          author: { id: 'reviewer', displayName: 'Ada Lovelace' },
+          content: 'Please revise',
+          timestamp: '2026-01-01T00:00:00.000Z',
+        }],
+        unlocated: true,
+      },
+      {
+        id: 'resolved',
+        status: 'resolved',
+        messages: [],
+        resolvedAt: '2026-01-02T00:00:00.000Z',
+        resolvedBy: { id: 'owner', displayName: 'Grace Hopper' },
+        unlocated: true,
+      },
+    ])
+    expect(JSON.stringify(result)).not.toContain('@example.test')
+  })
+
+  test('filters by an author display name and not by email', async () => {
+    const http = {
+      getJson: vi.fn(async (path: string) => {
+        if (path.endsWith('/threads')) return threads
+        throw new McpError('NOT_FOUND', 'no ranges')
+      }),
+      postJson: vi.fn(),
+      deleteJson: vi.fn(),
+    }
+    const { connections } = connectionHarness([])
+    const api = new CommentsApi(http, connections)
+
+    const byName = await api.listComments('project', { author: 'ada love' })
+    const byId = await api.listComments('project', { author: 'reviewer' })
+    const byEmail = await api.listComments('project', { author: 'ada@example' })
+
+    expect(byName.threads.map(thread => thread.id)).toEqual(['open'])
+    expect(byId.threads.map(thread => thread.id)).toEqual(['open'])
+    expect(byEmail.threads).toEqual([])
+  })
+
   test('does not join every document when the project range route is absent', async () => {
     const http = {
       getJson: vi.fn(async (path: string) => {
@@ -226,7 +289,17 @@ describe('review comments API', () => {
     ])
     const { connection, connections } = connectionHarness([before, after])
     const http = {
-      getJson: vi.fn(async () => ({ thread: { messages: [] } })),
+      getJson: vi.fn(async () => ({
+        thread: {
+          messages: [{
+            id: 'message',
+            content: 'Review this',
+            timestamp: Date.UTC(2026, 0, 1),
+            user_id: 'user',
+            user: { id: 'user', first_name: 'Ada', last_name: 'Lovelace', email: 'ada@example.test' },
+          }],
+        },
+      })),
       postJson: vi.fn(async () => ({ id: 'message' })),
       deleteJson: vi.fn(async () => ({})),
     }
@@ -266,6 +339,16 @@ describe('review comments API', () => {
     )
     expect(result).toMatchObject({ threadId: 'thread', writeMode: 'untracked' })
     expect(result.revision).toEqual(expect.any(String))
+    expect(result.thread).toEqual({
+      id: 'thread',
+      status: 'open',
+      messages: [{
+        id: 'message',
+        author: { id: 'user', displayName: 'Ada Lovelace' },
+        content: 'Review this',
+        timestamp: '2026-01-01T00:00:00.000Z',
+      }],
+    })
   })
 
   test('polls for a late comment attachment before considering orphan cleanup', async () => {

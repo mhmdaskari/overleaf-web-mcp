@@ -174,6 +174,48 @@ describe('MCP server', () => {
     await server.close()
   })
 
+  test('validates list_comments structuredContent against its output schema over the transport', async () => {
+    const runtime = fakeRuntime()
+    const listing = {
+      positionsUnavailable: false,
+      threads: [
+        {
+          id: 't1',
+          status: 'open',
+          messages: [{
+            id: 'm1',
+            author: { id: 'u1', displayName: 'Ada Lovelace' },
+            content: 'Please revise',
+            timestamp: '2026-01-01T00:00:00.000Z',
+          }],
+          filePath: 'main.tex',
+          start: { line: 2, column: 1 },
+          end: { line: 2, column: 3 },
+          quotedText: 'bc',
+        },
+        {
+          id: 't2',
+          status: 'resolved',
+          messages: [{ author: null, content: '' }],
+          resolvedAt: '2026-01-02T00:00:00.000Z',
+          resolvedBy: { id: 'u2', displayName: '' },
+          unlocated: true,
+        },
+      ],
+    }
+    runtime.comments.listComments.mockResolvedValue(listing)
+    const server = createMcpServer(runtime)
+    const client = new Client({ name: 'smoke-client', version: '1.0.0' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+
+    const result = await client.callTool({ name: 'list_comments', arguments: { projectId: 'p' } })
+    expect(result.isError).toBeFalsy()
+    expect(result.structuredContent).toEqual(listing)
+    await client.close()
+    await server.close()
+  })
+
   test('validates auth_status structuredContent against its output schema over the transport', async () => {
     const runtime = fakeRuntime()
     const status = {
