@@ -82,3 +82,35 @@ Line break then comment \\% \section{Hidden}
     )
   })
 })
+
+describe('ignored environments', () => {
+  test('reads a percent inside verbatim as text, even on the line of its end', () => {
+    const input = '\\section{A}\n\\begin{verbatim}50% \\end{verbatim}\n\\section{B}\n\\section{C}'
+    const sections = findSections(input)
+
+    expect(sections.map(section => section.title)).toEqual(['A', 'B', 'C'])
+    expect(input.slice(sections[0]!.start, sections[0]!.end)).not.toContain('\\section{B}')
+  })
+
+  test.each(['verbatim', 'verbatim*', 'lstlisting', 'minted', 'comment'])(
+    'masks headings in %s and resumes after its end despite a literal percent',
+    environment => {
+      const input = String.raw`\section{A}
+\begin{${environment}}
+100% \section{Inside}
+x % \end{${environment}}
+\section{B}
+`
+      expect(titles(input)).toEqual(['A', 'B'])
+    }
+  )
+
+  test('does not open an environment from a commented or escaped begin', () => {
+    expect(titles('% \\begin{verbatim}\n\\section{A}')).toEqual(['A'])
+    expect(titles('\\\\begin{verbatim}\n\\section{A}')).toEqual(['A'])
+  })
+
+  test('masks an unterminated ignored environment through the end of the file', () => {
+    expect(titles('\\section{A}\n\\begin{verbatim}\n\\section{B}\n')).toEqual(['A'])
+  })
+})

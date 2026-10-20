@@ -60,49 +60,52 @@ function readBalanced(
   return null
 }
 
-function isEscaped(source: string, index: number): boolean {
-  // `\\` is a complete control symbol, so only an odd run of backslashes escapes the next char.
-  let backslashes = 0
-  while (source[index - 1 - backslashes] === '\\') backslashes += 1
-  return backslashes % 2 === 1
+function lineEnd(source: string, index: number): number {
+  const newline = source.indexOf('\n', index)
+  return newline === -1 ? source.length : newline
+}
+
+// Returns the end of the ignored environment opened at `index`, or -1 when none opens there.
+function ignoredEnvironmentEnd(source: string, index: number): number {
+  const begin = /\\begin\{([^}]+)\}/uy
+  begin.lastIndex = index
+  const name = begin.exec(source)?.[1]
+  if (name === undefined || !IGNORED_ENVIRONMENTS.has(name)) return -1
+  // Inside these environments everything, `%` included, is literal up to the first matching end.
+  const end = `\\end{${name}}`
+  const found = source.indexOf(end, begin.lastIndex)
+  return found === -1 ? source.length : found + end.length
 }
 
 function maskIgnored(source: string): string {
   // Spaces preserve every source offset; newlines preserve line structure for returned ranges.
   const chars = [...source]
-  let lineComment = false
-  const environmentStack: string[] = []
+  const mask = (from: number, to: number): void => {
+    for (let index = from; index < to; index += 1) {
+      if (chars[index] !== '\n') chars[index] = ' '
+    }
+  }
 
-  for (let index = 0; index < source.length; index += 1) {
-    if (source[index] === '\n') {
-      lineComment = false
+  let index = 0
+  while (index < source.length) {
+    if (source[index] === '%') {
+      const end = lineEnd(source, index)
+      mask(index, end)
+      index = end
       continue
     }
-    if (lineComment) {
-      chars[index] = ' '
-      continue
-    }
-    if (source[index] === '%' && !isEscaped(source, index)) {
-      lineComment = true
-      chars[index] = ' '
-      continue
-    }
-
-    const tail = source.slice(index)
-    const begin = /^\\begin\{([^}]+)\}/u.exec(tail)
-    const end = /^\\end\{([^}]+)\}/u.exec(tail)
-    if (begin && IGNORED_ENVIRONMENTS.has(begin[1] ?? '')) {
-      environmentStack.push(begin[1]!)
-    }
-
-    if (environmentStack.length > 0) {
-      const length = (begin?.[0] ?? end?.[0] ?? source[index] ?? '').length
-      for (let offset = 0; offset < Math.max(length, 1); offset += 1) {
-        if (chars[index + offset] !== '\n') chars[index + offset] = ' '
+    if (source[index] === '\\') {
+      const end = ignoredEnvironmentEnd(source, index)
+      if (end !== -1) {
+        mask(index, end)
+        index = end
+        continue
       }
-      if (end && end[1] === environmentStack.at(-1)) environmentStack.pop()
-      index += Math.max(length - 1, 0)
+      // A control symbol such as `\%` or `\\` is consumed whole, so `\\%` still starts a comment.
+      index += /[A-Za-z]/u.test(source[index + 1] ?? '') ? 1 : 2
+      continue
     }
+    index += 1
   }
   return chars.join('')
 }
