@@ -18,6 +18,15 @@ describe('OT operation adapters', () => {
     ])
   })
 
+  test('builds a ShareJS operation that edits around an unchanged character outside the BMP', () => {
+    expect(buildShareJsOperation('a \u{1F600} old', 'b \u{1F600} new')).toEqual([
+      { p: 0, d: 'a' },
+      { p: 0, i: 'b' },
+      { p: 5, d: 'old' },
+      { p: 5, i: 'new' },
+    ])
+  })
+
   test('maps visible offsets across history-OT tracked deletes', () => {
     const snapshot = {
       content: 'abcDELETEdef',

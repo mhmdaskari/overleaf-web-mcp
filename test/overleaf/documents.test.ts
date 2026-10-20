@@ -5,6 +5,7 @@ import { FifoQueue } from '../../src/core/queue.js'
 import { createRevision } from '../../src/core/revision.js'
 import { DocumentsApi } from '../../src/overleaf/documents.js'
 import type { JoinedDocument } from '../../src/protocol/project-connection.js'
+import { applyShareJs } from '../helpers/overleaf-socket.js'
 
 const entity = {
   id: 'doc',
@@ -282,6 +283,56 @@ describe('document API', () => {
       protocol: 'sharejs',
     })
     expect(connection.submitUpdate).toHaveBeenCalledOnce()
+  })
+
+  test('edits around a character outside the BMP that a ShareJS write spans without sending it again', async () => {
+    const before = 'Intro \u{1F600} text old.'
+    const target = 'Intro2 \u{1F600} text new.'
+    const { api, connection } = createHarness(
+      [shareDocument(before, 3), shareDocument(target, 4)],
+      undefined,
+      { currentUserId: 'user' }
+    )
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: before,
+    })
+
+    await expect(
+      api.writeFile('project', 'main.tex', revision, target, 'tracked')
+    ).resolves.toMatchObject({ protocol: 'sharejs', writeMode: 'tracked' })
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+    const update = connection.submitUpdate.mock.calls[0]![1] as {
+      op: Array<{ p: number; i?: string; d?: string }>
+      meta: { tc: string }
+    }
+    expect(update.op).toEqual([
+      { p: 5, i: '2' },
+      { p: 15, d: 'old' },
+      { p: 15, i: 'new' },
+    ])
+    expect(applyShareJs(before, update.op)).toBe(target)
+    expect(update.meta.tc).toMatch(/^[0-9a-f]{18}$/u)
+  })
+
+  test('refuses a ShareJS write that adds a character outside the BMP beside one it spans, naming the added one', async () => {
+    const before = 'a \u{1F600} b'
+    const { api, connection } = createHarness([shareDocument(before, 3)])
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: before,
+    })
+
+    await expect(
+      api.writeFile('project', 'main.tex', revision, 'a2 \u{1F600} b\n\n\u{1F601}')
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT', details: { line: 3 } })
+    expect(connection.submitUpdate).not.toHaveBeenCalled()
   })
 
   test('refuses a new copy of a character outside the BMP that the ShareJS document already holds', async () => {

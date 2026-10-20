@@ -1,5 +1,5 @@
 import { asMcpError, McpError } from '../core/errors.js'
-import { createMinimalTextEdit } from '../core/diff.js'
+import { createOutsideBmpPreservingEdits } from '../core/diff.js'
 import { assertDocumentSize, assertUpdateSize } from '../core/limits.js'
 import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
@@ -72,18 +72,15 @@ export interface DocumentsApiOptions {
   policy?: AccessPolicy
 }
 
-// Code points above U+FFFF, and unpaired surrogates, which Overleaf would store the same way.
-const OUTSIDE_BMP = /[\u{10000}-\u{10FFFF}\uD800-\uDFFF]/u
-
 /**
- * The 1-based line in `target` of the first character outside the BMP that the minimal edit
- * from `current` inserts. A character the document already holds counts once it is sent again.
+ * The 1-based line in `target` of the first character outside the BMP that a ShareJS write would
+ * have to send. The write edits around one the document already holds, so only a character the
+ * target adds, or moves past another, counts.
  */
 function insertedOutsideBmpLine(current: string, target: string): number | undefined {
-  const edit = createMinimalTextEdit(current, target)
-  const match = edit === null ? null : OUTSIDE_BMP.exec(edit.insertText)
-  if (edit === null || match === null) return undefined
-  return target.slice(0, edit.position + match.index).split('\n').length
+  const plan = createOutsideBmpPreservingEdits(current, target)
+  if (!('insertedAt' in plan)) return undefined
+  return target.slice(0, plan.insertedAt).split('\n').length
 }
 
 async function safelyLeave(connection: DocumentConnection, docId: string): Promise<void> {

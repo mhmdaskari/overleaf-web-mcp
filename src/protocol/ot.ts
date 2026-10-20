@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 
-import { createMinimalTextEdit } from '../core/diff.js'
+import { createMinimalTextEdit, createOutsideBmpPreservingEdits } from '../core/diff.js'
 import type { OtProtocol } from '../core/revision.js'
 
 export interface RawRange {
@@ -63,12 +63,19 @@ export function snapshotToVisibleOffset(snapshot: HistorySnapshot, snapshotOffse
   return snapshotOffset - deletedBefore
 }
 
+/**
+ * ShareJS applies components in order, each at a position in the text the previous ones left, so
+ * the operation steps around a character outside the BMP that the legacy editor could not store
+ * again. A target that adds one is refused before this is called.
+ */
 export function buildShareJsOperation(before: string, after: string): ShareJsComponent[] {
-  const edit = createMinimalTextEdit(before, after)
-  if (!edit) return []
+  const plan = createOutsideBmpPreservingEdits(before, after)
+  const edits = 'edits' in plan ? plan.edits : [createMinimalTextEdit(before, after)!]
   const op: ShareJsComponent[] = []
-  if (edit.deleteText) op.push({ p: edit.position, d: edit.deleteText })
-  if (edit.insertText) op.push({ p: edit.position, i: edit.insertText })
+  for (const edit of edits) {
+    if (edit.deleteText) op.push({ p: edit.position, d: edit.deleteText })
+    if (edit.insertText) op.push({ p: edit.position, i: edit.insertText })
+  }
   return op
 }
 
