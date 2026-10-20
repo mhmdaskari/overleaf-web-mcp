@@ -259,6 +259,21 @@ describe('entity API', () => {
     expect(http.getBytes).not.toHaveBeenCalled()
   })
 
+  test('refuses a symbolic link to a folder at the local path before fetching, even with overwrite', async () => {
+    const { api, http } = harness()
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
+    const link = join(directory, 'linked')
+    await symlink(await mkdtemp(join(tmpdir(), 'overleaf-download-')), link)
+
+    for (const overwrite of [false, true]) {
+      await expect(api.downloadFile('project', 'chapters/old.tex', link, overwrite)).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+        message: expect.stringMatching(/is a folder/u),
+      })
+    }
+    expect(http.getBytes).not.toHaveBeenCalled()
+  })
+
   test('refuses a symbolic link at the local path without overwrite, even a dangling one', async () => {
     const { api, http } = harness()
     const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))

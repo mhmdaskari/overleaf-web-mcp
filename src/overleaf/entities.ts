@@ -465,7 +465,9 @@ export class EntitiesApi {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
       throw localFileFailure(error, 'written')
     })
-    if (existing?.isDirectory() === true) {
+    // A link is followed for this check alone; a dangling one still counts as existing above.
+    const followed = existing?.isSymbolicLink() === true ? await stat(writePath).catch(() => undefined) : existing
+    if (followed?.isDirectory() === true) {
       throw new McpError('INVALID_ARGUMENT', `${localPath} is a folder; name the file to write.`)
     }
     if (existing !== undefined && !overwrite) throw localFileExists(localPath)
