@@ -121,6 +121,13 @@ const MAX_LISTED_OUTPUTS = 100
 /** Builds remembered per process, one per project. */
 const MAX_REMEMBERED_BUILDS = 100
 const MAX_BIBTEX_LOGS = 3
+/**
+ * What BibTeX or Biber reads from output.aux: a citation, a database, biblatex's own records, or
+ * an \include'd file's aux, which may hold any of them.
+ */
+const AUX_BIBLIOGRAPHY_LINE = /^\\(?:citation|bibdata|abx@aux@|@input)/mu
+/** BibTeX's or Biber's outputs for output.aux. */
+const BIBLIOGRAPHY_OUTPUTS = new Set(['output.blg', 'output.bbl'])
 
 /** Statuses that mean Overleaf ran the build, whatever LaTeX made of it. */
 const BUILT_STATUSES = new Set(['success', 'failure', 'stopped-on-first-error'])
@@ -357,6 +364,15 @@ export class CompileApi {
     // Recorded before any throw, so a timed-out build's log stays reachable.
     const record = buildId === undefined ? undefined : this.#remember(projectId, buildId, response)
     if (!BUILT_STATUSES.has(response.status)) throw statusError(response.status, root.path, record)
+    const paths = response.outputFiles.map(file => file.path)
+    const bibliography =
+      record !== undefined && paths.includes('output.blg') ? await this.#citesBibliography(record, paths) : false
+    // Left over from an earlier build, so the output tools answer as if BibTeX never ran.
+    if (bibliography === false && record?.files !== undefined) {
+      record.files = record.files.filter(file => !BIBLIOGRAPHY_OUTPUTS.has(file))
+    }
+    // An aux file that could not be read keeps the log in, so a build is never reported clean on a guess.
+    const bibtexLogs = paths.filter(path => path.endsWith('.blg') && (path !== 'output.blg' || bibliography !== false))
     return {
       status: response.status,
       outputFiles: response.outputFiles,
@@ -365,7 +381,7 @@ export class CompileApi {
       ...(response.clsiServerId === undefined ? {} : { clsiServerId: response.clsiServerId }),
       rootFilePath: root.path,
       ...(record === undefined ? {} : { buildRef: encodeBuildRef(record) }),
-      summary: await this.#summarize(response.status, response.outputFiles, record),
+      summary: await this.#summarize(response.status, paths, bibtexLogs, record),
     }
   }
 
@@ -578,12 +594,28 @@ export class CompileApi {
     return { text: new TextDecoder().decode(bytes), truncated }
   }
 
+  /**
+   * Whether this build's output.aux gives BibTeX or Biber anything to read, which ties the listed
+   * output.blg to this build: Overleaf's incremental compile directory keeps an earlier build's
+   * .blg and .bbl and lists them again. Undefined when the aux file could not be read in full.
+   */
+  async #citesBibliography(record: BuildRecord, paths: string[]): Promise<boolean | undefined> {
+    if (!paths.includes('output.aux')) return false
+    try {
+      const { text, truncated } = await this.#readText(record, 'output.aux')
+      if (AUX_BIBLIOGRAPHY_LINE.test(text)) return true
+      return truncated ? undefined : false
+    } catch {
+      return undefined
+    }
+  }
+
   async #summarize(
     status: string,
-    outputFiles: CompileOutputFile[],
+    paths: string[],
+    bibtexLogs: string[],
     record: BuildRecord | undefined
   ): Promise<CompileSummary> {
-    const paths = outputFiles.map(file => file.path)
     const pdfProduced = paths.includes('output.pdf')
     let parsed = emptyLogSummary()
     let logRead = false
@@ -597,7 +629,7 @@ export class CompileApi {
       }
     }
     if (record !== undefined) {
-      for (const blg of paths.filter(path => path.endsWith('.blg')).slice(0, MAX_BIBTEX_LOGS)) {
+      for (const blg of bibtexLogs.slice(0, MAX_BIBTEX_LOGS)) {
         try {
           parsed = mergeLogSummaries(parsed, parseBibtexLog((await this.#readText(record, blg)).text))
         } catch {

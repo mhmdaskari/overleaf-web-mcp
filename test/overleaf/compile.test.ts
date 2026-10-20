@@ -108,12 +108,14 @@ describe('compile_project', () => {
   })
 
   test('a clean build is builtCleanly with its page count', async () => {
-    const { api } = harness({
-      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log'), stats: { 'latexmk-errors': 0 } },
+    const { api, requests } = harness({
+      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux'), stats: { 'latexmk-errors': 0 } },
       files: { 'output.log': await fixture('clean.log') },
     })
     const result = await api.compileProject('p', 'main.tex')
     expect(result.summary).toMatchObject({ builtCleanly: true, errorCount: 0, pageCount: 3, pdfSizeBytes: 45678 })
+    // Without a BibTeX log listed, the aux file is not read.
+    expect(requests).toHaveLength(2)
     expect(result).toMatchObject({ buildId: BUILD, stats: { 'latexmk-errors': 0 } })
     expect(decodeBuildRef(result.buildRef!)).toMatchObject({ projectId: 'p', buildId: BUILD })
   })
@@ -128,18 +130,58 @@ describe('compile_project', () => {
     expect(result.summary.errors[0]).toEqual({ line: 3, message: 'Undefined control sequence.' })
   })
 
-  test('merges the BibTeX log into the summary', async () => {
+  // included.aux leaves its citations to an \include'd file's own aux, so it cannot rule BibTeX out.
+  test.each(['bibtex.aux', 'biblatex.aux', 'included.aux'])('merges the BibTeX log into the summary when %s may cite a bibliography', async aux => {
     const { api } = harness({
-      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.blg') },
-      files: { 'output.log': await fixture('missing-bib.log'), 'output.blg': await fixture('missing-bib.blg') },
+      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg') },
+      files: {
+        'output.log': await fixture('missing-bib.log'),
+        'output.aux': await fixture(aux),
+        'output.blg': await fixture('missing-bib.blg'),
+      },
     })
-    const { summary } = await api.compileProject('p', 'main.tex')
+    const { summary, buildRef } = await api.compileProject('p', 'main.tex')
     expect(summary).toMatchObject({
       builtCleanly: false,
       errorCount: 1,
       missingFiles: ['refs.bib'],
       undefinedCitations: ['knuth84', 'lamport94'],
     })
+    expect(decodeBuildRef(buildRef!).files).toEqual(expect.arrayContaining(['output.bbl', 'output.blg']))
+  })
+
+  test('a BibTeX log left over from an earlier build is not this build\'s', async () => {
+    // Overleaf's incremental compile directory keeps an earlier root's .blg and .bbl and lists them again.
+    const { api, requests } = harness({
+      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg') },
+      files: {
+        'output.log': await fixture('clean.log'),
+        'output.aux': await fixture('no-bib.aux'),
+        'output.bbl': '\\begin{thebibliography}{1}\n\\end{thebibliography}\n',
+        'output.blg': await fixture('missing-bib.blg'),
+      },
+    })
+    const { summary, buildRef } = await api.compileProject('p', 'main.tex')
+    expect(summary).toMatchObject({ builtCleanly: true, errorCount: 0, undefinedCitations: [], missingFiles: [] })
+    expect(requests.map(request => request.url.pathname.split('/').at(-1)).sort()).toEqual(['compile', 'output.aux', 'output.log'])
+
+    // The output tools answer as for a build in which BibTeX never ran, in this process or another.
+    await expect(api.getCompileLog('p', { kind: 'bibtex' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(api.downloadCompileOutput('p', '/tmp/x.bbl', { file: 'output.bbl' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    const other = harness({ files: { 'output.blg': await fixture('missing-bib.blg') } })
+    await expect(other.api.getCompileLog('p', { kind: 'bibtex', buildRef })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    expect(other.requests).toHaveLength(0)
+    expect(requests).toHaveLength(3)
+  })
+
+  test('a BibTeX log is still merged when the aux file cannot be read, so the build is never reported clean on a guess', async () => {
+    const { api } = harness({
+      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.blg') },
+      files: { 'output.log': await fixture('clean.log'), 'output.blg': await fixture('missing-bib.blg') },
+    })
+    const { summary } = await api.compileProject('p', 'main.tex')
+    expect(summary).toMatchObject({ builtCleanly: false, errorCount: 1, missingFiles: ['refs.bib'] })
+    await expect(api.getCompileLog('p', { kind: 'bibtex' })).resolves.toMatchObject({ file: 'output.blg' })
   })
 
   test('a log that cannot be read is never reported clean', async () => {
@@ -362,8 +404,8 @@ describe('get_compile_log', () => {
   test('returns a bounded tail and the error lines', async () => {
     const log = await fixture('nonstop-errors.log')
     const { api } = harness({
-      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.blg') },
-      files: { 'output.log': log, 'output.blg': await fixture('missing-bib.blg') },
+      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.blg') },
+      files: { 'output.log': log, 'output.aux': await fixture('bibtex.aux'), 'output.blg': await fixture('missing-bib.blg') },
     })
     await api.compileProject('p', 'main.tex')
 
