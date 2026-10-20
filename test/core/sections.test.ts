@@ -71,6 +71,17 @@ Line break then comment \\% \section{Commented After Linebreak}
     expect(titles('x \\\\\\\\% \\section{B}')).toEqual([])
   })
 
+  test('reads a heading name after a line-break control symbol as text', () => {
+    const input = '\\section{A}\nText line\\\\section{X} more\n\\section{B}\n'
+    expect(titles(input)).toEqual(['A', 'B'])
+    expect(replaceSection(input, 'section:0', 'New body\n')).toBe(
+      '\\section{A}\nNew body\n\\section{B}\n'
+    )
+    // An even run of backslashes before the name leaves a real heading after the line breaks.
+    expect(titles('x\\\\\\section{X}')).toEqual(['X'])
+    expect(titles('x\\\\\\\\section{X}')).toEqual([])
+  })
+
   test('keeps a section body from ending inside a commented heading line', () => {
     const input = String.raw`\section{A}
 Line break then comment \\% \section{Hidden}

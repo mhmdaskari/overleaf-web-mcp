@@ -102,6 +102,12 @@ function inlineVerbatimEnd(source: string, index: number): number {
   return close === -1 || close > limit ? limit : close + 1
 }
 
+function backslashesBefore(source: string, index: number): number {
+  let count = 0
+  while (source[index - count - 1] === '\\') count += 1
+  return count
+}
+
 function maskIgnored(source: string): string {
   // Spaces preserve every source offset; newlines preserve line structure for returned ranges.
   // Split by UTF-16 code unit, not code point, so array indexes match string offsets.
@@ -146,6 +152,8 @@ export function findSections(input: string): LatexSection[] {
   for (const match of masked.matchAll(commandPattern)) {
     const command = match[1]!
     const start = match.index
+    // After an odd run, this backslash ends a `\\` line break, so the name that follows is text.
+    if (backslashesBefore(masked, start) % 2 === 1) continue
     let cursor = start + match[0].length
     cursor = skipWhitespace(masked, cursor)
     let shortTitle: string | undefined
