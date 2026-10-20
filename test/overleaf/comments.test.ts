@@ -292,6 +292,30 @@ describe('review comments API', () => {
     })
   })
 
+  test('reads trackChangesActive before posting, so a failed project join posts no reply', async () => {
+    const http = {
+      postJson: vi.fn(async () => undefined),
+      getJson: vi.fn(async () => threads),
+      deleteJson: vi.fn(),
+    }
+    const connections = {
+      withConnection: vi.fn(async () => {
+        throw new McpError('REMOTE_ERROR', 'join cut off', {
+          retryable: true,
+          details: { reason: 'disconnected' },
+        })
+      }),
+      invalidate: vi.fn(async () => undefined),
+    }
+    const api = new CommentsApi(http, connections, { currentUserId: 'user' })
+
+    await expect(api.replyToComment('project', 'open', 'My reply')).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+      retryable: true,
+    })
+    expect(http.postJson).not.toHaveBeenCalled()
+  })
+
   test('refuses a reply to a thread that does not exist before posting anything', async () => {
     const http = {
       postJson: vi.fn(),

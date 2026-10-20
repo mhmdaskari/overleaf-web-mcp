@@ -412,6 +412,8 @@ export class CommentsApi {
     if (!before) {
       throw new McpError('NOT_FOUND', 'No comment thread has this threadId.', { details: { threadId } })
     }
+    // Read before posting: a project join that fails afterwards would report a posted reply as an error.
+    const disclosure = await this.#mutationDisclosure(projectId)
     const earlier = new Set((before.messages ?? []).map(message => message.id))
     const started = this.#now()
     // A reply is identified as the one new message in the thread from this account with this content.
@@ -439,7 +441,6 @@ export class CommentsApi {
           return timestamp >= started - 1_000 && timestamp <= this.#now() + 60_000
         })
       if (matched.length === 1) {
-        const disclosure = await this.#mutationDisclosure(projectId)
         return { threadId, message: mapMessage(matched[0]!), ...disclosure, recoveredAfterTimeout: true }
       }
       throw new McpError(
@@ -456,7 +457,7 @@ export class CommentsApi {
         { details: { threadId } }
       )
     }
-    return { threadId, message: mapMessage(replies[0]!), ...await this.#mutationDisclosure(projectId) }
+    return { threadId, message: mapMessage(replies[0]!), ...disclosure }
   }
 
   async #mutationDisclosure(projectId: string): Promise<{
