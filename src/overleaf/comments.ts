@@ -589,6 +589,7 @@ export class CommentsApi {
             visibleEnd,
             trackChangesActive: connection.trackChangesActive,
             submitError: error,
+            confirmed: true,
           }
         }
         await leaveQuietly(connection, entity.id)
@@ -605,6 +606,8 @@ export class CommentsApi {
 
     let live = submit.live
     let recoveredAfterTimeout = false
+    // Overleaf acknowledged the attachment and only its verification read failed, so it is never cleaned up.
+    const confirmed = submit.confirmed === true
     const timedOut = submit.submitError instanceof McpError && submit.submitError.code === 'TIMEOUT'
     if (!live) {
       // An ambiguous attachment is recovered by observing the generated thread ID and exact range.
@@ -661,7 +664,7 @@ export class CommentsApi {
         live.protocol === submit.before.protocol &&
         live.version === submit.before.version &&
         contentHash(live.content) === contentHash(submit.before.content)
-      if (!recoveredAfterTimeout || !unchanged) {
+      if (confirmed || !recoveredAfterTimeout || !unchanged) {
         throw new McpError(
           'OUTCOME_UNKNOWN',
           'The comment thread exists but its exact range could not be verified.',
@@ -778,7 +781,13 @@ export class CommentsApi {
           live = await connection.joinDocument(entity.id)
         } catch (error) {
           // The change applied, so a failed verification read is settled by observation, never a resend.
-          return { before, entity, trackChangesActive: connection.trackChangesActive, submitError: error }
+          return {
+            before,
+            entity,
+            trackChangesActive: connection.trackChangesActive,
+            submitError: error,
+            confirmed: true,
+          }
         }
         await leaveQuietly(connection, entity.id)
         return { before, entity, live, trackChangesActive: connection.trackChangesActive }
@@ -787,11 +796,13 @@ export class CommentsApi {
 
     let live = submission.live
     let recoveredAfterTimeout = false
+    // Overleaf acknowledged the change and only its verification read failed, so it can never be not applied.
+    const confirmed = submission.confirmed === true
     const timedOut = submission.submitError instanceof McpError && submission.submitError.code === 'TIMEOUT'
     if (!live) {
       await this.#connections.invalidate(input.projectId)
       const deadline = Date.now() + this.#recoveryTimeoutMs
-      let observedUnapplied = false
+      let matched = false
       let observationError: unknown
       do {
         try {
@@ -810,8 +821,10 @@ export class CommentsApi {
               'Document protocol changed during comment-status recovery.'
             )
           }
-          if (await this.#statusMatches(input.projectId, live, input.threadId, resolved)) break
-          observedUnapplied = true
+          if (await this.#statusMatches(input.projectId, live, input.threadId, resolved)) {
+            matched = true
+            break
+          }
         } catch (error) {
           if (error instanceof McpError && error.code === 'PROTOCOL_UNSUPPORTED') throw error
           live = undefined
@@ -827,9 +840,16 @@ export class CommentsApi {
           details: { threadId: input.threadId },
         })
       }
-      if (!(await this.#statusMatches(input.projectId, live, input.threadId, resolved))) {
+      if (!matched && confirmed) {
         throw new McpError(
-          observedUnapplied ? (timedOut ? 'TIMEOUT' : 'REMOTE_ERROR') : 'OUTCOME_UNKNOWN',
+          'OUTCOME_UNKNOWN',
+          'Overleaf accepted the comment status change but the requested state could not be verified. Do not retry it.',
+          { retryable: false, details: { threadId: input.threadId } }
+        )
+      }
+      if (!matched) {
+        throw new McpError(
+          timedOut ? 'TIMEOUT' : 'REMOTE_ERROR',
           'The comment status change was not confirmed and the requested state is not live.',
           { retryable: false, details: { threadId: input.threadId, outcome: 'not_applied' } }
         )

@@ -845,4 +845,63 @@ describe('review comments API', () => {
     expect(connection.submitUpdate).toHaveBeenCalledOnce()
     expect(http.postJson).not.toHaveBeenCalled()
   })
+
+  test.each<['sharejs' | 'history-ot', JoinedDocument]>([
+    ['sharejs', shareDocument('hello', 1, [{ op: { p: 1, c: 'el', t: 'open' } }])],
+    ['history-ot', historyDocument(false, 1)],
+  ])('never reports a confirmed %s status change as not applied when its verification read failed', async (protocol, document) => {
+    const lost = new McpError('REMOTE_ERROR', 'socket closed', {
+      retryable: true,
+      details: { event: 'joinDoc', reason: 'disconnected' },
+    })
+    // Every observation still shows the thread open, as if a collaborator reopened it meanwhile.
+    const { connection, connections } = connectionHarness([
+      document,
+      lost,
+      ...Array.from({ length: 50 }, () => document),
+    ])
+    const http = {
+      getJson: vi.fn(async () => threads),
+      postJson: vi.fn(async () => ({})),
+      deleteJson: vi.fn(),
+    }
+    const api = new CommentsApi(http, connections, {
+      recoveryTimeoutMs: 0,
+      recoveryPollIntervalMs: 0,
+    })
+
+    const error = await api.setCommentStatus(statusInput(protocol)).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(McpError)
+    expect(error).toMatchObject({ code: 'OUTCOME_UNKNOWN', retryable: false, details: { threadId: 'open' } })
+    expect((error as McpError).details).not.toHaveProperty('outcome')
+    expect(connection.submitUpdate.mock.calls.length + http.postJson.mock.calls.length).toBe(1)
+  })
+
+  test('never cleans up or reports as not applied a confirmed attachment whose verification read failed', async () => {
+    const lost = new McpError('REMOTE_ERROR', 'socket closed', {
+      retryable: true,
+      details: { event: 'joinDoc', reason: 'disconnected' },
+    })
+    const { connection, connections } = connectionHarness([
+      shareDocument('hello', 1),
+      lost,
+      ...Array.from({ length: 50 }, () => shareDocument('hello', 1)),
+    ])
+    const http = {
+      getJson: vi.fn(async () => ({ thread: { messages: [] } })),
+      postJson: vi.fn(async () => ({ id: 'message' })),
+      deleteJson: vi.fn(async () => ({})),
+    }
+    const api = new CommentsApi(http, connections, {
+      threadIdFactory: () => 'thread',
+      recoveryTimeoutMs: 0,
+      recoveryPollIntervalMs: 0,
+    })
+
+    const error = await api.addComment(addCommentInput()).catch((caught: unknown) => caught)
+    expect(error).toMatchObject({ code: 'OUTCOME_UNKNOWN', retryable: false, details: { threadId: 'thread' } })
+    expect((error as McpError).details).not.toHaveProperty('outcome')
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+    expect(http.deleteJson).not.toHaveBeenCalled()
+  })
 })
