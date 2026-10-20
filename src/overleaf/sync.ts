@@ -106,6 +106,8 @@ export interface SyncFailure {
   action: SyncAction
   errorCode: McpErrorCode
   message: string
+  /** The failed step's own error details, such as `reason`, `status`, or `outcome`. */
+  details?: Record<string, unknown>
 }
 
 export interface SyncDirectoryResult {
@@ -370,6 +372,16 @@ function actionFor(work: UploadWork, writeMode: WriteMode): SyncAction {
     return 'create'
   }
   return 'upload'
+}
+
+function syncFailure(destinationPath: string, action: SyncAction, failure: McpError): SyncFailure {
+  return {
+    destinationPath,
+    action,
+    errorCode: failure.code,
+    message: failure.message,
+    ...(failure.details === undefined ? {} : { details: failure.details }),
+  }
 }
 
 const ACTION_VERBS: Record<SyncAction, string> = {
@@ -1190,7 +1202,7 @@ export class SyncApi {
         completed.push({ destinationPath: folder, action: 'create_folder', ...(entityId === undefined ? {} : { entityId }) })
       },
       onFailed: (folder, failure) => {
-        record({ destinationPath: folder, action: 'create_folder', errorCode: failure.code, message: failure.message })
+        record(syncFailure(folder, 'create_folder', failure))
       },
     })
 
@@ -1237,8 +1249,7 @@ export class SyncApi {
         )
         completed.push({ destinationPath: work.destinationPath, action, ...(entityId === undefined ? {} : { entityId }) })
       } catch (error) {
-        const failure = asMcpError(error)
-        record({ destinationPath: work.destinationPath, action, errorCode: failure.code, message: failure.message })
+        record(syncFailure(work.destinationPath, action, asMcpError(error)))
       }
       await report(action)
     }
@@ -1270,8 +1281,7 @@ export class SyncApi {
           await this.#deleteIfUnchanged(projectId, work)
           completed.push({ destinationPath: work.destinationPath, action: 'delete', entityId: work.entityId })
         } catch (error) {
-          const failure = asMcpError(error)
-          record({ destinationPath: work.destinationPath, action: 'delete', errorCode: failure.code, message: failure.message })
+          record(syncFailure(work.destinationPath, 'delete', asMcpError(error)))
         }
         await report('delete')
       }

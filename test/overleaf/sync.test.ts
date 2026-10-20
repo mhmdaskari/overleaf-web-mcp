@@ -529,7 +529,12 @@ describe('sync_directory', () => {
     })
 
     expect(result.failed).toEqual([
-      expect.objectContaining({ destinationPath: 'a.tex', action: 'write', errorCode: 'REVISION_CONFLICT' }),
+      expect.objectContaining({
+        destinationPath: 'a.tex',
+        action: 'write',
+        errorCode: 'REVISION_CONFLICT',
+        details: expect.objectContaining({ actualVersion: 2, liveRevision: expect.any(String) }),
+      }),
     ])
     expect(project.entities.get('a.tex')?.content).toBe('theirs\n')
     expect(project.entities.get('b.tex')?.content).toBe('mine b\n')
@@ -652,7 +657,15 @@ describe('sync_directory', () => {
       writeMode: 'tracked',
     })
 
-    expect(partial.failed.map(entry => [entry.destinationPath, entry.action])).toEqual([['intro.tex', 'create']])
+    expect(partial.failed).toEqual([
+      {
+        destinationPath: 'intro.tex',
+        action: 'create',
+        errorCode: 'REMOTE_ERROR',
+        message: 'Overleaf refused the OT update.',
+        details: { event: 'applyOtUpdate', reason: 'unrecognized', created: true },
+      },
+    ])
     expect(partial.remaining).toEqual([{ destinationPath: 'stale.png', action: 'delete' }])
     expect(project.entities.get('intro.tex')).toMatchObject({ type: 'doc', content: '' })
 
