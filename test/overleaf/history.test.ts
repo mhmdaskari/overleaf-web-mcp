@@ -133,6 +133,46 @@ describe('project history API', () => {
     })
   })
 
+  test('drops operations before the cursor from a group that straddles it', async () => {
+    // Overleaf re-merged 138-141 into 138-142 between polls; the op at 141 made version 142.
+    const straddling = {
+      ...firstUpdate,
+      fromV: 138,
+      toV: 142,
+      labels: [],
+      project_ops: [
+        { atV: 141, add: { pathname: 'review.tex' } },
+        { atV: 140, remove: { pathname: 'withbib.tex' } },
+        { atV: 139, remove: { pathname: 'refs.bib' } },
+        { atV: 138, remove: { pathname: 'broken.tex' } },
+      ],
+    }
+    const api = new HistoryApi({
+      getJson: vi.fn(async () => ({
+        updates: [straddling, { ...firstUpdate, fromV: 137, toV: 138, labels: [] }],
+      })),
+    })
+    const atVersions = async (sinceVersion?: number) => {
+      const result = await api.monitorProjectHistory('project', sinceVersion)
+      return result.updates.map(update => ({
+        fromVersion: update.fromVersion,
+        toVersion: update.toVersion,
+        atVersions: update.projectOperations.map(operation => operation.atVersion),
+      }))
+    }
+
+    await expect(atVersions(141)).resolves.toEqual([
+      { fromVersion: 138, toVersion: 142, atVersions: [141] },
+    ])
+    await expect(atVersions(139)).resolves.toEqual([
+      { fromVersion: 138, toVersion: 142, atVersions: [141, 140, 139] },
+    ])
+    await expect(atVersions()).resolves.toEqual([
+      { fromVersion: 138, toVersion: 142, atVersions: [141, 140, 139, 138] },
+      { fromVersion: 137, toVersion: 138, atVersions: [6, 7, 8] },
+    ])
+  })
+
   test('returns an unchanged cursor for an empty project history', async () => {
     const api = new HistoryApi({ getJson: vi.fn(async () => ({ updates: [] })) })
 

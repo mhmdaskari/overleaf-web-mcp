@@ -252,9 +252,19 @@ export class HistoryApi {
           hasEarlierHistory &&
           oldestReturnedVersion !== null &&
           sinceVersion < oldestReturnedVersion,
-        updates: normalized.filter(
-          update => sinceVersion === undefined || update.toVersion > sinceVersion
-        ),
+        updates: sinceVersion === undefined
+          ? normalized
+          : normalized
+            .filter(update => update.toVersion > sinceVersion)
+            // Overleaf re-merges a group between polls, so one that straddles the cursor
+            // still holds operations already reported. An operation at atVersion produced
+            // atVersion + 1, so one at the cursor itself is new.
+            .map(update => ({
+              ...update,
+              projectOperations: update.projectOperations.filter(
+                operation => operation.atVersion >= sinceVersion
+              ),
+            })),
       }
     } catch (error) {
       if (error instanceof McpError) throw error
