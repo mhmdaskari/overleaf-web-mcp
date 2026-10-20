@@ -861,6 +861,12 @@ export class CommentsApi {
     threadId: string,
     resolved: boolean
   ): Promise<boolean> {
+    if (document.protocol === 'history-ot') {
+      // The snapshot holds the status even for a comment whose anchored text was deleted.
+      const comment = ((document.rawSnapshot as HistorySnapshot).comments ?? [])
+        .find(entry => entry.id === threadId)
+      if (comment?.resolved !== undefined) return comment.resolved === resolved
+    }
     const range = attachment(document, threadId)
     if (range?.resolved !== undefined) return range.resolved === resolved
     const thread = (await this.getThreads(projectId))[threadId]

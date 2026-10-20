@@ -723,6 +723,41 @@ describe('review comments API', () => {
     expect(connection.submitUpdate).toHaveBeenCalledOnce()
   })
 
+  // Its anchored text was deleted, so the snapshot keeps the comment with no range.
+  function rangelessHistoryDocument(resolved: boolean, version: number): JoinedDocument {
+    return {
+      ...historyDocument(resolved, version),
+      rawSnapshot: { content: 'hello', comments: [{ id: 'open', ranges: [], resolved }], trackedChanges: [] },
+    }
+  }
+
+  test.each<[string, McpError | undefined]>([
+    ['a confirmed', undefined],
+    ['a timed-out', new McpError('TIMEOUT', 'apply timeout')],
+  ])('verifies %s status change of a history-OT comment with no range from its snapshot', async (_, submitError) => {
+    const { connection, connections } = connectionHarness(
+      [rangelessHistoryDocument(false, 1), rangelessHistoryDocument(true, 2)],
+      submitError
+    )
+    // The REST thread still reads open: history-OT keeps the status in the snapshot.
+    const http = {
+      getJson: vi.fn(async () => threads),
+      postJson: vi.fn(),
+      deleteJson: vi.fn(),
+    }
+    const api = new CommentsApi(http, connections, {
+      recoveryTimeoutMs: 0,
+      recoveryPollIntervalMs: 0,
+    })
+
+    await expect(api.setCommentStatus(statusInput())).resolves.toMatchObject({
+      threadId: 'open',
+      status: 'resolved',
+    })
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+    expect(http.postJson).not.toHaveBeenCalled()
+  })
+
   test('reports a status change cut off by a lost socket as not applied, without retry', async () => {
     const { connection, connections } = connectionHarness(
       Array.from({ length: 50 }, () => historyDocument(false, 1)),
