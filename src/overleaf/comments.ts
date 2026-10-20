@@ -168,7 +168,8 @@ function rangesFromDocument(document: JoinedDocument): LocatedRange[] {
         start,
         end,
         quotedText: document.content.slice(start, end),
-        ...(comment.resolved === undefined ? {} : { resolved: comment.resolved }),
+        // Overleaf leaves resolved out of an open comment's snapshot entry.
+        resolved: comment.resolved === true,
       }]
     })
   }
@@ -866,7 +867,8 @@ export class CommentsApi {
       // The snapshot holds the status even for a comment whose anchored text was deleted.
       const comment = ((document.rawSnapshot as HistorySnapshot).comments ?? [])
         .find(entry => entry.id === threadId)
-      if (comment?.resolved !== undefined) return comment.resolved === resolved
+      // Overleaf writes resolved: true only for a resolved comment and leaves the key out for an open one.
+      if (comment) return (comment.resolved === true) === resolved
     }
     const range = attachment(document, threadId)
     if (range?.resolved !== undefined) return range.resolved === resolved

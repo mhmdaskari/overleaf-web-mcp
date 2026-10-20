@@ -804,4 +804,45 @@ describe('review comments API', () => {
     })
     expect(connection.submitUpdate).toHaveBeenCalledOnce()
   })
+
+  // Overleaf's Comment.toRaw writes resolved: true for a resolved comment and leaves the key out for an open one.
+  function overleafHistoryDocument(resolved: boolean, version: number, ranges: Array<{ pos: number; length: number }>): JoinedDocument {
+    return {
+      ...historyDocument(resolved, version),
+      rawSnapshot: {
+        content: 'hello',
+        comments: [{ id: 'open', ranges, ...(resolved ? { resolved: true } : {}) }],
+        trackedChanges: [],
+      },
+    }
+  }
+
+  test.each<[string, Array<{ pos: number; length: number }>, McpError | undefined]>([
+    ['a confirmed reopen of a comment with no range', [], undefined],
+    ['a timed-out reopen of a comment with no range', [], new McpError('TIMEOUT', 'apply timeout')],
+    ['a confirmed reopen of an anchored comment', [{ pos: 1, length: 2 }], undefined],
+    ['a timed-out reopen of an anchored comment', [{ pos: 1, length: 2 }], new McpError('TIMEOUT', 'apply timeout')],
+  ])('verifies %s from a history-OT snapshot that leaves resolved out', async (_, ranges, submitError) => {
+    const { connection, connections } = connectionHarness(
+      [overleafHistoryDocument(true, 1, ranges), overleafHistoryDocument(false, 2, ranges)],
+      submitError
+    )
+    // The REST thread still reads resolved: history-OT keeps the status in the snapshot.
+    const http = {
+      getJson: vi.fn(async () => ({ open: { ...threads.open, resolved: true } })),
+      postJson: vi.fn(),
+      deleteJson: vi.fn(),
+    }
+    const api = new CommentsApi(http, connections, {
+      recoveryTimeoutMs: 0,
+      recoveryPollIntervalMs: 0,
+    })
+
+    await expect(api.setCommentStatus({ ...statusInput(), status: 'open' })).resolves.toMatchObject({
+      threadId: 'open',
+      status: 'open',
+    })
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+    expect(http.postJson).not.toHaveBeenCalled()
+  })
 })
