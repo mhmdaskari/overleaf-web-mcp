@@ -550,7 +550,8 @@ export class CommentsApi {
           submitError = error
         }
         await leaveQuietly(connection, entity.id)
-        if (submitError instanceof McpError && submitError.code === 'TIMEOUT') {
+        // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
+        if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
           return {
             entity,
             before,
@@ -589,6 +590,7 @@ export class CommentsApi {
 
     let live = submit.live
     let recoveredAfterTimeout = false
+    const timedOut = submit.submitError instanceof McpError && submit.submitError.code === 'TIMEOUT'
     if (!live) {
       // An ambiguous attachment is recovered by observing the generated thread ID and exact range.
       await this.#connections.invalidate(input.projectId)
@@ -614,7 +616,7 @@ export class CommentsApi {
           if (!unchanged) {
             throw new McpError(
               'OUTCOME_UNKNOWN',
-              'The document changed while the timed-out comment attachment remained unconfirmed.',
+              'The document changed while the comment attachment remained unconfirmed.',
               { details: { threadId } }
             )
           }
@@ -627,7 +629,7 @@ export class CommentsApi {
         await new Promise<void>(resolve => setTimeout(resolve, this.#recoveryPollIntervalMs))
       } while (Date.now() <= deadline)
       if (!live) {
-        throw new McpError('OUTCOME_UNKNOWN', 'Could not verify comment attachment after timeout.', {
+        throw new McpError('OUTCOME_UNKNOWN', 'Could not verify the unconfirmed comment attachment.', {
           cause: observationError,
           details: { threadId },
         })
@@ -662,7 +664,8 @@ export class CommentsApi {
           details: { threadId },
         })
       }
-      throw new McpError('TIMEOUT', 'The comment range attachment was not applied.', {
+      throw new McpError(timedOut ? 'TIMEOUT' : 'REMOTE_ERROR', 'The comment range attachment was not applied.', {
+        retryable: false,
         details: { threadId, outcome: 'not_applied' },
       })
     }

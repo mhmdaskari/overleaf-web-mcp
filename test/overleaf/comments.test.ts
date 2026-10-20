@@ -82,13 +82,15 @@ function historyDocument(resolved: boolean, version: number): JoinedDocument {
   }
 }
 
-function connectionHarness(documents: JoinedDocument[], submitError?: McpError) {
+// A fixture that is an Error is thrown by that join instead of returned.
+function connectionHarness(documents: Array<JoinedDocument | Error>, submitError?: McpError) {
   const connection = {
     queue: new FifoQueue(),
     getTree: () => tree,
-    joinDocument: vi.fn(async () => {
+    joinDocument: vi.fn(async (): Promise<JoinedDocument> => {
       const value = documents.shift()
       if (!value) throw new Error('no document fixture')
+      if (value instanceof Error) throw value
       return value
     }),
     leaveDocument: vi.fn(async () => undefined),
@@ -457,6 +459,76 @@ describe('review comments API', () => {
       content: 'Review this',
     })).resolves.toMatchObject({ recoveredAfterTimeout: true })
     expect(http.deleteJson).not.toHaveBeenCalled()
+  })
+
+  function addCommentInput() {
+    return {
+      projectId: 'project',
+      filePath: 'main.tex',
+      revision: createRevision({
+        projectId: 'project',
+        docId: 'doc1',
+        protocol: 'sharejs',
+        otVersion: 1,
+        content: 'hello',
+      }),
+      start: { line: 1, column: 2 },
+      end: { line: 1, column: 4 },
+      expectedText: 'el',
+      content: 'Review this',
+    }
+  }
+
+  test('observes an attachment whose socket failed after it was sent, and keeps the thread', async () => {
+    const attached = shareDocument('hello', 2, [{ op: { p: 1, c: 'el', t: 'thread' } }])
+    const { connection, connections } = connectionHarness(
+      [shareDocument('hello', 1), attached],
+      new McpError('OUTCOME_UNKNOWN', 'socket closed')
+    )
+    const http = {
+      getJson: vi.fn(async () => ({ thread: { messages: [] } })),
+      postJson: vi.fn(async () => ({ id: 'message' })),
+      deleteJson: vi.fn(async () => ({})),
+    }
+    const api = new CommentsApi(http, connections, {
+      threadIdFactory: () => 'thread',
+      recoveryTimeoutMs: 20,
+      recoveryPollIntervalMs: 0,
+    })
+
+    await expect(api.addComment(addCommentInput())).resolves.toMatchObject({
+      threadId: 'thread',
+      recoveredAfterTimeout: true,
+    })
+    expect(connections.invalidate).toHaveBeenCalledWith('project')
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+    expect(http.postJson).toHaveBeenCalledOnce()
+    expect(http.deleteJson).not.toHaveBeenCalled()
+  })
+
+  test('reports an attachment cut off by a lost socket as not applied only after observing it absent', async () => {
+    const { connection, connections } = connectionHarness(
+      [shareDocument('hello', 1), ...Array.from({ length: 50 }, () => shareDocument('hello', 1))],
+      new McpError('OUTCOME_UNKNOWN', 'socket closed')
+    )
+    const http = {
+      getJson: vi.fn(async () => ({ thread: { messages: [] } })),
+      postJson: vi.fn(async () => ({ id: 'message' })),
+      deleteJson: vi.fn(async () => ({})),
+    }
+    const api = new CommentsApi(http, connections, {
+      threadIdFactory: () => 'thread',
+      recoveryTimeoutMs: 0,
+      recoveryPollIntervalMs: 0,
+    })
+
+    await expect(api.addComment(addCommentInput())).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+      retryable: false,
+      details: { threadId: 'thread', outcome: 'not_applied' },
+    })
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+    expect(http.deleteJson).toHaveBeenCalledOnce()
   })
 
   test('resolves a ShareJS thread anchored in the named document', async () => {
