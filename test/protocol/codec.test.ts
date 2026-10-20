@@ -52,6 +52,18 @@ describe('Socket.IO 0.9 codec', () => {
     expect(parseSocketPacket('2::')).toEqual({ type: 'heartbeat' })
   })
 
+  test('reads an event without args as one with no arguments', () => {
+    // Socket.IO 0.9 leaves args out of an event emitted with none.
+    expect(parseSocketPacket('5:::{"name":"reconnectGracefully"}')).toEqual({
+      type: 'event',
+      name: 'reconnectGracefully',
+      args: [],
+    })
+    expect(() => parseSocketPacket('5:::{"name":"notice","args":{}}')).toThrowError(
+      expect.objectContaining({ code: 'PROTOCOL_UNSUPPORTED' })
+    )
+  })
+
   test('accepts acknowledgements with no argument payload', () => {
     expect(parseSocketPacket('6:::7')).toEqual({
       type: 'ack',

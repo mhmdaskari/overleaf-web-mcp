@@ -57,12 +57,14 @@ export function parseSocketPacket(value: string): SocketPacket {
   if (type === '5') {
     try {
       const event = JSON.parse(data ?? '') as { name?: unknown; args?: unknown }
-      if (typeof event.name !== 'string' || !Array.isArray(event.args)) throw new Error('invalid event')
+      // Socket.IO 0.9 writes args only when an event has any.
+      const args = event.args ?? []
+      if (typeof event.name !== 'string' || !Array.isArray(args)) throw new Error('invalid event')
       const ackId = rawId ? Number(rawId.replace(/\+$/u, '')) : undefined
       return {
         type: 'event',
         name: event.name,
-        args: event.args,
+        args,
         ...(ackId === undefined ? {} : { ackId }),
       }
     } catch (error) {
