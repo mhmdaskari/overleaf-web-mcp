@@ -71,6 +71,19 @@ export interface DocumentsApiOptions {
   policy?: AccessPolicy
 }
 
+// Code points above U+FFFF, and unpaired surrogates, which Overleaf would store the same way.
+const OUTSIDE_BMP = /[\u{10000}-\u{10FFFF}\uD800-\uDFFF]/gu
+
+/** The 1-based line of the first character outside the BMP in `target` that `current` lacks. */
+function newOutsideBmpLine(current: string, target: string): number | undefined {
+  let present: Set<string> | undefined
+  for (const match of target.matchAll(OUTSIDE_BMP)) {
+    present ??= new Set(current.match(OUTSIDE_BMP))
+    if (!present.has(match[0])) return target.slice(0, match.index).split('\n').length
+  }
+  return undefined
+}
+
 async function safelyLeave(connection: DocumentConnection, docId: string): Promise<void> {
   try {
     await connection.leaveDocument(docId)
@@ -182,6 +195,18 @@ export class DocumentsApi {
           otVersion: before.version,
           content: before.content,
         })
+        if (before.protocol === 'sharejs') {
+          // The legacy editor replaces each such character with U+FFFD, so the write could never verify.
+          const line = newOutsideBmpLine(before.content, target)
+          if (line !== undefined) {
+            await safelyLeave(connection, entity.id)
+            throw new McpError(
+              'INVALID_ARGUMENT',
+              "Overleaf's legacy editor cannot store characters outside the Basic Multilingual Plane, such as emoji, and would replace each with U+FFFD. Replace them, for example with a LaTeX command, and write again. Nothing was sent.",
+              { details: { line } }
+            )
+          }
+        }
 
         const tracking =
           writeMode === 'tracked'

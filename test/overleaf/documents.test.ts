@@ -228,6 +228,81 @@ describe('document API', () => {
     expect(connection.submitUpdate).not.toHaveBeenCalled()
   })
 
+  test('refuses characters outside the BMP on a ShareJS document before sending anything', async () => {
+    const { api, connection } = createHarness([shareDocument('old\ntext', 3)])
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: 'old\ntext',
+    })
+
+    const error = await api
+      .writeFile('project', 'main.tex', revision, 'old\ntext \u{1F600}')
+      .catch((caught: unknown) => caught)
+
+    expect(error).toMatchObject({ code: 'INVALID_ARGUMENT', details: { line: 2 } })
+    expect((error as Error).message).toContain('Basic Multilingual Plane')
+    expect((error as Error).message).not.toContain('\u{1F600}')
+    expect(connection.submitUpdate).not.toHaveBeenCalled()
+    expect(connection.leaveDocument).toHaveBeenCalledWith('doc')
+  })
+
+  test('refuses an unpaired surrogate on a ShareJS document', async () => {
+    const { api, connection } = createHarness([shareDocument('old', 3)])
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: 'old',
+    })
+
+    await expect(api.writeFile('project', 'main.tex', revision, 'old \uD83D')).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
+    expect(connection.submitUpdate).not.toHaveBeenCalled()
+  })
+
+  test('allows a character outside the BMP that the ShareJS document already holds', async () => {
+    const { api, connection } = createHarness([
+      shareDocument('a \u{1F600}', 3),
+      shareDocument('b \u{1F600}', 4),
+    ])
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: 'a \u{1F600}',
+    })
+
+    await expect(api.writeFile('project', 'main.tex', revision, 'b \u{1F600}')).resolves.toMatchObject({
+      protocol: 'sharejs',
+    })
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+  })
+
+  test('leaves characters outside the BMP on a history-OT document to Overleaf', async () => {
+    const { api, connection } = createHarness([
+      historyDocument('old', 3),
+      historyDocument('old \u{1F600}', 4),
+    ])
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'history-ot',
+      otVersion: 3,
+      content: 'old',
+    })
+
+    await expect(api.writeFile('project', 'main.tex', revision, 'old \u{1F600}')).resolves.toMatchObject({
+      protocol: 'history-ot',
+    })
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+  })
+
   test('recovers a timed-out write when the intended hash is live', async () => {
     const timeout = new McpError('TIMEOUT', 'ack timeout')
     const { api } = createHarness(
