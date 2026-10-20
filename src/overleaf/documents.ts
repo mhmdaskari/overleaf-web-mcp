@@ -1,4 +1,5 @@
 import { asMcpError, McpError } from '../core/errors.js'
+import { createMinimalTextEdit } from '../core/diff.js'
 import { assertDocumentSize, assertUpdateSize } from '../core/limits.js'
 import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
@@ -72,16 +73,17 @@ export interface DocumentsApiOptions {
 }
 
 // Code points above U+FFFF, and unpaired surrogates, which Overleaf would store the same way.
-const OUTSIDE_BMP = /[\u{10000}-\u{10FFFF}\uD800-\uDFFF]/gu
+const OUTSIDE_BMP = /[\u{10000}-\u{10FFFF}\uD800-\uDFFF]/u
 
-/** The 1-based line of the first character outside the BMP in `target` that `current` lacks. */
-function newOutsideBmpLine(current: string, target: string): number | undefined {
-  let present: Set<string> | undefined
-  for (const match of target.matchAll(OUTSIDE_BMP)) {
-    present ??= new Set(current.match(OUTSIDE_BMP))
-    if (!present.has(match[0])) return target.slice(0, match.index).split('\n').length
-  }
-  return undefined
+/**
+ * The 1-based line in `target` of the first character outside the BMP that the minimal edit
+ * from `current` inserts. A character the document already holds counts once it is sent again.
+ */
+function insertedOutsideBmpLine(current: string, target: string): number | undefined {
+  const edit = createMinimalTextEdit(current, target)
+  const match = edit === null ? null : OUTSIDE_BMP.exec(edit.insertText)
+  if (edit === null || match === null) return undefined
+  return target.slice(0, edit.position + match.index).split('\n').length
 }
 
 async function safelyLeave(connection: DocumentConnection, docId: string): Promise<void> {
@@ -197,7 +199,7 @@ export class DocumentsApi {
         })
         if (before.protocol === 'sharejs') {
           // The legacy editor replaces each such character with U+FFFD, so the write could never verify.
-          const line = newOutsideBmpLine(before.content, target)
+          const line = insertedOutsideBmpLine(before.content, target)
           if (line !== undefined) {
             await safelyLeave(connection, entity.id)
             throw new McpError(

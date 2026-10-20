@@ -284,6 +284,40 @@ describe('document API', () => {
     expect(connection.submitUpdate).toHaveBeenCalledOnce()
   })
 
+  test('refuses a new copy of a character outside the BMP that the ShareJS document already holds', async () => {
+    const before = '\u{1F600} a'
+    const { api, connection } = createHarness([shareDocument(before, 3)])
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: before,
+    })
+
+    await expect(
+      api.writeFile('project', 'main.tex', revision, `${before}\n\u{1F600} b`)
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT', details: { line: 2 } })
+    expect(connection.submitUpdate).not.toHaveBeenCalled()
+  })
+
+  test('refuses reordering characters outside the BMP on a ShareJS document, which inserts them again', async () => {
+    const before = 'x\n\u{1F600}\u{1F601}'
+    const { api, connection } = createHarness([shareDocument(before, 3)])
+    const revision = createRevision({
+      projectId: 'project',
+      docId: 'doc',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: before,
+    })
+
+    await expect(
+      api.writeFile('project', 'main.tex', revision, 'x\n\u{1F601}\u{1F600}')
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT', details: { line: 2 } })
+    expect(connection.submitUpdate).not.toHaveBeenCalled()
+  })
+
   test('leaves characters outside the BMP on a history-OT document to Overleaf', async () => {
     const { api, connection } = createHarness([
       historyDocument('old', 3),
