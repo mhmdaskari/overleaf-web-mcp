@@ -8,6 +8,8 @@ import { SocketIo09Peer } from '../../src/protocol/socketio09-client.js'
 export interface ServerDocument {
   content: string
   version: number
+  /** Lines sent exactly as given instead of encoding `content`. */
+  rawLines?: string[]
 }
 
 export type Handler = (socket: FakeOverleafSocket, name: string, args: unknown[], ackId: number) => void
@@ -34,7 +36,7 @@ export class FakeOverleafSocket extends EventEmitter {
     const { name, args } = JSON.parse(match[2]!) as { name: string; args: unknown[] }
     this.events.push(name)
     if (name === 'joinDoc') {
-      const lines = this.document.content
+      const lines = this.document.rawLines ?? this.document.content
         .split('\n')
         .map(line => Buffer.from(line, 'utf8').toString('latin1'))
       this.ack(ackId, [null, lines, this.document.version, [], {}, 'sharejs-text-ot'])

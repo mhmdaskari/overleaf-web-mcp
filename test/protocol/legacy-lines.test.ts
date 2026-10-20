@@ -11,19 +11,31 @@ describe('legacy ShareJS line decoding', () => {
     await cache.closeAll()
   })
 
-  test('keeps a leading byte order mark and text that was never byte-encoded', async () => {
+  test('keeps a leading byte order mark', async () => {
     const content = '\uFEFFfirst\nsecond'
-    const { api, cache, sockets } = createStack({ content, version: 3 }, () => undefined)
+    const { api, cache } = createStack({ content, version: 3 }, () => undefined)
 
     await expect(api.readFile('project', 'main.tex')).resolves.toMatchObject({ content })
+    await cache.closeAll()
+  })
 
-    // A line holding a code unit above 0xFF was not sent as UTF-8 bytes, so it is taken as it is.
-    sockets[0]!.send = function (this: typeof sockets[number], value: string) {
-      const match = /^5:(\d+)\+::(.*)$/su.exec(value)
-      const { name } = JSON.parse(match![2]!) as { name: string }
-      this.ack(Number(match![1]), name === 'joinDoc' ? [null, ['Łata ok'], 3, [], {}, 'sharejs-text-ot'] : [null])
-    }
-    await expect(api.readFile('project', 'main.tex')).resolves.toMatchObject({ content: 'Łata ok' })
+  test('takes a line holding a code unit above 0xFF as it is', async () => {
+    // Read as bytes, its low bytes would decode to 'Aata ok' without an error.
+    const document = { content: '', version: 3, rawLines: ['\u0141ata ok'] }
+    const { api, cache } = createStack(document, () => undefined)
+
+    await expect(api.readFile('project', 'main.tex')).resolves.toMatchObject({ content: '\u0141ata ok' })
+    await cache.closeAll()
+  })
+
+  test('keeps a line whose bytes are not UTF-8 and still decodes the next one', async () => {
+    const encoded = Buffer.from('caf\u00E9', 'utf8').toString('latin1')
+    const document = { content: '', version: 3, rawLines: ['caf\u00E9', encoded] }
+    const { api, cache } = createStack(document, () => undefined)
+
+    await expect(api.readFile('project', 'main.tex')).resolves.toMatchObject({
+      content: 'caf\u00E9\ncaf\u00E9',
+    })
     await cache.closeAll()
   })
 
