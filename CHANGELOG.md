@@ -4,6 +4,24 @@ All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
 result shapes may change in a minor or patch release; each such change is listed below.
 
+## [Unreleased]
+
+### Fixed
+
+- **Project actions and `stop_compile` report success again.** Overleaf now acknowledges rename,
+  trash, restore, archive, unarchive, permanent deletion, and compile stop with a plain-text `OK`.
+  The server refused that body as not JSON and returned `PROTOCOL_UNSUPPORTED` although Overleaf
+  had applied the action. A bare status-text acknowledgement is now accepted wherever an empty
+  body already was; any other body that is not JSON is still refused.
+- **Tracked writes are accepted on ShareJS documents.** `writeMode: "tracked"` on `create_file`,
+  `write_file`, `write_section`, and `sync_directory` sent the user ID as the track-changes id
+  seed, which Overleaf refuses as longer than 18 characters, so every tracked write failed with
+  `REMOTE_ERROR`. The server now sends an 18-character seed, as the web editor does; Overleaf
+  still attributes the change to the signed-in user.
+- **`compile_project` builds the `rootFilePath` it is given.** overleaf.com built the project's
+  configured root document whatever `rootFilePath` named, while the result reported the requested
+  path. The compile request now names the file to build.
+
 ## [0.6.1] - 2026-10-20
 
 A refreshed README and package description, and a session deadline that no longer drifts. No tool

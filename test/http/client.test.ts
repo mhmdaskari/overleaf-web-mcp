@@ -103,6 +103,32 @@ describe('authenticated HTTP client', () => {
     })
   })
 
+  test('accepts a bare status-text acknowledgement where an empty body is allowed', async () => {
+    const reply = (body: string, contentType: string) => async () =>
+      new Response(body, { status: 200, headers: { 'content-type': contentType } })
+    const clientReplying = (body: string, contentType = 'text/plain; charset=utf-8') =>
+      new OverleafHttpClient({
+        baseUrl: 'https://overleaf.test',
+        jar: new CookieJar(),
+        fetcher: reply(body, contentType),
+      })
+
+    // Overleaf answers project trash, archive, and their reversals with res.sendStatus(200).
+    await expect(clientReplying('OK').postJson('/project/p/trash')).resolves.toEqual({})
+    await expect(clientReplying('OK').deleteJson('/project/p/trash')).resolves.toEqual({})
+    // Anything else that is not JSON is still refused, including a 200 page.
+    await expect(clientReplying('OK').getJson('/user/projects')).rejects.toMatchObject({
+      code: 'PROTOCOL_UNSUPPORTED',
+    })
+    await expect(clientReplying('Done').postJson('/project/p/trash')).rejects.toMatchObject({
+      code: 'PROTOCOL_UNSUPPORTED',
+    })
+    await expect(clientReplying('OK', 'text/html').postJson('/project/p/trash')).rejects.toMatchObject({
+      code: 'PROTOCOL_UNSUPPORTED',
+      details: { path: '/project/p/trash', contentType: 'text/html' },
+    })
+  })
+
   test('enforces an explicit request deadline', async () => {
     const client = new OverleafHttpClient({
       baseUrl: 'https://overleaf.test',

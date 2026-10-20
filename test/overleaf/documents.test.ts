@@ -130,7 +130,9 @@ describe('document API', () => {
       doc: 'doc',
       v: 3,
       op: [{ p: 0, d: 'old' }, { p: 0, i: 'new' }],
-      meta: { tc: 'user' },
+      // Overleaf takes the author from the session; tc seeds the tracked-change ids and is
+      // refused when longer than 18 characters.
+      meta: { tc: expect.stringMatching(/^[0-9a-f]{18}$/u) },
     })
     expect(result).toMatchObject({
       trackChangesActive: false,

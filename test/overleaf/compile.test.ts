@@ -75,7 +75,7 @@ async function failure(call: () => Promise<unknown>): Promise<McpError> {
 }
 
 describe('compile_project', () => {
-  test('maps rootFilePath to rootDoc_id and posts a bounded compile request with its options', async () => {
+  test('maps rootFilePath to rootDoc_id and rootResourcePath and posts a bounded compile request with its options', async () => {
     const { api, requests } = harness()
     await expect(api.compileProject('project', 'main.tex', 30_000, { stopOnFirstError: true, draft: true })).resolves.toMatchObject({
       status: 'success',
@@ -86,6 +86,8 @@ describe('compile_project', () => {
     expect(requests[0]!.url.searchParams.get('file_line_errors')).toBe('true')
     expect(requests[0]!.body).toEqual({
       rootDoc_id: 'root-doc',
+      // overleaf.com builds from rootResourcePath and falls back to the configured root without it.
+      rootResourcePath: 'main.tex',
       check: 'silent',
       incrementalCompilesEnabled: true,
       stopOnFirstError: true,

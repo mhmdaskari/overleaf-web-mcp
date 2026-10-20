@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto'
+
 import { createMinimalTextEdit } from '../core/diff.js'
 import type { OtProtocol } from '../core/revision.js'
 
@@ -134,6 +136,15 @@ export function buildStatusOperation(
   return [{ commentId: threadId, resolved }]
 }
 
+/**
+ * The first 18 hex characters of a Mongo ObjectId: seconds, then random bytes. Overleaf appends a
+ * six-character counter to the seed to make comment and tracked-change ids.
+ */
+export function generateIdSeed(): string {
+  const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0')
+  return `${timestamp}${randomBytes(5).toString('hex')}`.slice(0, 18)
+}
+
 export function makeUpdate(
   docId: string,
   version: number,
@@ -148,7 +159,7 @@ export function makeUpdate(
     doc: docId,
     v: version,
     op: operation,
-    // ShareJS tracked writes attach author metadata; untracked and history-OT writes omit it here.
+    // ShareJS tracked writes attach a track-changes id seed; untracked and history-OT writes omit it.
     ...(trackingMetadata === undefined ? {} : { meta: trackingMetadata }),
   }
 }

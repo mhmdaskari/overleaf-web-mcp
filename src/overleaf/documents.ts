@@ -12,6 +12,7 @@ import { normalizeLf } from '../core/text.js'
 import {
   buildHistoryTextOperation,
   buildShareJsOperation,
+  generateIdSeed,
   makeUpdate,
   type HistorySnapshot,
 } from '../protocol/ot.js'
@@ -203,7 +204,7 @@ export class DocumentsApi {
           operation,
           before.protocol,
           writeMode === 'tracked' && before.protocol === 'sharejs'
-            ? { tc: this.#currentUserId }
+            ? { tc: generateIdSeed() }
             : undefined
         )
         assertUpdateSize(update, this.#maxUpdateChars)

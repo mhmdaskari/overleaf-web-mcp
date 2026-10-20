@@ -169,7 +169,7 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS !== '1
         await runtime.createFile(
           created.projectId,
           'broken.tex',
-          '\\documentclass{article}\n\\begin{document}\n\\undefinedcommand\n\\end{document}\n'
+          '\\documentclass{article}\n\\begin{document}\n\\undefinedcommand Disposable lifecycle test.\n\\end{document}\n'
         )
         // Overleaf refuses a compile within a second of the last one.
         await new Promise(resolve => setTimeout(resolve, 1_500))
@@ -185,7 +185,7 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS !== '1
           trashed: true,
         })
       }
-    })
+    }, 120_000)
   }
 )
 
@@ -234,7 +234,7 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_SYNC_TESTS !== '1')(
         await runtime.projects.manageProject(created.projectId, { action: 'trash', confirmName: name })
         await rm(folder, { recursive: true })
       }
-    })
+    }, 120_000)
 
     test('batch-uploads into new folders, skips on request, and downloads the project as a zip', async () => {
       const folder = await mkdtemp(join(tmpdir(), 'overleaf-live-batch-'))
@@ -277,6 +277,6 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_SYNC_TESTS !== '1')(
         await runtime.projects.manageProject(created.projectId, { action: 'trash', confirmName: name })
         await rm(folder, { recursive: true })
       }
-    })
+    }, 120_000)
   }
 )

@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto'
-
 import { asMcpError, McpError } from '../core/errors.js'
 import { assertUpdateSize } from '../core/limits.js'
 import { AccessPolicy, assertPathSafeId } from '../core/policy.js'
@@ -14,6 +12,7 @@ import { lineColumnToOffset, normalizeLf, offsetToLineColumn, type LineColumn } 
 import {
   buildCommentOperation,
   buildStatusOperation,
+  generateIdSeed,
   makeUpdate,
   snapshotToVisibleOffset,
   visibleToSnapshotOffset,
@@ -103,8 +102,7 @@ export interface CommentsApiOptions {
 }
 
 function generateThreadId(): string {
-  const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0')
-  return `${timestamp}${randomBytes(5).toString('hex')}000001`.slice(0, 24)
+  return `${generateIdSeed()}000001`
 }
 
 function legacyRange(docId: string, value: unknown): LocatedRange | undefined {

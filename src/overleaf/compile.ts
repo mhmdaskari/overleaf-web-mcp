@@ -340,6 +340,8 @@ export class CompileApi {
         `/project/${encodeURIComponent(projectId)}/compile?file_line_errors=true`,
         {
           rootDoc_id: root.id,
+          // overleaf.com builds from rootResourcePath; without it, it builds the configured root.
+          rootResourcePath: root.path,
           check: 'silent',
           incrementalCompilesEnabled: true,
           ...(options.stopOnFirstError === true ? { stopOnFirstError: true } : {}),

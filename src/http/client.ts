@@ -1,3 +1,5 @@
+import { STATUS_CODES } from 'node:http'
+
 import type { CookieJar } from 'tough-cookie'
 
 import { AUTH_LOGIN_INSTRUCTION, McpError } from '../core/errors.js'
@@ -35,11 +37,15 @@ const MIME_TYPE_PATTERN = /^[a-z]+\/[a-z0-9.+-]{1,64}$/u
  */
 async function parseJsonBody(response: Response, path: string, emptyValue?: unknown): Promise<unknown> {
   const text = await response.text()
-  if (text === '' && emptyValue !== undefined) return emptyValue
+  const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
+  if (emptyValue !== undefined) {
+    if (text === '') return emptyValue
+    // Express's res.sendStatus answers with the bare status text, `OK` for 200, and no data.
+    if (contentType === 'text/plain' && text === STATUS_CODES[response.status]) return emptyValue
+  }
   try {
     return JSON.parse(text) as unknown
   } catch (error) {
-    const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
     throw new McpError('PROTOCOL_UNSUPPORTED', 'Overleaf returned a response that is not JSON.', {
       details: {
         path,
