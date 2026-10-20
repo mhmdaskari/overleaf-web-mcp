@@ -115,6 +115,19 @@ x % \end{${environment}}
   })
 })
 
+describe('offsets around astral characters', () => {
+  test('keeps offsets aligned after an astral character in a masked region', () => {
+    const input = '\\begin{verbatim}\u{1F600}\\end{verbatim}\n\\section{A}\nBody\n'
+    const [section] = findSections(input)
+
+    expect(section?.title).toBe('A')
+    expect(section?.start).toBe(input.indexOf('\\section{A}'))
+    expect(replaceSection(input, section!.id, 'New\n')).toBe(
+      '\\begin{verbatim}\u{1F600}\\end{verbatim}\n\\section{A}\nNew\n'
+    )
+  })
+})
+
 describe('inline verbatim', () => {
   test('masks a heading inside \\verb with any delimiter', () => {
     expect(titles('\\verb|\\section{V}|')).toEqual([])

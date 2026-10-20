@@ -104,7 +104,8 @@ function inlineVerbatimEnd(source: string, index: number): number {
 
 function maskIgnored(source: string): string {
   // Spaces preserve every source offset; newlines preserve line structure for returned ranges.
-  const chars = [...source]
+  // Split by UTF-16 code unit, not code point, so array indexes match string offsets.
+  const chars = source.split('')
   const mask = (from: number, to: number): void => {
     for (let index = from; index < to; index += 1) {
       if (chars[index] !== '\n') chars[index] = ' '
