@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { basename, posix } from 'node:path'
 
 import { z } from 'zod'
 
@@ -85,6 +85,9 @@ export interface ProjectSettings {
 
 /** Overleaf's own limit on project names, enforced client-side to fail before the request. */
 const MAX_PROJECT_NAME_LENGTH = 150
+
+/** Overleaf's default `validRootDocExtensions`, matched case-insensitively as Overleaf does. */
+const ROOT_DOC_EXTENSION = /^\.(?:tex|ltx|rtex|rnw)$/iu
 
 /** Overleaf reports zip import rejections as HTTP 422 with a machine-readable code. */
 const ZIP_ERRORS: Record<string, string> = {
@@ -402,6 +405,12 @@ export class ProjectsApi {
     this.#policy.assertProject(projectId)
     // The settings are re-read afterwards, so that read is allowed before anything is changed.
     this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
+    if (settings.rootFilePath !== undefined && !ROOT_DOC_EXTENSION.test(posix.extname(settings.rootFilePath))) {
+      throw new McpError(
+        'INVALID_ARGUMENT',
+        'rootFilePath must name a .tex, .ltx, .Rtex, or .Rnw document; Overleaf compiles no other root. Nothing was changed.'
+      )
+    }
     // Overleaf applies a settings request field by field in this order and stops at the first
     // failure with a bare HTTP 500, so one request per field tells which ones were stored.
     const updates: Array<{ setting: keyof ProjectSettingsInput; body: Record<string, string> }> = []

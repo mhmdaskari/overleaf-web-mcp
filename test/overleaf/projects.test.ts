@@ -300,6 +300,23 @@ describe('projects API', () => {
       expect(options.invalidate).toHaveBeenCalledTimes(1)
     })
 
+    test('refuses a root document Overleaf cannot compile before any request', async () => {
+      const { api, http, options } = harness()
+
+      for (const rootFilePath of ['refs.bib', 'chapters/intro.sty', 'README', '.tex']) {
+        await expect(api.updateProjectSettings('p', { rootFilePath, compiler: 'xelatex' })).rejects.toMatchObject({
+          code: 'INVALID_ARGUMENT',
+        })
+      }
+      expect(options.resolvePath).not.toHaveBeenCalled()
+      expect(http.postJson).not.toHaveBeenCalled()
+
+      for (const rootFilePath of ['a.tex', 'b.ltx', 'c.Rtex', 'd.Rnw', 'E.TEX', 'sub/f.rnw']) {
+        await api.updateProjectSettings('p', { rootFilePath })
+      }
+      expect(options.resolvePath).toHaveBeenCalledTimes(6)
+    })
+
     test('sends an empty spellCheckLanguage to turn spell checking off', async () => {
       const { api, http } = harness()
 
