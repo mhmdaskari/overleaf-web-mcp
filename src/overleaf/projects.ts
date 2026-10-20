@@ -3,7 +3,7 @@ import { basename } from 'node:path'
 
 import { z } from 'zod'
 
-import { McpError } from '../core/errors.js'
+import { asMcpError, McpError } from '../core/errors.js'
 import { prepareLocalDownload, writeDownload } from '../core/local-download.js'
 import { AccessPolicy, isPathSafeId } from '../core/policy.js'
 import { ERROR_CODE_PATTERN } from '../http/client.js'
@@ -141,6 +141,17 @@ function zipFailure(error: unknown): McpError {
     'INVALID_ARGUMENT',
     detail ?? 'Overleaf rejected the zip archive.',
     code === undefined ? {} : { details: { overleafError: code } }
+  )
+}
+
+/** Keeps the failure's code and details and adds which settings were stored before it. */
+function partialSettingsFailure(error: unknown, applied: string[], failed: string): McpError {
+  const cause = asMcpError(error)
+  const stored = applied.length === 0 ? 'No setting was' : `${applied.join(', ')} ${applied.length === 1 ? 'was' : 'were'}`
+  return new McpError(
+    cause.code,
+    `${cause.message} ${stored} applied before the request for ${failed} failed, and no later setting was sent.`,
+    { retryable: cause.retryable, details: { ...cause.details, applied: [...applied], failed }, cause }
   )
 }
 
@@ -391,24 +402,40 @@ export class ProjectsApi {
     this.#policy.assertProject(projectId)
     // The settings are re-read afterwards, so that read is allowed before anything is changed.
     this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
-    const body: Record<string, string> = {}
-    if (settings.rootFilePath !== undefined) {
-      body.rootDocId = (await this.#options.resolvePath(projectId, settings.rootFilePath, 'doc')).id
+    // Overleaf applies a settings request field by field in this order and stops at the first
+    // failure with a bare HTTP 500, so one request per field tells which ones were stored.
+    const updates: Array<{ setting: keyof ProjectSettingsInput; body: Record<string, string> }> = []
+    if (settings.compiler !== undefined) updates.push({ setting: 'compiler', body: { compiler: settings.compiler } })
+    if (settings.imageName !== undefined) {
+      updates.push({ setting: 'imageName', body: { imageName: settings.imageName } })
     }
-    if (settings.compiler !== undefined) body.compiler = settings.compiler
-    if (settings.imageName !== undefined) body.imageName = settings.imageName
     if (settings.spellCheckLanguage !== undefined) {
-      body.spellCheckLanguage = settings.spellCheckLanguage
+      updates.push({ setting: 'spellCheckLanguage', body: { spellCheckLanguage: settings.spellCheckLanguage } })
     }
-    if (Object.keys(body).length === 0) {
+    if (settings.rootFilePath !== undefined) {
+      const rootDocId = (await this.#options.resolvePath(projectId, settings.rootFilePath, 'doc')).id
+      updates.push({ setting: 'rootFilePath', body: { rootDocId } })
+    }
+    if (updates.length === 0) {
       throw new McpError(
         'INVALID_ARGUMENT',
         'Provide at least one of rootFilePath, compiler, imageName, or spellCheckLanguage.'
       )
     }
-    await this.#options.http.postJson(`/project/${encodeURIComponent(projectId)}/settings`, body)
-    // The cached join snapshot never learns about settings changes; re-join to report the truth.
-    await this.#options.invalidate(projectId)
+    const applied: string[] = []
+    try {
+      for (const update of updates) {
+        try {
+          await this.#options.http.postJson(`/project/${encodeURIComponent(projectId)}/settings`, update.body)
+        } catch (error) {
+          throw partialSettingsFailure(error, applied, update.setting)
+        }
+        applied.push(update.setting)
+      }
+    } finally {
+      // The cached join snapshot never learns about settings changes, applied in full or in part.
+      await this.#options.invalidate(projectId)
+    }
     const tree = await this.#options.getProjectTree(projectId)
     return {
       projectId,

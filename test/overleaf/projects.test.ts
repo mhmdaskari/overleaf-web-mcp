@@ -233,7 +233,7 @@ describe('projects API', () => {
       expect(http.postJson).not.toHaveBeenCalled()
     })
 
-    test('resolves rootFilePath to a document id, posts only the given keys, and re-reads the project', async () => {
+    test('resolves rootFilePath to a document id, posts each given key on its own, and re-reads the project', async () => {
       const { api, http, options, calls } = harness()
 
       await expect(
@@ -246,9 +246,58 @@ describe('projects API', () => {
         spellCheckLanguage: 'en',
       })
       expect(options.resolvePath).toHaveBeenCalledWith('p', 'main.tex', 'doc')
-      expect(http.postJson).toHaveBeenCalledWith('/project/p/settings', { rootDocId: 'doc', compiler: 'xelatex' })
+      // Overleaf's own order: compiler, imageName, spellCheckLanguage, then the root document.
+      expect(http.postJson.mock.calls).toEqual([
+        ['/project/p/settings', { compiler: 'xelatex' }],
+        ['/project/p/settings', { rootDocId: 'doc' }],
+      ])
       // The cached join never learns about settings changes, so the re-read must follow an invalidate.
       expect(calls).toEqual(['invalidate', 'tree'])
+    })
+
+    test('names the settings applied before one fails and drops the cached join', async () => {
+      const { api, http, options } = harness()
+      http.postJson
+        .mockResolvedValueOnce({} as never)
+        .mockResolvedValueOnce({} as never)
+        .mockRejectedValueOnce(
+          new McpError('REMOTE_ERROR', 'Overleaf returned HTTP 500.', {
+            details: { status: 500, path: '/project/p/settings' },
+          })
+        )
+
+      const failure = api.updateProjectSettings('p', {
+        rootFilePath: 'main.tex',
+        compiler: 'lualatex',
+        imageName: 'texlive-full:2025.1',
+        spellCheckLanguage: 'fr',
+      })
+      await expect(failure).rejects.toMatchObject({
+        code: 'REMOTE_ERROR',
+        retryable: false,
+        details: {
+          status: 500,
+          path: '/project/p/settings',
+          applied: ['compiler', 'imageName'],
+          failed: 'spellCheckLanguage',
+        },
+      })
+      // Nothing after the failed setting is sent.
+      expect(http.postJson).toHaveBeenCalledTimes(3)
+      expect(options.invalidate).toHaveBeenCalledTimes(1)
+      expect(options.getProjectTree).not.toHaveBeenCalled()
+    })
+
+    test('keeps the code and retryability of a failure on the first setting', async () => {
+      const { api, http, options } = harness()
+      http.postJson.mockRejectedValueOnce(new McpError('TIMEOUT', 'slow', { retryable: true }))
+
+      await expect(api.updateProjectSettings('p', { imageName: 'texlive-full:2025.1' })).rejects.toMatchObject({
+        code: 'TIMEOUT',
+        retryable: true,
+        details: { applied: [], failed: 'imageName' },
+      })
+      expect(options.invalidate).toHaveBeenCalledTimes(1)
     })
 
     test('sends an empty spellCheckLanguage to turn spell checking off', async () => {
