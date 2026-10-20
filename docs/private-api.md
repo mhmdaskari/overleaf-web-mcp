@@ -70,7 +70,7 @@ import). Only a value matching `^[a-z][a-z0-9_]{0,63}$` is ever propagated, unde
 
 | Method and route | Sent | Read | Used by |
 | --- | --- | --- | --- |
-| `POST /project/:id/compile?file_line_errors=true` | `{ rootDoc_id, check: "silent", incrementalCompilesEnabled: true }`, plus `stopOnFirstError: true` and `draft: true` when asked | `status`; `outputFiles[]` reduced to `path`, `type`, and `build`; numeric `stats`; `clsiServerId`. Everything else, `url`, `timings`, and `pdfDownloadDomain` included, is dropped | `compile_project` |
+| `POST /project/:id/compile?file_line_errors=true` | `{ rootDoc_id, rootResourcePath, check: "silent", incrementalCompilesEnabled: true }` (overleaf.com builds `rootResourcePath`, and the configured root without it), plus `stopOnFirstError: true` and `draft: true` when asked | `status`; `outputFiles[]` reduced to `path`, `type`, and `build`; numeric `stats`; `clsiServerId`. Everything else, `url`, `timings`, and `pdfDownloadDomain` included, is dropped | `compile_project` |
 | `GET /project/:id/build/:buildId/output/:file` | `?clsiserverid=` when the compile response named one | the output file: `output.log` and `.blg` logs, at most 1 MB, for the summary and `get_compile_log`; any output for `download_compile_output` | `compile_project`, `get_compile_log`, `download_compile_output`, the compile output resources |
 | `POST /project/:id/compile/stop` | nothing | nothing | `stop_compile` |
 
