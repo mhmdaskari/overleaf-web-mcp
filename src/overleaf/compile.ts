@@ -383,7 +383,10 @@ export class CompileApi {
     const bibtexLogs = paths.filter(path => path.endsWith('.blg') && (path !== 'output.blg' || bibliography !== false))
     return {
       status: response.status,
-      outputFiles: response.outputFiles,
+      outputFiles:
+        record?.noBibliography === true
+          ? response.outputFiles.filter(file => !BIBLIOGRAPHY_OUTPUTS.has(file.path))
+          : response.outputFiles,
       stats: response.stats,
       ...(buildId === undefined ? {} : { buildId }),
       ...(response.clsiServerId === undefined ? {} : { clsiServerId: response.clsiServerId }),

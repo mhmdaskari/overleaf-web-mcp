@@ -140,7 +140,8 @@ describe('compile_project', () => {
         'output.blg': await fixture('missing-bib.blg'),
       },
     })
-    const { summary, buildRef } = await api.compileProject('p', 'main.tex')
+    const { summary, buildRef, outputFiles } = await api.compileProject('p', 'main.tex')
+    expect(outputFiles.map(file => file.path)).toEqual(expect.arrayContaining(['output.bbl', 'output.blg']))
     expect(summary).toMatchObject({
       builtCleanly: false,
       errorCount: 1,
@@ -161,8 +162,10 @@ describe('compile_project', () => {
         'output.blg': await fixture('missing-bib.blg'),
       },
     })
-    const { summary, buildRef } = await api.compileProject('p', 'main.tex')
+    const { summary, buildRef, outputFiles } = await api.compileProject('p', 'main.tex')
     expect(summary).toMatchObject({ builtCleanly: true, errorCount: 0, undefinedCitations: [], missingFiles: [] })
+    // Not offered as this build's outputs, as the output tools would refuse them.
+    expect(outputFiles.map(file => file.path)).toEqual(['output.pdf', 'output.log', 'output.aux'])
     expect(requests.map(request => request.url.pathname.split('/').at(-1)).sort()).toEqual(['compile', 'output.aux', 'output.log'])
 
     // The output tools answer as for a build in which BibTeX never ran, in this process or another.
@@ -188,8 +191,9 @@ describe('compile_project', () => {
         'output.blg': await fixture('missing-bib.blg'),
       },
     })
-    const { summary, buildRef } = await api.compileProject('p', 'main.tex')
+    const { summary, buildRef, outputFiles } = await api.compileProject('p', 'main.tex')
     expect(summary).toMatchObject({ builtCleanly: true, errorCount: 0, missingFiles: [] })
+    expect(outputFiles.map(file => file.path)).toEqual(['output.pdf', 'output.log', 'output.aux', ...figures])
     expect(decodeBuildRef(buildRef!).files).toBeUndefined()
     const before = requests.length
 
