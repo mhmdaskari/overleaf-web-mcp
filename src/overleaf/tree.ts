@@ -70,7 +70,8 @@ export function flattenProjectTree(input: RawFolder[] | RawFolder): ProjectEntit
   const roots = Array.isArray(input) ? input : [input]
   const output: ProjectEntity[] = []
 
-  const visit = (folder: RawFolder, prefix: string, includeFolder: boolean): void => {
+  const visit = (folder: RawFolder, prefix: string, parentFolderId?: string): void => {
+    const includeFolder = parentFolderId !== undefined
     const folderPath = includeFolder ? normalizeProjectPath(posix.join(prefix, folder.name)) : prefix
     if (includeFolder) {
       output.push({
@@ -78,7 +79,7 @@ export function flattenProjectTree(input: RawFolder[] | RawFolder): ProjectEntit
         name: folder.name,
         path: folderPath,
         type: 'folder',
-        parentFolderId: roots[0]?._id ?? folder._id,
+        parentFolderId,
       })
     }
     for (const doc of folder.docs ?? []) {
@@ -100,10 +101,10 @@ export function flattenProjectTree(input: RawFolder[] | RawFolder): ProjectEntit
         ...(file.hash === undefined ? {} : { hash: file.hash }),
       })
     }
-    for (const child of folder.folders ?? []) visit(child, folderPath, true)
+    for (const child of folder.folders ?? []) visit(child, folderPath, folder._id)
   }
 
-  for (const root of roots) visit(root, '', false)
+  for (const root of roots) visit(root, '')
   return output
 }
 

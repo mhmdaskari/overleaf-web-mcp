@@ -36,4 +36,22 @@ describe('project trees', () => {
     expect(() => resolveProjectPath(tree, 'plot.png', 'doc')).toThrow(/not a doc/u)
     expect(() => resolveProjectPath(tree, '../main.tex')).toThrow(/invalid project path/u)
   })
+
+  test('gives each nested folder the id of the folder that holds it', () => {
+    const tree = flattenProjectTree({
+      _id: 'root',
+      name: 'rootFolder',
+      folders: [
+        {
+          _id: 'outer',
+          name: 'outer',
+          folders: [{ _id: 'inner', name: 'inner', docs: [{ _id: 'deep', name: 'deep.tex' }] }],
+        },
+      ],
+    })
+
+    expect(resolveProjectPath(tree, 'outer').parentFolderId).toBe('root')
+    expect(resolveProjectPath(tree, 'outer/inner').parentFolderId).toBe('outer')
+    expect(resolveProjectPath(tree, 'outer/inner/deep.tex').parentFolderId).toBe('inner')
+  })
 })
