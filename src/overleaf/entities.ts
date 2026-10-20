@@ -1,4 +1,5 @@
-import { lstat, readFile, stat, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, lstat, readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, posix } from 'node:path'
 
 import { McpError } from '../core/errors.js'
@@ -472,7 +473,8 @@ export class EntitiesApi {
     }
     if (existing !== undefined && !overwrite) throw localFileExists(localPath)
     if (existing === undefined) {
-      await stat(dirname(writePath)).catch((error: unknown) => {
+      // The folder must exist and be writable; the write below stays the final word.
+      await access(dirname(writePath), constants.W_OK).catch((error: unknown) => {
         throw localFileFailure(error, 'written')
       })
     }

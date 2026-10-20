@@ -316,8 +316,8 @@ describe('entity API', () => {
     expect(http.getBytes).not.toHaveBeenCalled()
   })
 
-  test.skipIf(process.getuid?.() === 0)('reports an unwritable local folder as an argument error', async () => {
-    const { api } = harness()
+  test.skipIf(process.getuid?.() === 0)('reports an unwritable local folder as an argument error before fetching', async () => {
+    const { api, http } = harness()
     const directory = await mkdtemp(join(tmpdir(), 'overleaf-download-'))
     await chmod(directory, 0o500)
     try {
@@ -326,6 +326,7 @@ describe('entity API', () => {
         .catch((error: unknown) => error)
       expect(denied).toMatchObject({ code: 'INVALID_ARGUMENT', details: { errno: 'EACCES' } })
       expect((denied as McpError).message).not.toContain(directory)
+      expect(http.getBytes).not.toHaveBeenCalled()
     } finally {
       await chmod(directory, 0o700)
     }
