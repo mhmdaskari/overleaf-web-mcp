@@ -148,6 +148,9 @@ function zipFailure(error: unknown): McpError {
 }
 
 /** Keeps the failure's code and details and adds which settings were stored before it. */
+/** Read-back failure codes an import keeps, since each means the same as for any other call. */
+const READ_BACK_CODES_KEPT: ReadonlySet<string> = new Set(['AUTH_EXPIRED', 'POLICY_DENIED', 'TIMEOUT'])
+
 function partialSettingsFailure(error: unknown, applied: string[], failed: string): McpError {
   const cause = asMcpError(error)
   const stored = applied.length === 0 ? 'No setting was' : `${applied.join(', ')} ${applied.length === 1 ? 'was' : 'were'}`
@@ -292,10 +295,14 @@ export class ProjectsApi {
     try {
       stored = await this.#options.findProject(projectId)
     } catch (error) {
+      // The project exists now, so the error is never retryable: retrying the import would create
+      // a second project. Only codes that mean the same here as for any call are kept; this tool's
+      // NOT_FOUND and RATE_LIMITED say nothing was created.
+      const kept = error instanceof McpError && READ_BACK_CODES_KEPT.has(error.code) ? error : undefined
       throw new McpError(
-        'REMOTE_ERROR',
-        'The project was imported but its name could not be read. Call list_projects or get_project_tree with the projectId in details.',
-        { details: { projectId }, cause: error }
+        kept?.code ?? 'REMOTE_ERROR',
+        `The project was imported, but its stored name could not be read${kept === undefined ? '.' : `: ${kept.message}`} Do not import it again; call list_projects or get_project_tree with the projectId in details.`,
+        { retryable: false, details: { ...kept?.details, projectId }, cause: error }
       )
     }
     return { projectId, name: stored.name, url: this.#projectUrl(projectId) }

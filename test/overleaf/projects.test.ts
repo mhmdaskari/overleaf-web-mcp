@@ -144,16 +144,40 @@ describe('projects API', () => {
     })
 
     test('hands back the new projectId when the stored name cannot be read after the import', async () => {
-      const { api, options } = harness()
-      options.findProject.mockRejectedValue(new McpError('TIMEOUT', 'slow'))
+      const { api, options, http } = harness()
       const dir = await mkdtemp(join(tmpdir(), 'olzip-'))
       const zipPath = join(dir, 'paper.zip')
       await writeFile(zipPath, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))
 
+      // The read-back's own code is kept, but the import has happened, so it is never retryable.
+      options.findProject.mockRejectedValueOnce(new McpError('TIMEOUT', 'slow', { retryable: true }))
       await expect(api.importProjectZip(zipPath)).rejects.toMatchObject({
-        code: 'REMOTE_ERROR',
+        code: 'TIMEOUT',
+        retryable: false,
+        message: expect.stringMatching(/was imported/u),
         details: { projectId: 'imported' },
       })
+      options.findProject.mockRejectedValueOnce(
+        new McpError('AUTH_EXPIRED', 'signed out', { details: { reason: 'session' } })
+      )
+      await expect(api.importProjectZip(zipPath)).rejects.toMatchObject({
+        code: 'AUTH_EXPIRED',
+        retryable: false,
+        details: { reason: 'session', projectId: 'imported' },
+      })
+      // This tool's NOT_FOUND and RATE_LIMITED say nothing was created, so they are not kept.
+      for (const cause of [
+        new Error('socket hang up'),
+        new McpError('NOT_FOUND', 'missing'),
+        new McpError('RATE_LIMITED', 'Wait before retrying.', { retryable: true, details: { retryAfterMs: 5 } }),
+      ]) {
+        options.findProject.mockRejectedValueOnce(cause)
+        const error = await api.importProjectZip(zipPath).catch((caught: unknown) => caught)
+        expect(error).toMatchObject({ code: 'REMOTE_ERROR', retryable: false })
+        expect((error as McpError).details).toEqual({ projectId: 'imported' })
+        expect((error as McpError).message).not.toMatch(/socket hang up|missing|retrying/u)
+      }
+      expect(http.postForm).toHaveBeenCalledTimes(5)
     })
 
     test('refuses an import whose name read-back the policy forbids, before uploading', async () => {
