@@ -110,6 +110,7 @@ describe('entity API', () => {
 
     for (const input of [
       { action: 'create_folder', path: 'a/b' },
+      { action: 'create_folder', path: 'a/b/' },
       { action: 'create_folder', path: 'a/x.tex' },
       { action: 'rename', path: 'a/y.tex', newName: 'x.tex' },
       { action: 'rename', path: 'a/b', newName: 'y.tex' },

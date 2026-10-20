@@ -247,7 +247,8 @@ export class EntitiesApi {
           const name = posix.basename(normalized)
           validateName(name)
           const parentFolderId = resolveFolderId(connection, parentPath(normalized))
-          assertPathFree(connection, normalized)
+          // Joined again, since a trailing slash survives normalizing and no tree path ends in one.
+          assertPathFree(connection, posix.join(parentPath(normalized), name))
           const created = await this.#http.postJson(`/project/${project}/folder`, {
             parent_folder_id: parentFolderId,
             name,
