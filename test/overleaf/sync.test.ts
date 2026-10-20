@@ -41,6 +41,8 @@ class FakeProject {
   /** Uploads that time out, after landing or without landing. */
   timeoutUploads = new Map<string, 'landed' | 'lost'>()
   rateLimitUploads = new Set<string>()
+  /** Creates that fail after the document is made, left empty or holding the content anyway. */
+  failCreates = new Map<string, 'empty' | 'landed'>()
   treeReads = 0
   /** Document reads, each one a join through the project's queue. */
   documentReads = 0
@@ -158,6 +160,18 @@ class FakeProject {
       createFile: async (_projectId, filePath, content, writeMode) => {
         this.mutations.push(`create ${filePath}`)
         this.writeModes.push(writeMode)
+        const failure = this.failCreates.get(filePath)
+        if (failure !== undefined) {
+          const landed = failure === 'landed'
+          this.entities.set(filePath, { id: this.#id(), type: 'doc', content: landed ? normalizeLf(content) : '', version: landed ? 2 : 1 })
+          throw landed
+            ? new McpError('REVISION_CONFLICT', 'Verified live content differs from the intended result.', {
+                details: { outcome: 'unknown', created: true },
+              })
+            : new McpError('REMOTE_ERROR', 'Overleaf refused the OT update.', {
+                details: { event: 'applyOtUpdate', reason: 'unrecognized', created: true },
+              })
+        }
         this.entities.set(filePath, { id: this.#id(), type: 'doc', content: normalizeLf(content), version: 1 })
         return { revision: this.#revision(filePath), protocol: 'sharejs', trackChangesActive: false, writeMode }
       },
@@ -622,6 +636,74 @@ describe('sync_directory', () => {
     await expect(
       new SyncApi(project.deps({})).syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true, writeMode: 'tracked' })
     ).rejects.toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
+  })
+
+  test('resumes a tracked create that left an empty document behind by writing it, revision-checked', async () => {
+    const project = new FakeProject({ 'stale.png': png(1) })
+    const root = await localFolder({ 'intro.tex': 'intro\n', 'fig.png': png(2) })
+    const api = new SyncApi(project.deps())
+    const plan = await api.planSync(PROJECT, root)
+    project.failCreates.set('intro.tex', 'empty')
+
+    const partial = await api.syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      planToken: plan.planToken,
+      confirmDeleteCount: 1,
+      writeMode: 'tracked',
+    })
+
+    expect(partial.failed.map(entry => [entry.destinationPath, entry.action])).toEqual([['intro.tex', 'create']])
+    expect(partial.remaining).toEqual([{ destinationPath: 'stale.png', action: 'delete' }])
+    expect(project.entities.get('intro.tex')).toMatchObject({ type: 'doc', content: '' })
+
+    project.failCreates.clear()
+    project.mutations.length = 0
+    const resumed = await api.syncDirectory(PROJECT, root, {
+      mode: 'mirror',
+      planToken: partial.planToken,
+      confirmDeleteCount: 1,
+      writeMode: 'tracked',
+    })
+
+    expect(resumed.status).toBe('complete')
+    expect(project.mutations).toEqual(['write intro.tex', 'delete stale.png'])
+    expect(project.entities.get('intro.tex')?.content).toBe('intro\n')
+  })
+
+  test('resumes a create whose content landed although it was reported failed, changing nothing', async () => {
+    const project = new FakeProject({})
+    const root = await localFolder({ 'intro.tex': 'intro\n' })
+    const api = new SyncApi(project.deps())
+    project.failCreates.set('intro.tex', 'landed')
+
+    const partial = await api.syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true, writeMode: 'tracked' })
+    expect(partial.failed.map(entry => entry.errorCode)).toEqual(['REVISION_CONFLICT'])
+    project.failCreates.clear()
+    project.mutations.length = 0
+
+    const resumed = await api.syncDirectory(PROJECT, root, {
+      mode: 'additive',
+      planToken: partial.planToken,
+      writeMode: 'tracked',
+    })
+    expect(resumed).toMatchObject({ status: 'complete', identicalCount: 1 })
+    expect(project.mutations).toEqual([])
+  })
+
+  test('stops a resumed sync when the document a failed create left behind was edited since', async () => {
+    const project = new FakeProject({})
+    const root = await localFolder({ 'intro.tex': 'intro\n' })
+    const api = new SyncApi(project.deps())
+    project.failCreates.set('intro.tex', 'empty')
+
+    const partial = await api.syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true, writeMode: 'tracked' })
+    project.failCreates.clear()
+    project.edit('intro.tex', 'a collaborator typed this\n')
+
+    await expect(
+      api.syncDirectory(PROJECT, root, { mode: 'additive', planToken: partial.planToken, writeMode: 'tracked' })
+    ).rejects.toMatchObject({ code: 'REMOTE_DRIFT', details: { changed: 'remote' } })
+    expect(project.entities.get('intro.tex')?.content).toBe('a collaborator typed this\n')
   })
 
   test('reports conflicts as failures and therefore deletes nothing', async () => {
