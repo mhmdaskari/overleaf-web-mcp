@@ -114,3 +114,32 @@ x % \end{${environment}}
     expect(titles('\\section{A}\n\\begin{verbatim}\n\\section{B}\n')).toEqual(['A'])
   })
 })
+
+describe('inline verbatim', () => {
+  test('masks a heading inside \\verb with any delimiter', () => {
+    expect(titles('\\verb|\\section{V}|')).toEqual([])
+    expect(titles('\\section{A}\nUse \\verb+\\section{V}+ here.\n\\section{B}')).toEqual([
+      'A',
+      'B',
+    ])
+    expect(titles('\\verb*!\\section{V}!\n\\section{B}')).toEqual(['B'])
+  })
+
+  test('reads a percent inside \\verb as text', () => {
+    expect(titles('\\verb|50%| \\section{B}')).toEqual(['B'])
+  })
+
+  test('ends an unclosed \\verb at the end of its line', () => {
+    expect(titles('\\verb|\\section{V}\n\\section{B}')).toEqual(['B'])
+  })
+
+  test('leaves other commands that start with verb alone', () => {
+    expect(titles('\\verbatiminput{x} \\section{B}')).toEqual(['B'])
+  })
+
+  test('masks a heading inside \\lstinline with braces or a delimiter', () => {
+    expect(titles('\\lstinline|\\section{V}| \\section{B}')).toEqual(['B'])
+    expect(titles('\\lstinline[language=TeX]{\\section{V}} \\section{B}')).toEqual(['B'])
+    expect(titles('\\lstinline{50%} \\section{B}')).toEqual(['B'])
+  })
+})

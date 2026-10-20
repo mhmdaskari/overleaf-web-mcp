@@ -77,6 +77,31 @@ function ignoredEnvironmentEnd(source: string, index: number): number {
   return found === -1 ? source.length : found + end.length
 }
 
+// Returns the end of an inline `\verb` or `\lstinline` argument at `index`, or -1 when none starts there.
+function inlineVerbatimEnd(source: string, index: number): number {
+  const command = /\\(verb\*?|lstinline)(?![A-Za-z])/uy
+  command.lastIndex = index
+  const name = command.exec(source)?.[1]
+  if (name === undefined) return -1
+  let cursor = command.lastIndex
+  if (name === 'lstinline') cursor = readBalanced(source, cursor, '[', ']')?.end ?? cursor
+  const delimiter = source[cursor]
+  if (delimiter === undefined || /\s/u.test(delimiter)) return -1
+
+  // The argument cannot span lines, so an unclosed one ends with its line.
+  const limit = lineEnd(source, cursor)
+  if (name === 'lstinline' && delimiter === '{') {
+    let depth = 0
+    for (let offset = cursor; offset < limit; offset += 1) {
+      if (source[offset] === '{') depth += 1
+      if (source[offset] === '}' && --depth === 0) return offset + 1
+    }
+    return limit
+  }
+  const close = source.indexOf(delimiter, cursor + 1)
+  return close === -1 || close > limit ? limit : close + 1
+}
+
 function maskIgnored(source: string): string {
   // Spaces preserve every source offset; newlines preserve line structure for returned ranges.
   const chars = [...source]
@@ -95,7 +120,8 @@ function maskIgnored(source: string): string {
       continue
     }
     if (source[index] === '\\') {
-      const end = ignoredEnvironmentEnd(source, index)
+      let end = ignoredEnvironmentEnd(source, index)
+      if (end === -1) end = inlineVerbatimEnd(source, index)
       if (end !== -1) {
         mask(index, end)
         index = end
