@@ -42,45 +42,68 @@ refused before anything is sent; Changed lists every contract change.
   `details.reason` is `not_connected` when nothing was sent, and `disconnected` when a read lost its
   reply or the socket closed during the project join. `OUTCOME_UNKNOWN` is kept for a write that was
   sent and may have applied. A write proved not applied after a lost socket is `REMOTE_ERROR` with
-  `details.outcome: "not_applied"` and `retryable: false`.
-- **Characters outside the Basic Multilingual Plane are refused on ShareJS documents.** On a ShareJS
-  (legacy editor) document, `write_file`, and with it `create_file`, `write_section`, and
-  `sync_directory`, refuses text containing such a character, an emoji for example, or an unpaired
-  surrogate, that the document does not already hold. The error is `INVALID_ARGUMENT` with
-  `details.line` (1-based), and nothing is sent; Overleaf would have replaced each one with U+FFFD.
-  History-OT documents are unaffected.
+  `details.outcome: "not_applied"` and `retryable: false`. `add_comment` and `set_comment_status`
+  follow the same rule: an attachment or status change whose socket failed after it was sent, and
+  that stays absent through the recovery window, is `REMOTE_ERROR` with `details.outcome:
+  "not_applied"`, `details.threadId`, and `retryable: false`, where `set_comment_status` reported
+  `TIMEOUT`; one that actually timed out still is `TIMEOUT`. A change Overleaf accepted but whose
+  requested state is never seen is `OUTCOME_UNKNOWN`, never not applied.
+- **Characters outside the Basic Multilingual Plane are never sent to ShareJS documents.** On a
+  ShareJS (legacy editor) document, `write_file`, and with it `create_file`, `write_section`, and
+  `sync_directory`, refuses text that adds such a character, an emoji for example, or an unpaired
+  surrogate, adds another copy of one the document already holds, or changes their order. The error
+  is `INVALID_ARGUMENT` with `details.line`, the 1-based line of the first added one, and nothing is
+  sent; Overleaf would have replaced each one with U+FFFD. An edit that spans such a character the
+  document already holds is sent as several components that step around it, where it used to send
+  the character again and Overleaf turned it into U+FFFD. History-OT documents are unaffected.
 - **`update_project_settings` names what it stored before a failure.** Its errors keep their code
   and `retryable` and add `details.applied`, the input field names stored before the failure, and
   `details.failed`, the input field name whose request failed. A `rootFilePath` without a `.tex`,
   `.ltx`, `.Rtex`, or `.Rnw` extension is `INVALID_ARGUMENT` before any request.
-- **`import_project_zip` also needs the `overleaf-read` effect.** It reads back the stored name.
-  Under an `OVERLEAF_ALLOWED_EFFECTS` without `overleaf-read`, the call is refused with
-  `POLICY_DENIED` before anything is uploaded.
+- **`import_project_zip` reads back the stored name, which needs the `overleaf-read` effect.** Under
+  an `OVERLEAF_ALLOWED_EFFECTS` without `overleaf-read`, the call is refused with `POLICY_DENIED`
+  before anything is uploaded. When the archive was imported but the read-back fails, an
+  `AUTH_EXPIRED`, `POLICY_DENIED`, or `TIMEOUT` from that read keeps its code and `details`; any
+  other failure, `NOT_FOUND` and `RATE_LIMITED` included, which for this tool mean nothing was
+  created, is `REMOTE_ERROR`. Every such error carries the new project's id in `details.projectId`,
+  says the project was imported, and is never `retryable`, since importing again would create a
+  second project.
 - **Local file-system failures are typed by errno.** In `upload_file`, `batch_upload`, and
   `download_file`, a missing file or folder is `NOT_FOUND` (`details.errno: "ENOENT"`), and any
   other failure, such as `EISDIR` or `EACCES`, is `INVALID_ARGUMENT` with the code in
   `details.errno`. Both used to be `REMOTE_ERROR`.
-- **`download_file` checks the local path before any request.** A folder at `localPath` is
-  `INVALID_ARGUMENT` whatever `overwrite` is, and a missing parent folder is `NOT_FOUND`.
+- **`download_file` checks the local path before any request, and replaces a file atomically.** A
+  folder, or a symbolic link to one, at `localPath` is `INVALID_ARGUMENT` whatever `overwrite` is, a
+  missing parent folder is `NOT_FOUND`, and a folder that cannot be written is `INVALID_ARGUMENT`
+  with `details.errno`, such as `EACCES`. With `overwrite: true` an existing file is replaced by
+  writing a temporary file in the same folder and renaming it into place, as `download_project_zip`
+  does, so a failed local write no longer leaves the old file truncated. The new file keeps the old
+  one's permission bits, and a symbolic link to a file is kept while the file it leads to is
+  replaced. The folder must now be writable even when the file exists: a writable file in a
+  read-only folder was overwritten in place before and is now refused before anything is fetched.
 - **`manage_entity` name collisions are `INVALID_ARGUMENT` before any request.** They were
-  `REMOTE_ERROR`. This covers `create_folder` on an existing path, `rename` to a name already in the
-  folder, the entity's own included, `move` into a folder that already holds that name, the entity's
-  current folder included, and moving a folder into itself or one of its subfolders. Names are
-  compared exactly, as Overleaf compares them.
+  `REMOTE_ERROR`. This covers `create_folder` on an existing path, with or without a trailing slash,
+  `rename` to a name already in the folder, the entity's own included, `move` into a folder that
+  already holds that name, the entity's current folder included, and moving a folder into itself or
+  one of its subfolders. Names are compared exactly, as Overleaf compares them.
 - **New `NOT_FOUND` refusals.** `reply_to_comment` with a `threadId` that names no existing thread,
   and `set_comment_status` for a thread not anchored in `filePath`, fail with `NOT_FOUND` and
   `details.threadId` before anything is posted or changed. `get_compile_log` with `kind: "bibtex"`,
   and `download_compile_output` of `output.blg` or `output.bbl`, are `NOT_FOUND` on a build in which
-  BibTeX did not run.
+  BibTeX did not run. These answers hold through a `buildRef` too, and for a build with more than
+  100 outputs. `compile_project`'s `outputFiles` leaves out `output.blg` and `output.bbl` on such a
+  build, so the listing matches what the output tools serve; the shape of `outputFiles` is
+  unchanged.
 - **`monitor_project_history` trims a group that straddles the cursor.** In an update group that
   starts before `sinceVersion`, `projectOperations` lists only operations with `atVersion` at or
   after `sinceVersion`. The group's `fromVersion`, `startedAt`, `paths`, and `labels` still describe
   the whole group.
 - **The tool descriptions follow the new behaviour.** Those of `clone_project`,
   `import_project_zip`, `update_project_settings`, `write_file`, `create_file`, `manage_entity`,
-  `download_file`, `sync_directory`, `get_section_content`, `write_section`, `get_compile_log`,
-  `download_compile_output`, the four comment tools, and `monitor_project_history` are updated, and
-  the connect-time instructions (438 words) note that legacy documents refuse emoji.
+  `download_file`, `sync_directory`, `get_section_content`, `write_section`, `compile_project`,
+  `get_compile_log`, `download_compile_output`, the four comment tools, and
+  `monitor_project_history` are updated, and the connect-time instructions (440 words) note that
+  legacy documents refuse added emoji.
 
 ### Fixed
 
@@ -100,7 +123,10 @@ refused before anything is sent; Changed lists every contract change.
 - **A project socket Overleaf closed is replaced, not reused.** After Overleaf closed a project
   socket, as it does after refusing an OT update, or a protocol error closed it, the dead socket
   stayed cached: every later document or comment call in the process failed with `OUTCOME_UNKNOWN`,
-  and `get_project_tree` returned a frozen tree. The next call now opens a fresh socket.
+  and `get_project_tree` returned a frozen tree. The next call now opens a fresh socket. A recovery
+  waiting to drop that socket while another call still held it could wait indefinitely once the
+  replacement connection failed to open, and a second one on the same project always did. Freeing a
+  connection slot now wakes every waiting call, and each checks again whether it can proceed.
 - **A Socket.IO event without arguments is accepted.** Socket.IO 0.9 leaves out `args` when Overleaf
   sends an event with none, as in a `reconnectGracefully` during a drain. That frame was rejected as
   `PROTOCOL_UNSUPPORTED`, which closed the project socket and failed any call in flight on it.
@@ -109,7 +135,15 @@ refused before anything is sent; Changed lists every contract change.
   unclassified. It is now observed like a timed-out write: `recoveredAfterTimeout: true` when the
   intended text is live, `REVISION_CONFLICT` with `details.outcome: "unknown"` for a third state, or
   `REMOTE_ERROR` with `details.outcome: "not_applied"` (`retryable: false`) when the original
-  revision stayed live through the recovery window.
+  revision stayed live through the recovery window. `add_comment` and `set_comment_status` are now
+  classified the same way. When the socket failed after the update was sent, or the verification
+  read after an accepted update failed, they no longer return a retryable `REMOTE_ERROR`, which
+  could lead to a duplicate thread, or, for `add_comment`, delete the new thread at once. They
+  observe the document instead: `recoveredAfterTimeout: true` when the comment or status is live,
+  `OUTCOME_UNKNOWN` with `details.threadId` when it cannot be settled or Overleaf accepted the
+  change but the requested state is never seen, and `TIMEOUT` or `REMOTE_ERROR` with
+  `details.outcome: "not_applied"` when an unaccepted change stayed absent. `add_comment` removes
+  its thread only in that last case.
 - **A ShareJS line holding a real U+FFFD reads back exactly.** Overleaf stores an emoji typed into
   its legacy editor as U+FFFD, and such a line came back as latin1 mojibake. `write_file` then
   placed edits below that line at shifted offsets, corrupting the document, and a write that landed
@@ -124,7 +158,11 @@ refused before anything is sent; Changed lists every contract change.
   account for that document, so the documented resume failed with `REMOTE_DRIFT`. The token now
   counts it while it is still empty or holds exactly the intended text, and the resumed sync writes
   it through a revision-checked write. A leftover someone edited in between still stops the resume
-  with `REMOTE_DRIFT`.
+  with `REMOTE_DRIFT`. The failed entry's message told the agent to read the document with
+  `read_file` and write it with `write_file`, advice meant for `create_file`; following it moved the
+  revision the `planToken` pins, so the resume failed with `REMOTE_DRIFT`. It now says not to create
+  or write the document by hand, but to resume with the returned `planToken`, or to run `plan_sync`
+  again if none came back.
 - **`update_project_settings` no longer half-applies a change silently.** Overleaf applies a
   settings request field by field and stops at the first failure with a bare HTTP 500, so a call
   that failed partway reported only the 500 while some settings were stored, and the same process
@@ -139,18 +177,23 @@ refused before anything is sent; Changed lists every contract change.
   after the root document's `\title` when there is one and adds a suffix such as `(1)` when the
   account already has a project with that name, so the returned name could differ from the stored
   one, and `manage_project` then rejected it as `confirmName`. The name is now read back after the
-  import. If that read fails, the error is `REMOTE_ERROR` with the new `projectId` in `details`, as
-  `create_project` already does.
+  import. If that read fails, the error carries the new `projectId` in `details` and is never
+  retryable; see Changed for its code.
 - **`compile_project` ignores a BibTeX log left over from an earlier build.** Overleaf's incremental
   build directory keeps an earlier build's `output.blg` and `output.bbl` and lists them again for
   later builds in which BibTeX did not run. Their warnings, undefined citations, missing files, and
   errors were reported as this build's, and a stale BibTeX error could make a clean build of another
   root report `builtCleanly: false`. When `output.blg` is listed, `compile_project` now reads the
   build's `output.aux` (one extra request, made only then) and keeps the BibTeX log only when the
-  aux file holds a `\citation`, `\bibdata`, biblatex record, or `\@input` line, or cannot be read in
-  full. On a build where BibTeX did not run, `get_compile_log` with `kind: "bibtex"` and
-  `download_compile_output` of `output.blg` or `output.bbl` answer `NOT_FOUND`, in this process or
-  through `buildRef`. `outputFiles` still lists those files exactly as Overleaf sent them.
+  aux file holds a `\bibdata`, biblatex record, or `\@input` line, or cannot be read in full. A
+  `\citation` line alone does not count, since `\cite` without `\bibliography` writes one and BibTeX
+  is then never run. The aux files an `\@input` line names are not read, so a root that uses
+  `\include` keeps the log. On a build in which BibTeX did not run, `outputFiles` leaves out
+  `output.blg` and `output.bbl`, and `get_compile_log` with `kind: "bibtex"` and
+  `download_compile_output` of either file answer `NOT_FOUND`, in this process or through
+  `buildRef`, also for a build with more than 100 outputs. A build that timed out or was terminated
+  is not checked, since its `output.aux` may be half written, so its `buildRef` can still reach a
+  leftover `.blg`.
 - **Section tools read `%` as LaTeX does.** `get_sections`, `get_section_content`, and
   `write_section` treated `%` after a `\\` line break as escaped, so a heading commented out after
   `\\%` was parsed as a live section and `write_section` cut a body short at that line. Whether a
@@ -159,7 +202,10 @@ refused before anything is sent; Changed lists every contract change.
   line as the environment's `\end{...}` used to hide every later heading, so a `write_section` on
   the section before it could delete the sections after it. Headings inside inline `\verb`, `\verb*`
   (with any delimiter), or `\lstinline` (with a delimiter or braces) are no longer parsed, and `%`
-  inside them is text.
+  inside them is text. In the same way, a heading name right after a `\\` line break, as in
+  `text\\section{X}`, is plain text to LaTeX. It was parsed as a live heading, so the section before
+  it ended between the two backslashes, and a `write_section` on that section dropped the first
+  backslash and turned the text into a real `\section` heading.
 - **Section offsets stay correct after an emoji in a comment.** A character outside the Basic
   Multilingual Plane inside a comment or a verbatim-like environment shifted every later section by
   one, so `write_section` replaced the wrong range.
@@ -171,23 +217,32 @@ refused before anything is sent; Changed lists every contract change.
   `batch_upload` gets the same codes through `upload_file`.
 - **`download_file` checks the local path before it fetches anything.** An existing file without
   `overwrite: true` is refused with the same `INVALID_ARGUMENT` as before, but no longer after a
-  wasted download. A folder at `localPath` used to suggest `overwrite: true`, which then failed. The
-  exclusive create still refuses a file that appears during the download.
+  wasted download. A folder, or a symbolic link to one, at `localPath` used to suggest `overwrite:
+  true`, which then failed after the download. A missing or unwritable parent folder is likewise
+  found before the fetch. The exclusive create still refuses a file that appears during the
+  download.
 - **`manage_entity` refuses a name collision before any request.** A `create_folder`, `rename`, or
   `move` that would put two entities with the same name in one folder, and moving a folder into
-  itself or one of its subfolders, failed at Overleaf as `REMOTE_ERROR` with HTTP 400.
+  itself or one of its subfolders, failed at Overleaf as `REMOTE_ERROR` with HTTP 400. A
+  `create_folder` path with a trailing slash is checked the same way.
 - **`monitor_project_history` no longer repeats project operations an earlier poll reported.**
   Overleaf can merge new changes into an update group between polls, so a group may start before
   `sinceVersion`, and its earlier operations were reported again.
 - **`list_comments` filters by author name.** `author` compared fields Overleaf does not send
   (`user.name`) and the author's email, so a display name never matched while an email substring
   did.
-- **`reply_to_comment` no longer starts a thread by mistake.** Overleaf creates any thread a message
-  is posted to, so a mistyped `threadId` silently started a new, unanchored thread that no tool can
-  delete, and the call reported success.
+- **`reply_to_comment` no longer posts a stray or duplicate reply.** Overleaf creates any thread a
+  message is posted to, so a mistyped `threadId` silently started a new, unanchored thread that no
+  tool can delete, and the call reported success. It also opened the project socket only after
+  posting, to read `trackChangesActive`, so a project join that failed then, for example while
+  Overleaf was draining, returned a retryable `REMOTE_ERROR` for a posted reply, and a retry posted
+  it twice. That state is now read before the reply is posted.
 - **`set_comment_status` checks the thread is in `filePath`.** It resolved or reopened the thread by
   id whatever document `filePath` named, and could report a thread anchored elsewhere, or nowhere,
-  as verified.
+  as verified. On a history-OT document, the new status is now verified from the document snapshot,
+  also for a comment whose anchored text was deleted and for an open comment, whose snapshot entry
+  leaves `resolved` out. A change that applied is no longer reported as `OUTCOME_UNKNOWN`, or after
+  a timeout as not applied.
 
 ### Documentation
 
