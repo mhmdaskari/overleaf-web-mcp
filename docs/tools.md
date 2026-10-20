@@ -5,10 +5,10 @@ The server registers 31 tools. Names are `snake_case`. Every tool except `auth_s
 `list_projects` or from one of the tools that create a project. An id never contains `/`, `\`,
 `.`, `?`, `#`, or `%`; one that does is refused with `INVALID_ARGUMENT` before anything is sent.
 Results are JSON; `auth_status`, `list_projects`, the project lifecycle tools, `upload_file`,
-`batch_upload`, `download_project_zip`, the folder sync tools, and the compilation tools other
-than `stop_compile` also declare an `outputSchema` and return the same object as
-`structuredContent`. Failures are JSON with `code`, `message`,
-`retryable`, and optional `details`; the codes are listed in the
+`batch_upload`, `download_project_zip`, the folder sync tools, the compilation tools other
+than `stop_compile`, and `list_comments`, `reply_to_comment`, and `add_comment` also declare an
+`outputSchema` and return the same object as `structuredContent`. Failures are JSON with `code`,
+`message`, `retryable`, and optional `details`; the codes are listed in the
 [safety model](safety.md#error-codes). The Overleaf routes behind each tool are catalogued in the
 [private API page](private-api.md).
 
@@ -77,14 +77,16 @@ the stub. If the project was created but its tree could not be read, the error c
 
 ### `clone_project`
 
-Copy an existing project, files and settings included, into a new one.
+Copy an existing project, its files, root document, and compiler included, into a new one.
 
 | Parameter | Required | Meaning |
 | --- | :---: | --- |
 | `sourceProjectId` | yes | Project to copy |
 | `name` | yes | Name of the copy |
 
-Returns `projectId`, `name`, and `url`.
+Returns `projectId`, `name`, and `url`. Overleaf does not copy the TeX Live image or the
+spell-check language: the copy gets the account's defaults. Set them with
+`update_project_settings` when they matter.
 
 ### `import_project_zip`
 
@@ -95,11 +97,19 @@ Create a new project from a local `.zip` archive of LaTeX sources.
 | `localZipPath` | yes | Local path of a `.zip` archive |
 | `name` | no | Project name; defaults to the archive's file name without `.zip` |
 
-Returns `projectId`, `name`, and `url`. Overleaf caps archives at about 50 MB
-(`UPDATE_TOO_LARGE`) and rate-limits this route: `RATE_LIMITED` means nothing was created and
-`details.retryAfterMs`, when present, says how long to wait. Overleaf's rejections
-(`invalid_zip_file`, `empty_zip_file`, `zip_contents_too_large`, `invalid_filename`) surface as
-`INVALID_ARGUMENT` with the code in `details.overleafError`. If the archive has several top-level
+Returns `projectId`, `url`, and `name`, the name Overleaf stored. It can differ from the one
+requested: Overleaf uses the root document's `\title` when there is one, and adds a suffix such as
+`(1)` when the account already has a project with that name. Use this name as `confirmName`. If
+the project was imported but its name could not be read back, the error is `REMOTE_ERROR` with
+the new `projectId` in `details`; do not import again. The read-back needs the `overleaf-read`
+effect.
+
+Overleaf caps archives at about 50 MB (`UPDATE_TOO_LARGE`) and rate-limits this route:
+`RATE_LIMITED` means nothing was created and `details.retryAfterMs`, when present, says how long
+to wait. Overleaf's rejections of an archive surface as `INVALID_ARGUMENT`. `details.overleafError`
+(`invalid_zip_file`, `empty_zip_file`, `zip_contents_too_large`, `invalid_filename`) appears only
+when Overleaf answers with such a machine-readable code; overleaf.com answers with a translated
+sentence, which is never quoted, so there is usually none. If the archive has several top-level
 `.tex` files, set the root with `update_project_settings` afterwards.
 
 ### `manage_project` <small>destructive</small>
@@ -116,9 +126,10 @@ Rename, trash, restore, archive, unarchive, or permanently delete a project.
 Returns `action`, `projectId`, and the project's `name` after the action. `trash` is the normal
 way to remove a project: it is reversible with `restore` or from the web UI's Trashed view.
 `delete` is permanent and only succeeds on a project that is already trashed; on a live project it
-fails with `INVALID_ARGUMENT` and changes nothing. The name check happens before any request is
-sent, so a wrong `confirmName` never reaches Overleaf. Trashed and archived projects disappear
-from `list_projects` unless `includeTrashed` or `includeArchived` is set.
+fails with `INVALID_ARGUMENT` and changes nothing. The current name is read from Overleaf first
+to compare, and the name check happens before any change is sent, so a wrong `confirmName`
+changes nothing. Trashed and archived projects disappear from `list_projects` unless
+`includeTrashed` or `includeArchived` is set.
 
 ### `update_project_settings`
 
@@ -127,15 +138,22 @@ Persist compile and editor settings in the project itself, so the web UI follows
 | Parameter | Required | Meaning |
 | --- | :---: | --- |
 | `projectId` | yes | Project id |
-| `rootFilePath` | one of | Document Overleaf should compile by default; must be an existing text document |
+| `rootFilePath` | one of | Document Overleaf should compile by default: an existing `.tex`, `.ltx`, `.Rtex`, or `.Rnw` document (any case); any other extension fails with `INVALID_ARGUMENT` before any request |
 | `compiler` | one of | `pdflatex`, `latex`, `xelatex`, or `lualatex` |
 | `imageName` | one of | TeX Live image name, as shown in Overleaf's menu |
 | `spellCheckLanguage` | one of | Overleaf language code such as `en` or `de`; `""` turns spell checking off |
 
 At least one setting is required. Returns `projectId`, `rootDocPath`, `compiler`, `imageName`,
-and `spellCheckLanguage` as re-read from a fresh project join, so the result reflects what
-Overleaf actually stored. A `rootFilePath` that does not exist fails with `NOT_FOUND`; one that
-names a folder or binary file fails with `INVALID_ARGUMENT`.
+and `spellCheckLanguage` (only when spell checking is on; absent when it is off) as re-read from
+a fresh project join, so the result reflects what Overleaf actually stored. A `rootFilePath` that
+does not exist fails with `NOT_FOUND`; one that names a folder or binary file fails with
+`INVALID_ARGUMENT`. Both checks run before any setting is sent.
+
+Settings are sent one request each, in the order Overleaf applies them: `compiler`, `imageName`,
+`spellCheckLanguage`, then the root document. If one fails, the error keeps its code and
+`retryable` and adds `details.applied` (the settings already stored) and `details.failed` (the
+setting whose request failed); nothing after it was sent. After a `TIMEOUT` the failed setting
+itself may or may not have been stored. Call `get_project_tree` to see the stored values.
 
 ## Projects and files
 
@@ -183,8 +201,14 @@ Replace a text document with a revision-checked, minimal, verified edit.
 
 Exactly one of `content` and `localPath` must be given. Returns the new `revision`, `protocol`,
 `trackChangesActive`, `writeMode`, and `recoveredAfterTimeout: true` when the write was confirmed
-during the recovery window after a timeout. A no-op write succeeds and records nothing. Fails with
-`REVISION_CONFLICT` if the document changed since the revision was read.
+during the recovery window after a timeout or a lost socket. A no-op write succeeds and records
+nothing. Fails with `REVISION_CONFLICT` if the document changed since the revision was read.
+
+On a ShareJS document (`protocol: "sharejs"`, Overleaf's legacy editor), text containing a
+character outside the Basic Multilingual Plane, such as an emoji, that the document does not
+already hold fails with `INVALID_ARGUMENT` (`details.line`, 1-based) and nothing is sent, because
+Overleaf's legacy editor would store each such character as U+FFFD. Replace them, for example
+with a LaTeX command. History-OT documents are not affected.
 
 ### `create_file`
 
@@ -201,6 +225,14 @@ Returns the document's `revision`, `protocol`, `trackChangesActive`, and `writeM
 entity itself is always an ordinary project-tree operation; only the initial content can be
 tracked.
 
+Creating the document and writing its content are separate steps, and the content is written as
+by `write_file`, with the same refusal of characters outside the Basic Multilingual Plane on a
+ShareJS document. If reading the new document back or writing its content fails after the
+document was created, that refusal included, the error keeps its code and its `details` (such as
+`outcome`), adds `details.created: true`, and is not retryable: the document now exists at
+`filePath`, possibly still empty, and is not deleted for you. Do not call `create_file` again;
+read it with `read_file` and write the content with `write_file`.
+
 ### `manage_entity` <small>destructive</small>
 
 Create a folder, or rename, move, or delete an existing document, file, or folder.
@@ -215,7 +247,13 @@ Create a folder, or rename, move, or delete an existing document, file, or folde
 | `confirmPath` | for `delete` | Must equal `path` exactly, else `CONFIRMATION_MISMATCH` |
 
 Returns the `action`, the affected entity `id` (or the created folder as `created: { _id, name }`),
-and `trackChangesActive`. Deleting a folder removes everything inside it.
+`trackChangesActive`, and `writeMode`, which is always `untracked` because tree operations are
+never tracked changes. Deleting a folder removes everything inside it.
+
+A name already used in the target folder (by `create_folder`; by a `rename`, including to the
+entity's own name; or by a `move`, including into the folder that already holds it) and moving a
+folder into itself or one of its subfolders fail with `INVALID_ARGUMENT` before anything is sent.
+Names are compared exactly, as Overleaf compares them.
 
 ### `upload_file` <small>destructive</small>
 
@@ -265,6 +303,10 @@ changes is already on for this account; otherwise it is untracked. The caller ca
 either way. A new file created by upload is never tracked content. A folder of the same name in
 the destination folder fails the upload with `INVALID_ARGUMENT` (`details.overleafError:
 "duplicate_file_name"`).
+
+A `localPath` that cannot be read fails before anything is sent: `NOT_FOUND` when it does not
+exist, `INVALID_ARGUMENT` otherwise (a folder, for example), with the errno code in
+`details.errno`.
 
 Returns `entityId`, `entityType`, `path`, `replaced` (whether something existed at that path),
 for binary files `hash`, computed locally so it can be checked against `get_project_tree` later,
@@ -363,9 +405,13 @@ destructive, not read-only, because it writes a local file and can replace one.
 | `overwrite` | no | Replace `localPath` if it exists; default `false` |
 
 Returns `bytes` and `localPath`. Fails with `INVALID_ARGUMENT` when the local file exists and
-`overwrite` is not `true`. A `localPath` that is the saved session's cookie jar or browser
-profile, or lies outside `OVERLEAF_LOCAL_WRITE_ROOTS` when that is set, fails with
-`PATH_OUTSIDE_ROOT` before anything is downloaded. The same goes for a `localPath` that leads
+`overwrite` is not `true`. That check, a folder at `localPath` (`INVALID_ARGUMENT` whatever
+`overwrite` is), and a missing parent folder (`NOT_FOUND`) all run before anything is requested
+from Overleaf. A local write that fails afterwards is `NOT_FOUND` for a missing folder and
+`INVALID_ARGUMENT` otherwise, with the errno code in `details.errno` (such as `EACCES`). A
+`localPath` that is the saved session's cookie jar or browser profile, or lies outside
+`OVERLEAF_LOCAL_WRITE_ROOTS` when that is set, fails with `PATH_OUTSIDE_ROOT` before anything is
+downloaded. The same goes for a `localPath` that leads
 there through a symbolic link, or through a `..` after one.
 
 ### `download_project_zip` <small>destructive</small>
@@ -382,10 +428,10 @@ archive as Overleaf's "Download as zip".
 
 The local checks run before anything is requested: the saved session's files, and a path outside
 `OVERLEAF_LOCAL_WRITE_ROOTS` when that is set, are `PATH_OUTSIDE_ROOT`, a missing parent folder is
-`NOT_FOUND`, a folder at `localPath` is `INVALID_ARGUMENT`, and an existing file without `overwrite: true` is
-`CONFIRMATION_MISMATCH` (where `download_file` answers `INVALID_ARGUMENT`). The temporary file the
-archive is streamed to is created in the same folder at this point too, so a folder that cannot be
-written fails with `INVALID_ARGUMENT` (`details.errno`, such as `EACCES`) before the request uses
+`NOT_FOUND`, a folder at `localPath` is `INVALID_ARGUMENT`, and an existing file without
+`overwrite: true` is `CONFIRMATION_MISMATCH` (where `download_file`, which also checks before the
+request, answers `INVALID_ARGUMENT`). The temporary file the archive is streamed to is created in
+the same folder at this point too, so a folder that cannot be written fails with `INVALID_ARGUMENT` (`details.errno`, such as `EACCES`) before the request uses
 up any of Overleaf's allowance. The archive must start with a zip signature, else the call fails
 with `PROTOCOL_UNSUPPORTED`, and end with a complete zip end record. Overleaf builds the archive
 while it sends it, so a transfer cut short still arrives with HTTP 200; one without that end
@@ -555,7 +601,9 @@ What happens, in order:
    and every new file are uploaded, and Overleaf decides whether a new file is a document or a
    binary. The upload checks, just before it is sent, that a new path is still empty and a changed
    binary still has the hash the plan compared; anything else fails that file with `REMOTE_DRIFT`,
-   which also withholds every delete. With `writeMode: "tracked"`, changed documents are written as tracked changes, and
+   which also withholds every delete. A document write or tracked create follows `write_file`'s
+   rules, so on a ShareJS document text holding a character outside the Basic Multilingual Plane,
+   such as an emoji, fails that file with `INVALID_ARGUMENT`. With `writeMode: "tracked"`, changed documents are written as tracked changes, and
    new files Overleaf treats as text (`.tex`, `.bib`, `.sty`, `.cls`, `.bst`, `.txt`, and
    similar) are created as documents with tracked content, the way `create_file` does, since a
    new file created by upload is never tracked content; binaries are uploaded as usual.
@@ -568,16 +616,22 @@ What happens, in order:
 
 Nothing is retried automatically. Returns `status` (`complete`, or `partial` when anything failed
 or was not attempted), `mode`, `completed` (`{ destinationPath, action, entityId? }`), `failed`
-(`{ destinationPath, action, errorCode, message }`), `remaining` (`{ destinationPath, action }`,
-what was not attempted), `identicalCount`, `planToken`, `planned` (whether the call was checked
-against a `planToken`; `false` only with `unplanned: true`).
+(`{ destinationPath, action, errorCode, message, details? }`, where `details` is the failed step's
+own error details, such as `reason`, `status`, `outcome`, `liveRevision`, or `created`),
+`remaining` (`{ destinationPath, action }`, what was not attempted), `identicalCount`,
+`planToken`, `planned` (whether the call was checked against a `planToken`; `false` only with
+`unplanned: true`).
 `action` is `create_folder`, `upload`, `write`, `create`, or `delete`.
 
 The returned `planToken` describes the state this sync left: what it changed as the project now
 shows it, and everything else as it was planned. Re-running with it resumes a partial sync, and
 still stops with `REMOTE_DRIFT` if someone changed something in between, including a document
 whose write failed with `REVISION_CONFLICT`: that one needs a fresh plan and a look at what the
-collaborator changed. The token is absent when the project could not be read back after the
+collaborator changed. A `create` that failed after its document was made (its failure has
+`details.created: true`) leaves that document in the project. The token counts it as this sync's
+change while it is still empty or holds exactly the local text, so resuming writes it through a
+revision-checked write, or finds it identical; if someone edited it in between, the resume stops
+with `REMOTE_DRIFT`. The token is absent when the project could not be read back after the
 changes; plan again before resuming.
 
 ### `delete_entities` <small>destructive</small>
@@ -600,8 +654,10 @@ Returns `status`, `completed` (`{ path, type, entityId }`), `failed`
 ## LaTeX sections
 
 Section tools work on one file at a time. They recognize starred headings and optional titles,
-ignore `%` comments and common verbatim-like environments, and never follow `\input` or
-`\include`.
+ignore `%` comments, the `verbatim`, `verbatim*`, `lstlisting`, `minted`, and `comment`
+environments, and inline `\verb`, `\verb*`, and `\lstinline` arguments, and never follow `\input`
+or `\include`. Inside those environments and arguments, `%` is literal text. Outside them, `\%`
+is a literal percent sign, while `\\%` is a line break followed by a comment.
 
 ### `get_sections` <small>read-only</small>
 
@@ -628,11 +684,17 @@ Read one section's body.
 | `sectionId` | yes | From `get_sections` |
 
 Returns `content` (the body text), the matching `section` record, and the document's current
-`revision`.
+`revision`. A section's body runs from the line after its heading to the next heading at the same
+or a higher level. It therefore includes any nested subsections, and the last section's body runs
+to the end of the file, including `\end{document}`.
 
 ### `write_section` <small>destructive</small>
 
-Replace one section's body with a revision-checked write.
+Replace one section's body with a revision-checked write. `content` replaces the whole body as
+`get_section_content` returns it, including nested subsections and, for the last section,
+everything up to the end of the file such as `\end{document}`. Read the body with
+`get_section_content` first and keep whatever should survive. End `content` with a newline so
+that the next heading starts its own line.
 
 | Parameter | Required | Meaning |
 | --- | :---: | --- |
@@ -644,6 +706,8 @@ Replace one section's body with a revision-checked write.
 | `writeMode` | no | `untracked` (default) or `tracked` |
 
 Returns the same fields as `write_file`. Fails with `REVISION_CONFLICT` if the document changed.
+The write follows `write_file`'s rules, including the refusal of characters outside the Basic
+Multilingual Plane on a ShareJS document and the recovery after a timeout or a lost socket.
 
 ## Compilation
 
@@ -662,12 +726,17 @@ Compile the project and report on the build from its logs.
 Check `summary.builtCleanly`, not `status`. Overleaf compiles in nonstopmode and reports `success`
 whenever a PDF came out, even when LaTeX hit errors on the way. `builtCleanly` is `true` only when
 a PDF was produced, `output.log` was read, and it reports no error. After the build the server
-reads the log, at most 1 MB of it, and any `.blg` BibTeX logs, and returns:
+reads the log, at most 1 MB of it, and any `.blg` BibTeX logs. Overleaf keeps an earlier build's
+`output.blg` and `output.bbl` and lists them again, so `output.blg` is read only when this
+build's `output.aux` gives BibTeX or Biber something to read (a `\citation`, `\bibdata`, biblatex
+record, or `\@input` line), or when `output.aux` cannot be read in full. It returns:
 
 - `status`: Overleaf's own, `success`, `failure` (LaTeX stopped without a PDF), or
   `stopped-on-first-error`.
 - `outputFiles`: `{ path, type, build? }` for each output; the URLs Overleaf sends are dropped,
-  since every output is fetched from the project's own route.
+  since every output is fetched from the project's own route. It is Overleaf's own listing, which
+  can include an `output.blg` and `output.bbl` left over from an earlier build; the output tools
+  treat those as not produced by this build.
 - `stats`: Overleaf's counters, numbers only. `buildId` and `clsiServerId` when Overleaf sent them.
 - `rootFilePath`: the document actually compiled.
 - `buildRef`: an opaque token naming this build to `get_compile_log` and
@@ -717,7 +786,7 @@ Read a build's LaTeX or BibTeX log without compiling again.
 | --- | :---: | --- |
 | `projectId` | yes | Project id |
 | `buildRef` | no | From `compile_project`; default, the latest build `compile_project` made in this server process |
-| `kind` | no | `latex` (default), `output.log`; or `bibtex`, the build's `.blg` file |
+| `kind` | no | `latex` (default), `output.log`; or `bibtex`, the build's `.blg` file, `NOT_FOUND` when BibTeX did not run for this build |
 | `format` | no | `raw` (default), or `errors-only` for only the lines that start an error |
 | `tail` | no | How many lines to return, from the end; default 200, at most 2,000 |
 
@@ -749,8 +818,9 @@ before anything is requested. It is requested only from the project's own route,
 existing `localPath` without `overwrite: true` is `CONFIRMATION_MISMATCH` and nothing is
 downloaded; a replacement is atomic, so a failed download leaves the old file. A `.pdf` that does
 not start with `%PDF-` is `PROTOCOL_UNSUPPORTED` and nothing is written. `NO_BUILD`, `NOT_FOUND`,
-and `BUILD_NOT_FOUND` are as for `get_compile_log`. Returns the absolute `localPath`, `file`,
-`sizeBytes`, `buildId`, and `replaced`.
+and `BUILD_NOT_FOUND` are as for `get_compile_log`; an `output.blg` or `output.bbl` left over from
+an earlier build is `NOT_FOUND`, like any file the build did not produce. Returns the absolute
+`localPath`, `file`, `sizeBytes`, `buildId`, and `replaced`.
 
 ### Compile output resources
 
@@ -774,12 +844,15 @@ List comment threads, resolving their document positions lazily.
 | `projectId` | yes | Project id |
 | `filePath` | no | Only threads anchored in this document |
 | `status` | no | `open` (default), `resolved`, or `all` |
-| `author` | no | Only threads with messages by this author name |
+| `author` | no | Only threads with a message whose author display name contains this (case-insensitive), or whose author id equals it |
 
-Returns `threads`, each with `id`, `status`, `messages` (author, content, timestamp), and when
-located `filePath`, `start`, `end`, and `quotedText`. A thread without a document range has
-`unlocated: true`. If the deployment offers no project-wide range index and no `filePath` was
-given, the result has `positionsUnavailable: true` rather than scanning every document.
+Returns `threads`, each with `id`, `status`, `messages` (each `id`, `author` as
+`{ id, displayName }` or `null` when Overleaf names no user, `content`, and an ISO `timestamp`),
+`resolvedAt` and `resolvedBy` (`{ id, displayName }`) on a resolved thread when Overleaf reports
+them, and when located `filePath`, `start`, `end`, and `quotedText`. No email address is ever
+returned. A thread without a document range has `unlocated: true`. If the deployment offers no
+project-wide range index and no `filePath` was given, the result has `positionsUnavailable: true`
+rather than scanning every document.
 
 ### `reply_to_comment`
 
@@ -791,9 +864,14 @@ Reply in an existing thread.
 | `threadId` | yes | From `list_comments` |
 | `content` | yes | Message text |
 
-Returns the created message. A reply that timed out is accepted only when the refreshed thread
-shows a matching message from the current author within the request window, so no reply is
-posted twice.
+A `threadId` that names no existing thread fails with `NOT_FOUND` and nothing is posted. Returns
+`threadId` and the created `message` (`id`, `author` `{ id, displayName }`, `content`,
+`timestamp`), plus `trackChangesActive`, `writeMode`, and `recoveredAfterTimeout: true` when a
+timed-out reply was confirmed. The created message is the one message that was not in the thread
+before the reply, from this account, with this content. A reply that timed out is accepted only
+when the refreshed thread shows exactly one such new message within the request window, so no
+reply is posted twice. If Overleaf accepted the reply but it cannot be singled out when read
+back, the call fails with `OUTCOME_UNKNOWN`; do not retry it.
 
 ### `add_comment`
 
@@ -808,7 +886,9 @@ Create a thread anchored to exact text.
 | `expectedText` | yes | Must equal the normalized text in that range exactly |
 | `content` | yes | Comment text |
 
-Returns the new thread's identifier and verification details. The thread is created and then
+Returns `threadId`, the created `thread` in the same shape as `list_comments` (without position
+fields) when it could be read back, and verification details: `revision`, `protocol`,
+`trackChangesActive`, `writeMode`, and `recoveredAfterTimeout`. The thread is created and then
 attached to the range through OT; if attachment cannot be confirmed, the orphaned thread is
 cleaned up only after the unchanged document proves it never applied.
 
@@ -824,7 +904,8 @@ Resolve or reopen a thread.
 | `threadId` | yes | Thread to change |
 | `status` | yes | `open` or `resolved` |
 
-Returns the verified status and resulting revision.
+A thread not anchored in `filePath` fails with `NOT_FOUND` and nothing changes. Returns the
+verified status and resulting revision.
 
 ## History
 
@@ -835,10 +916,15 @@ Poll one recent window of project history.
 | Parameter | Required | Meaning |
 | --- | :---: | --- |
 | `projectId` | yes | Project id |
-| `sinceVersion` | no | Return only update groups newer than this version |
+| `sinceVersion` | no | Return only update groups newer than this version, and in them only project operations at or after it |
 
 Returns `currentVersion`, `nextSinceVersion` to pass on the next poll, `hasEarlierHistory`,
 `gapDetected` (true when the cursor predates the single window returned), and `updates`, each with
 `fromVersion`, `toVersion`, `startedAt`, `endedAt`, `authors` (id and display name; emails are
-stripped), `paths`, `projectOperations`, `labels`, and `origin`. This is stateless polling, not a
-background watcher, and it never pages backward or computes diffs.
+stripped), `paths`, `projectOperations`, `labels`, and `origin`. Overleaf can merge new changes
+into an update group between polls, so a group may start before `sinceVersion`. Such a group
+keeps its full `fromVersion`, `startedAt`, `paths`, and `labels`, but its `projectOperations` list
+only operations with `atVersion` at or after `sinceVersion`. An operation at `atVersion` produces
+version `atVersion + 1`, so passing `nextSinceVersion` back never skips an operation and never
+repeats one. This is stateless polling, not a background watcher, and it never pages backward or
+computes diffs.

@@ -59,19 +59,28 @@ try {
   and timestamp metadata on inserted and retained-deletion components.
 - Visible history-OT offsets account for tracked deletions retained in the raw snapshot.
 - At most two project sockets are cached by default. Active sockets are never evicted, and idle
-  sockets disconnect after 90 seconds.
+  sockets disconnect after 90 seconds. A socket Overleaf or a protocol error closed is dropped when
+  the next call takes it, and that call opens a fresh one. A call on a closed socket sends nothing
+  and fails with a retryable `REMOTE_ERROR`; a read whose socket closes before the reply does too.
 - All document sessions and tree mutations in a project share one FIFO queue, because Overleaf's
   join/leave epoch is socket-wide. A document is joined for one queued operation and then left.
 - A write succeeds only after acknowledgement, a matching `otUpdateApplied`, a leave and rejoin,
   and content-hash verification of the live document.
-- If a write times out, the intended hash proves success, the unchanged original revision proves
-  the write was not applied, and any third observable state is reported as a conflict. The write
-  is never submitted again automatically.
+- If a write times out, or its socket closes or fails after the update was sent, or the
+  verification read after an applied update fails, the intended hash proves success, the
+  unchanged original revision proves the write was not applied, and any third observable state is
+  reported as a conflict. The write is never submitted again automatically.
+- ShareJS sends each line as the latin1 string of its UTF-8 bytes. A line is decoded only when
+  those bytes are valid UTF-8, so a real U+FFFD in the text, which Overleaf stores for an emoji
+  typed into its legacy editor, reads back exactly. Writes to a ShareJS document refuse characters
+  outside the Basic Multilingual Plane that the document does not already hold, since Overleaf
+  would store each as U+FFFD and the write could never verify.
 - A comment is created as a REST thread and then attached through OT. Timed-out attachment
   recovery checks the new thread id and exact range; orphan cleanup happens only after the
   unchanged document proves attachment did not apply.
-- A timed-out reply is accepted only when current author, exact normalized content, and the
-  request-time window identify the refreshed message.
+- A reply is identified as the one message that was not in the thread before it was posted, with
+  the current author and exact normalized content. A timed-out reply is accepted only when exactly
+  one such message, within the request-time window, is in the refreshed thread.
 - ShareJS comment status uses the dedicated REST action. History-OT comment status is part of the
   document operation and snapshot.
 - Folder sync is a composition, not a second implementation: `sync_directory` calls the same

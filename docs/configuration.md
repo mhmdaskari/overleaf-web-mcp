@@ -204,8 +204,8 @@ The effects are:
 
 Nearly every operation reads project data, writes included, so `overleaf-read` belongs in any
 useful list. An operation that reads after it changes something, such as `create_project`
-reading the new project's tree, needs every effect it will use before it starts, so a refusal
-never lands after the change.
+reading the new project's tree or `import_project_zip` reading back the stored name, needs every
+effect it will use before it starts, so a refusal never lands after the change.
 
 For example, an assistant that may only read one project and save copies of its files into one folder:
 

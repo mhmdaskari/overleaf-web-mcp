@@ -26,7 +26,7 @@ unexpected shape surfaces as `PROTOCOL_UNSUPPORTED` rather than a parse exceptio
 | `POST /Project/:id/clone` | `{ projectName }` | `project_id` (validated) | `clone_project` |
 | `POST /project/new/upload` | multipart `qqfile` (the archive) and `name` | `project_id` (validated); `{ success: false, error }` or HTTP 422 with a short `error` code on rejection; HTTP 429 when throttled | `import_project_zip` |
 | `POST /project/:id/rename` | `{ newProjectName }` | nothing | `manage_project` `rename` |
-| `POST /project/:id/settings` | any of `rootDocId`, `compiler`, `imageName`, `spellCheckLanguage` | nothing; the server re-joins the project to report the persisted values | `update_project_settings` |
+| `POST /project/:id/settings` | one of `compiler`, `imageName`, `spellCheckLanguage`, `rootDocId` per request, sent in that order (the order Overleaf applies them) | nothing; the server re-joins the project to report the persisted values | `update_project_settings` |
 | `POST /project/:id/trash`, `DELETE /project/:id/trash` | nothing | nothing | `manage_project` `trash`, `restore` |
 | `POST /Project/:id/archive`, `DELETE /Project/:id/archive` | nothing | nothing | `manage_project` `archive`, `unarchive` |
 | `DELETE /Project/:id` | nothing | nothing | `manage_project` `delete`; the server only sends it for a project the list reports as trashed |

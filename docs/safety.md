@@ -16,12 +16,13 @@ the smallest operational-transformation edit that produces it, submits that, the
 document and compares a content hash against the intended result before returning the new
 revision. An acknowledgement alone is never treated as success.
 
-**Timeouts are observed, never retried.** If a write times out, the server watches the live
-document for a bounded window. Seeing the intended content means the write applied. Seeing the
-original revision through the whole window means it did not. Seeing anything else is reported as
-a conflict. In no case is the write submitted again, so a slow network can never apply an edit
-twice. A timed-out upload in `batch_upload` is classified the same way from the project tree
-afterwards, and is never sent again either.
+**Timeouts are observed, never retried.** If a write times out, or its socket closes or fails
+after the update was sent, or the verification read after an applied update fails, the server
+watches the live document for a bounded window. Seeing the intended content means the write
+applied. Seeing the original revision through the whole window means it did not. Seeing anything
+else is reported as a conflict. In no case is the write submitted again, so a slow network can
+never apply an edit twice. A timed-out upload in `batch_upload` is classified the same way from
+the project tree afterwards, and is never sent again either.
 
 **Tracked changes are honest.** `writeMode: "tracked"` records the edit as Overleaf tracked
 changes for review. If tracking is not possible, for example because the session has no
@@ -35,12 +36,13 @@ changes is on.
 **Destructive actions need a second value.** Deleting an entity with `manage_entity` requires
 `confirmPath` to equal `path` exactly, deleting several with `delete_entities` requires
 `confirmCount` to equal the number of paths, and a mirror `sync_directory` requires
-`confirmDeleteCount` to equal the number of entries its plan would delete. Trashing, archiving, or deleting a project with
-`manage_project` requires `confirmName` to equal the project's current name exactly, without
-trimming, and the check happens before any request is sent. A wrong value fails with
-`CONFIRMATION_MISMATCH` and changes nothing. Projects follow Overleaf's own model: trash first,
-which is reversible, and permanent deletion only from the trash. `download_file` and
-`download_project_zip` refuse to replace an existing local file unless `overwrite` is `true`.
+`confirmDeleteCount` to equal the number of entries its plan would delete. Trashing, archiving,
+or deleting a project with `manage_project` requires `confirmName` to equal the project's current
+name exactly, without trimming. The current name is read from Overleaf first, and the check
+happens before any change is sent. A wrong value fails with `CONFIRMATION_MISMATCH` and changes
+nothing. Projects follow Overleaf's own model: trash first, which is reversible, and permanent
+deletion only from the trash. `download_file` and `download_project_zip` refuse to replace an
+existing local file unless `overwrite` is `true`.
 
 Replacements are confirmed by value or by expected state too. `upload_file` replaces a binary
 file with `overwrite: true` or with `expectedHash` equal to the hash it has now, and a text
@@ -140,7 +142,9 @@ repeats this notice.
   current project name, else `CONFIRMATION_MISMATCH`. `delete` is refused with `INVALID_ARGUMENT`
   unless the project is already trashed.
 - `update_project_settings` persists in the project itself and reports the settings as re-read
-  from a fresh join, never the values it was asked to set.
+  from a fresh join, never the values it was asked to set. It sends one setting per request and
+  never retries; a failure names the settings already stored in `details.applied` and the failed
+  one in `details.failed`.
 - `get_project_tree` reports `hash` as a git blob hash, `sha1("blob " + byteLength + "\0" +
   content)`, which is exactly what `git hash-object <file>` prints. Plain `sha1sum` never matches.
   The hash is present only on binary `file` entities; Overleaf stores no content hash for `doc`
@@ -154,7 +158,7 @@ repeats this notice.
   compare-and-swap: a replacement that lands between the check and the upload is lost.
 - `download_file` is annotated `{ readOnlyHint: false, destructiveHint: true, idempotentHint: false }`,
   since it writes locally, and fails with `INVALID_ARGUMENT` when the local path exists and
-  `overwrite` is not `true`.
+  `overwrite` is not `true`, before anything is fetched.
 - `batch_upload` checks every `destinationPath` and `localPath` before any request, and fails the
   whole call with `INVALID_ARGUMENT` or `NOT_FOUND` on a bad one. It creates each missing folder
   once, uploads in the order given, never retries, and in `skip` mode re-checks each destination
@@ -163,6 +167,7 @@ repeats this notice.
   `recoveredAfterTimeout: true` when a binary with the local file's hash is now at the path,
   `TIMEOUT` when the path is empty before and after or holds the same binary with the same hash,
   and `OUTCOME_UNKNOWN` in any other case, a document included. It is never sent again.
+- Comment and history results name each author by id and display name, never by email address.
 - `download_project_zip` fails with `CONFIRMATION_MISMATCH` before any request when `localPath`
   holds a file and `overwrite` is not `true`, with `PROTOCOL_UNSUPPORTED` when the response is
   not a zip archive, and with `REMOTE_ERROR`, retryable, when the archive lacks its zip end
@@ -211,13 +216,13 @@ Every failure is returned as JSON with `code`, `message`, `retryable`, and optio
 | --- | --- | --- |
 | `AUTH_EXPIRED` | No saved session, or Overleaf no longer accepts it. | Run `npx overleaf-web-mcp login` again. Do not retry the call. |
 | `PERMISSION_DENIED` | Overleaf refused the operation for this account (HTTP 403). From `download_project_zip` it can also mean the session expired, since that route checks project access rather than the login. | Check the project's access level; read-only collaborators cannot write. For a project download, check `auth_status` too. |
-| `NOT_FOUND` | The project, path, or Overleaf resource does not exist (HTTP 404). | Re-read the tree; the entity may have been renamed or removed. |
+| `NOT_FOUND` | The project, path, or Overleaf resource does not exist (HTTP 404), or a local file to upload or a local folder to download into does not exist (`details.errno: "ENOENT"`). | Re-read the tree; the entity may have been renamed or removed. |
 | `REVISION_CONFLICT` | The document changed since the revision you hold, or the verified result differs from the intent. `details.liveRevision` carries the current revision. | Read again, reconcile, and write with the new revision. |
 | `PROTOCOL_UNSUPPORTED` | The deployment speaks a collaboration protocol version this release does not, or the document's OT protocol changed between read and write, or a tracked write has no user id, or a project download was not a zip archive, or a downloaded `.pdf` was not a PDF, or a response that should be JSON was not (`details.path`, and `details.contentType` when it names a media type), or a compile response lacked its expected keys (`details` `{ endpoint, expectedKeys, receivedKeys }`). | Read again. If the protocol version is the issue, see `OVERLEAF_PROTOCOL_VERSIONS`. |
 | `DOC_TOO_LARGE` | The resulting document would reach the advertised maximum length. | Split the content across documents. |
 | `UPDATE_TOO_LARGE` | The serialized edit exceeds the configured update limit, or Overleaf answered HTTP 413. | Split the change into smaller writes, each with a fresh revision. |
 | `TIMEOUT` | A request or OT application timed out. For writes, `details.outcome: "not_applied"` means the original revision stayed live throughout the recovery window. In a `batch_upload` result, the path was as before the upload when the tree was read back; the upload could still land late. | Safe to read and try again with a fresh revision. |
-| `OUTCOME_UNKNOWN` | A write timed out and the live document could not be observed afterwards, or a timed-out `batch_upload` entry whose path the tree read back cannot settle either way. | Read the document, or `get_project_tree`, before doing anything else; do not assume either outcome. |
+| `OUTCOME_UNKNOWN` | A write timed out, or its socket closed or failed after the update was sent, and the live document could not be observed afterwards, or a timed-out `batch_upload` entry whose path the tree read back cannot settle either way. | Read the document, or `get_project_tree`, before doing anything else; do not assume either outcome. |
 | `COMPILE_FAILED` | Overleaf ended the compile with no build to report on: `terminated`, `exited`, `project-too-large`, `validation-problems`, or a status this server does not know. A LaTeX error is not this: that build returns a summary. `details` is `{ status, rootFilePath, buildId?, buildRef? }`; `status` is `unrecognized` when Overleaf's was not a short identifier. | Inspect the status; with a `buildRef`, read the log with `get_compile_log`. |
 | `COMPILE_RATE_LIMITED` | Overleaf did not run the compile: `too-recently-compiled`, `rate-limited`, `autocompile-backoff`, `compile-in-progress`, or HTTP 429. `details` as for `COMPILE_FAILED`, plus `retryAfterMs` when known. | Wait `retryAfterMs`, or a little while, then compile once more. |
 | `COMPILE_UNAVAILABLE` | Overleaf's compile service is down for maintenance or unavailable. | Try again later. |
@@ -225,13 +230,13 @@ Every failure is returned as JSON with `code`, `message`, `retryable`, and optio
 | `NO_BUILD` | `get_compile_log`, `download_compile_output`, or a compile output resource was called without a `buildRef`, and this server process has not compiled the project. | Call `compile_project` first, or pass the `buildRef` an earlier compile returned. |
 | `BUILD_NOT_FOUND` | Overleaf no longer keeps the build's output (`details.buildId`, `details.file`). | Compile again. |
 | `PARTIAL_CLEANUP` | A multi-step operation applied some steps and could not undo them all. `details` says what remains. | Inspect the project and finish the cleanup by hand. |
-| `INVALID_ARGUMENT` | The call was malformed, a path was invalid, an entity had the wrong type, Overleaf rejected a name, an id held a character that is not path-safe (`details.parameter`), or an upload would replace a text document without `uncheckedDocumentReplace: true` (`details.missing`). `details.overleafError` may carry Overleaf's short reason code. | Fix the arguments; to replace a document, prefer `write_file` with `localPath`. |
+| `INVALID_ARGUMENT` | The call was malformed, a path was invalid, an entity had the wrong type, Overleaf rejected a name, an id held a character that is not path-safe (`details.parameter`), an upload would replace a text document without `uncheckedDocumentReplace: true` (`details.missing`), a name is already used in the target folder or a folder would move into itself, a local file cannot be read or written (`details.errno`, such as `EISDIR` or `EACCES`), or text written to a ShareJS (legacy editor) document holds a character outside the Basic Multilingual Plane, such as an emoji, that the document does not already hold (`details.line`, 1-based; Overleaf would store each as U+FFFD; nothing was sent). `details.overleafError` may carry Overleaf's short reason code. | Fix the arguments; to replace a document, prefer `write_file` with `localPath`. Replace characters outside the Basic Multilingual Plane, for example with a LaTeX command. |
 | `CONFIRMATION_MISMATCH` | A confirm-by-value parameter (`confirmPath`, `confirmName`, `confirmCount`, `confirmDeleteCount`) did not equal the value it must repeat exactly, or mirror mode was called without `confirmDeleteCount`, or `download_project_zip` or `download_compile_output` found a file at `localPath` without `overwrite: true`, or `upload_file` was given `overwrite: false` for a path that holds a document or binary file, or would replace a binary without `overwrite: true` or `expectedHash`, or `batch_upload` found taken destinations with `onConflict` left at `fail`, or `sync_directory` had no `planToken` (`details.missing` names the parameter to pass). Nothing was changed. | Re-read the path, name, or plan and pass the value back verbatim, after confirming with the user. |
 | `RATE_LIMITED` | Overleaf answered HTTP 429, most often on project creation, zip import, project download, or uploads. `details.retryAfterMs` carries Overleaf's hint when it sent one; the project download sends none. Nothing was applied by that request, and `batch_upload` stops there. | Wait at least `retryAfterMs`, or a minute when it is absent (uploads are counted over 15 minutes, so a batch may need longer), then try once more. |
 | `REMOTE_DRIFT` | The project, or the local folder, changed since the `planToken` was issued (`details.changed` is `remote`, `local`, or `both`), or an entity planned for deletion, or a path a sync was about to upload to, changed just before, or an upload's `expectedHash` no longer matches. Nothing was changed by that step. | Run `plan_sync` again, or read `get_project_tree` again, and review the change with the user. |
 | `PATH_OUTSIDE_ROOT` | A local path is outside what the server may touch, nothing done. `details.kind` says why: `outside_folder` for a symbolic link or `.olignore` in `localFolderPath` that leads outside it, `outside_read_roots` or `outside_write_roots` for a path outside `OVERLEAF_LOCAL_READ_ROOTS` or `OVERLEAF_LOCAL_WRITE_ROOTS`, and `session_files` for a download onto the saved session. | Use a path inside the allowed folders, remove the link, or exclude it with an `ignore` pattern. |
 | `POLICY_DENIED` | The access policy does not allow this project (`OVERLEAF_ALLOWED_PROJECTS`, `details.parameter`) or this effect (`OVERLEAF_ALLOWED_EFFECTS`, `details.effect`). Nothing was sent. | Do not work around it; ask the person who configured the server. |
-| `REMOTE_ERROR` | Anything else Overleaf returned or a network failure, including a project download cut short before its zip end record, or a redirect answering a request that changes something. `details.status` carries the HTTP status when there is one, and `details.reason` an identifier for a socket error. | Retry once if `retryable` is `true`; otherwise report it. |
+| `REMOTE_ERROR` | Anything else Overleaf returned or a network failure, including a project download cut short before its zip end record, or a redirect answering a request that changes something. `details.status` carries the HTTP status when there is one, and `details.reason` an identifier for a socket error: `not_connected` when the project socket was already closed and nothing was sent, `disconnected` when it closed before answering a read or during the project join (both `retryable: true`). After a write whose socket closed or failed once the update was sent, `details.outcome: "not_applied"` (with `retryable: false`) means the original revision stayed live throughout the recovery window. Local file-system failures are never `REMOTE_ERROR`. | Retry once if `retryable` is `true`; otherwise report it. |
 
 ## What changed in 0.6.0
 
