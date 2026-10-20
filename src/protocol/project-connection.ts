@@ -56,9 +56,18 @@ export interface ProjectConnectionOptions {
   applyTimeoutMs?: number
 }
 
+// Fatal, so only bytes that are not UTF-8 fail; a real U+FFFD in the text decodes like any character.
+const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+
+/** Overleaf sends each ShareJS line as the latin1 string of its UTF-8 bytes. */
 function decodeLegacyLine(line: string): string {
-  const decoded = Buffer.from(line, 'latin1').toString('utf8')
-  return decoded.includes('\uFFFD') ? line : decoded
+  // A code unit above 0xFF means the line was never byte-encoded and is already text.
+  if (/[\u0100-\u{10FFFF}]/u.test(line)) return line
+  try {
+    return utf8.decode(Buffer.from(line, 'latin1'))
+  } catch {
+    return line
+  }
 }
 
 function effectiveTrackChanges(
