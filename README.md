@@ -1,6 +1,6 @@
 <h1 align="center">Overleaf Web MCP</h1>
 
-<p align="center"><strong>Let Claude, Codex, Cursor, or any MCP client read, edit, compile, and review<br>your Overleaf projects, signed in as you.</strong></p>
+<p align="center"><strong>Read, edit, compile, and review your Overleaf projects, signed in as you,<br>from Claude, Codex, Cursor, or any MCP client, or from a shell or a TypeScript program.</strong></p>
 
 <p align="center">
   <a href="https://mhmdaskari.github.io/overleaf-web-mcp/"><strong>Docs</strong></a> &nbsp;·&nbsp;
