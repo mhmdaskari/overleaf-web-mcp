@@ -23,6 +23,9 @@ worked. See [configuration](configuration.md#where-the-session-is-stored) for th
 
 ## 2. Connect your MCP client
 
+Using only the command line or the TypeScript library? Skip to
+[without an MCP client](#without-an-mcp-client).
+
 === "Claude Code"
 
     One command registers the server for every project on this machine:
@@ -112,13 +115,35 @@ worked. See [configuration](configuration.md#where-the-session-is-stored) for th
 
 Restart the client so it starts the server, then ask it to check your Overleaf connection. That
 runs `auth_status`, which reports the account's project count without exposing anything else.
+From a shell, `npx overleaf-web-mcp call auth_status` runs the same check and exits 0.
+
+## Without an MCP client
+
+Skip steps 2 and 3. Once you have signed in, every tool is also a command:
+
+```bash
+npx overleaf-web-mcp call auth_status
+npx overleaf-web-mcp projects list
+```
+
+For regular use, install the package once so commands start without `npx`:
+
+```bash
+npm install -g overleaf-web-mcp
+overleaf-web-mcp --help
+```
+
+The [command line guide](cli.md) covers every command, its output, and its exit codes, and the
+[TypeScript SDK](sdk.md) page covers the library. The three Agent Skills ship inside the package,
+in `$(npm root -g)/overleaf-web-mcp/skills` after a global install;
+[the guide](cli.md#agent-skills) says how to install them for an agent.
 
 ## Troubleshooting
 
 **"Failed to connect" right after adding the server.** Almost always one of two things.
 
 - *No saved session.* The server refuses to start until you have run `npx overleaf-web-mcp login`.
-  Run it and try again.
+  Run it and try again. A command fails the same way, with `AUTH_EXPIRED` on stderr and exit 3.
 - *Node is older than 20.* If your default `node` is an older version, `npx` starts the server
   with it and it exits immediately. Check `node --version`. If you keep several versions with a
   manager such as nvm, register the server with an absolute path to a new enough binary instead
@@ -145,19 +170,22 @@ To stop it recurring, schedule the keepalive daily; see
 collaboration WebSocket through a proxy, so project tools failed with `ENOTFOUND` even where
 `list_projects` worked.
 
-**`AUTH_EXPIRED` in a tool result.** The saved session has expired or been revoked. Run
-`npx overleaf-web-mcp login` again. Nothing else needs to change.
+**`AUTH_EXPIRED` in a tool result, or on a command's stderr with exit 3.** The saved session has
+expired or been revoked. Run `npx overleaf-web-mcp login` again. Nothing else needs to change.
 
 **You appear online to collaborators.** While the server holds a project connection open, up to
 90 seconds after the last call by default, the account can show as present in the editor. See
-[configuration](configuration.md) to shorten that.
+[configuration](configuration.md) to shorten that. A command holds one only while it runs, but
+each command is its own session, so a shell loop over many files opens one after another; see
+[request volume](cli.md#sessions-presence-and-request-volume).
 
 ## Self-hosted Overleaf
 
-Use the same origin for the login command and the server:
+Use the same origin for the login command, the server, and every other command:
 
 ```bash
 OVERLEAF_BASE_URL=https://overleaf.example.org npx overleaf-web-mcp login
+OVERLEAF_BASE_URL=https://overleaf.example.org npx overleaf-web-mcp projects list
 ```
 
 ```json
@@ -188,4 +216,6 @@ npm run login
 npm start
 ```
 
-Point your client's `command` at `node` and `args` at `dist/cli.js` in the checkout.
+Point your client's `command` at `node` and `args` at `dist/cli.js` in the checkout. From the
+checkout, `node dist/cli.js <command>` runs any other command, such as
+`node dist/cli.js projects list`.

@@ -21,6 +21,12 @@ No Overleaf Git integration is involved.
 
 Every operation is defined once and reached through one engine, whichever interface calls it.
 
+- **Adapters**: the MCP server (`src/mcp/`); the [command line](cli.md) (`src/cli/`), which
+  parses arguments and requests with the contract schemas, refuses unknown keys, prints the
+  result, and maps errors to exit codes; and `createOverleafClient` (`src/client.ts`), the
+  [SDK](sdk.md)'s client. The Agent Skills sit on top of the command line and call only its public
+  commands. `src/cli.ts` loads the MCP server only for `serve`, so an operation command never
+  loads the MCP SDK.
 - **Contracts** (`src/contracts/`): for each operation, its input and output schemas, its
   description, its MCP annotations, and its effects, plus the error codes and the
   `OperationContext` an interface passes in (progress, cancellation, diagnostics). Tests check
@@ -28,27 +34,30 @@ Every operation is defined once and reached through one engine, whichever interf
   confirm value or an expected state.
 - **Service** (`src/service/operations.ts`): `createOverleafService(runtime)` returns one function
   per operation. Each one shapes its arguments for the domain engine and nothing else; the MCP
-  handlers in `src/mcp/tools.ts` make one service call each.
+  handlers in `src/mcp/tools.ts` make one service call each, as do each command line call and
+  each client method. The service also checks a read-only result against its output schema, so
+  an answer this release does not understand fails the same way through every interface.
 - **Domain engine** (`src/overleaf/`, `src/protocol/`, `src/http/`): every public method checks
   the [access policy](configuration.md#access-policy) for the project and each effect it
   performs before any request, so a direct call through the exported runtime is held to the same
   rules as a tool call. The per-project queue, revision checks, write verification, and timeout
   recovery live here.
 
-The engine is published without MCP as `overleaf-web-mcp/core`, which exports `OverleafRuntime`,
-`readConfig`, `createOverleafService`, `McpError`, `ERROR_CODES`, and the contract types, and
-never loads the MCP SDK. It enforces the same defaults as the MCP server; v0.7.0 documents its
-stable surface.
+The engine is published without MCP as `overleaf-web-mcp/core`, which exports
+`createOverleafClient`, `createOverleafService`, `OverleafRuntime`, `readConfig`, `McpError`,
+`ERROR_CODES`, and the contract types and constants, and never loads the MCP SDK. It enforces the
+same defaults as the MCP server. The [SDK page](sdk.md#stable-surface) lists the stable surface;
+the runtime's fields, such as `http`, `documents`, and `connections`, and `RuntimeDependencies`
+with its `fetcher` and `connectionFactory`, are internal.
 
 ```ts
-import { createOverleafService, OverleafRuntime, readConfig } from 'overleaf-web-mcp/core'
+import { createOverleafClient } from 'overleaf-web-mcp/core'
 
-const runtime = await OverleafRuntime.create(readConfig())
+const client = await createOverleafClient()
 try {
-  const service = createOverleafService(runtime)
-  const { content, revision } = await service.read_file({ projectId, filePath: 'main.tex' })
+  const { content, revision } = await client.readFile({ projectId, filePath: 'main.tex' })
 } finally {
-  await runtime.close()
+  await client.close()
 }
 ```
 
@@ -138,7 +147,7 @@ capability against the source of the most widely used servers.
 
 | Implementation | Connection model | Focus |
 | --- | --- | --- |
-| **This project** | Browser-assisted saved session plus private REST and Socket.IO/OT | Project and file management, tracked writing, compilation, review, recent history |
+| **This project** | Browser-assisted saved session plus private REST and Socket.IO/OT | Project and file management, tracked writing, compilation, review, and recent history, from MCP, a shell, or TypeScript |
 | [`@netique/overleaf-mcp`](https://github.com/netique/overleaf-mcp) | Browser session plus private REST and Socket.IO/OT | A close web/OT peer with review comments and tracked-change workflows |
 | [`overleaf-mcp-rt`](https://github.com/DanielHou315/overleaf-mcp-rt) | Session authentication plus native OT | Real-time file, compile, and comment tooling for `www.overleaf.com` and Community Edition |
 | [`olcli`](https://github.com/aloth/olcli) | Session cookie plus private REST | A command-line client with an MCP mode: whole-file uploads, compilation, comments, and local-folder diffs |
@@ -149,10 +158,9 @@ work on the repository rather than the live document, so their edits bypass trac
 revision checks entirely. Web-session peers such as `@netique/overleaf-mcp` share this project's
 connection model and also offer tracked changes; what sets this project apart is the project
 lifecycle tools, the verified-write guarantees described above, and folder sync that, given the
-`planToken` from `plan_sync`, stops when either side drifted from the plan. The
-[roadmap](roadmap.md) plans a command line and a TypeScript client
-over the same engine `overleaf-web-mcp/core` already exposes, tracked-change review, and
-multi-file documents.
+`planToken` from `plan_sync`, stops when either side drifted from the plan. The command line and
+the TypeScript client over the same engine shipped in 0.7.0; the [roadmap](roadmap.md) still
+plans tracked-change review and multi-file documents.
 
 Review-range investigation was informed by
 [Overleaf Comment Exporter](https://github.com/salokr/overleaf-comment-exporter). Real-time

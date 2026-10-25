@@ -17,7 +17,13 @@ before publishing.
 Unit and deterministic integration tests cover revision identity, Unicode positions, section
 parsing, tracked and untracked OT operations, history normalization, update limits, queue and
 cache behaviour, Socket.IO frames, timeout recovery, comment attachment, file-tree events, MCP
-registration, progress notifications, and the server instructions on both MCP protocol eras.
+registration, progress notifications, and the server instructions on both MCP protocol eras. The
+command line is tested for argument parsing, the exit code of every error code from a read and
+from a write, output framing, and refusal of unknown request keys before any request; the SDK
+client for one method per tool and strict input. `test/parity.test.ts` runs every tool through
+an MCP client, which checks each `structuredContent` against the advertised `outputSchema` and
+refuses an undeclared key, through the command line, and through the SDK client, and expects the
+same result and the same error from each.
 Folder sync is tested against an in-memory project: git blob hashes against `git hash-object`
 values, ignore rules and symbolic links, plan comparison and folder collapsing, an upload failing
 midway (no delete runs, and the returned token resumes), a remote or local change between plan and
@@ -26,23 +32,31 @@ sync (`REMOTE_DRIFT`, nothing applied), and a collaborator's edit during the syn
 
 Other tests guard the shape of the code. `test/server.test.ts` compares `tools/list` with the
 committed snapshot in `test/__snapshots__/list-tools.json`, so a change to a tool's name,
-description, schema, or annotations shows up in review; update it with `npx vitest run -u` only
-for a change listed in `CHANGELOG.md`. `test/contracts/operations.test.ts` checks every
-operation's annotations against its effects. The access policy is tested through a real runtime
-over an injected fetcher and connection factory, counting requests, and error sanitization by
-feeding a sentinel string through every upstream channel and checking no serialized error holds
-it.
+description, schema, or annotations shows up in review. The golden tests in `test/golden/`
+(with `test/helpers/golden.ts`) record tool results taken through the real domain classes. Update
+either snapshot with `npx vitest run -u` only for a change listed in `CHANGELOG.md`.
+`test/contracts/operations.test.ts` checks every operation's annotations against its effects.
+`test/cli/docs.test.ts` checks that [the command line page](cli.md) shows every command the help
+prints and every exit code, and that [the SDK page](sdk.md) lists only names the package exports.
+`test/skills.test.ts` parses every command in `skills/*/SKILL.md` against the help and refuses
+any mention of the MCP SDK, `src/`, or the cookie jar. The access policy is tested through a real
+runtime over an injected fetcher and connection factory, counting requests, and error
+sanitization by feeding a sentinel string through every upstream channel and checking no
+serialized error holds it.
 
 ## Layout and boundaries
 
 `src/contracts/` defines every operation once, `src/service/` shapes arguments for the domain
-engine in `src/overleaf/`, `src/protocol/`, and `src/http/`, and `src/mcp/` is one adapter over the
-service; the [internals page](internals.md#layers) describes the layers. ESLint enforces the
-boundary: only `src/mcp/`, `src/server.ts`, `src/cli.ts`, and `src/index.ts` may import the MCP
-SDK or the adapter, type imports included, so `src/sdk.ts`, the `overleaf-web-mcp/core` entry,
-works without it. `console` is refused everywhere in `src/`, and `process.stdout` and
-`process.stderr` outside `src/cli.ts` and `src/server.ts`. CI imports both built entry points by
-package name after the build.
+engine in `src/overleaf/`, `src/protocol/`, and `src/http/`, and three adapters sit over the
+service: `src/mcp/`, the command line in `src/cli/`, and `createOverleafClient` in
+`src/client.ts`; the [internals page](internals.md#layers) describes the layers. ESLint enforces
+the boundary: only `src/mcp/`, `src/server.ts`, `src/cli.ts`, and `src/index.ts` may import the MCP
+SDK or the adapter, type imports included, so `src/cli/` and `src/sdk.ts`, the
+`overleaf-web-mcp/core` entry, work without it. `src/cli.ts` imports `src/server.ts` only for
+`serve`, so an operation command never loads the MCP SDK. `console` is refused everywhere in
+`src/`, and `process.stdout` and `process.stderr` outside `src/cli.ts` and `src/server.ts`;
+`src/cli/` writes through the `CliIo` streams `src/cli.ts` hands it. CI imports both built entry
+points by package name after the build.
 
 ## Live tests
 
@@ -61,10 +75,29 @@ Add `RUN_OVERLEAF_LIVE_REVIEW_TESTS=1` for review reads,
 set its root document, compile it once, and trash it, or
 `RUN_OVERLEAF_LIVE_SYNC_TESTS=1` to create a throwaway project named `mcp-sync-<time>`, mirror a
 temporary local folder into it with `plan_sync` and `sync_directory`, check that a second plan
-finds nothing to do, and trash it. Neither test deletes a project
-permanently; remove the trashed project by hand from the web UI's Trashed view. Feature
-availability depends on the deployment and account. Keep request volume low and treat cleanup
-failures as test failures.
+finds nothing to do, and trash it.
+
+Two more live files drive the built package, so run `npm run build` first, and run each on its own
+path:
+
+```bash
+npm run build
+RUN_OVERLEAF_LIVE_TESTS=1 RUN_OVERLEAF_LIVE_CLI_TESTS=1 npm test -- test/live/cli-live.test.ts
+RUN_OVERLEAF_LIVE_TESTS=1 RUN_OVERLEAF_LIVE_COMPARE_TESTS=1 npm test -- test/live/compare-interfaces.test.ts
+```
+
+`test/live/cli-live.test.ts` drives `node dist/cli.js` alone, from `call create_project` through
+`files write`, `sync apply --plan-token`, and `compile run`, to a trash of the throwaway project
+it named `mcp-cli-<time>`. `test/live/compare-interfaces.test.ts` creates a throwaway project
+named `mcp-compare-<time>`, runs four tasks on it (revise one section, sync figures and sources,
+diagnose a failed build, and resolve a review task on comment threads) through a spawned `serve`,
+`node dist/cli.js`, and the SDK, each cold and warm, then trashes it. It writes a JSON report to
+`OVERLEAF_LIVE_COMPARE_REPORT`, by default a file in the system temp folder whose path the test
+prints.
+
+None of these tests deletes a project permanently; remove the trashed project by hand from the
+web UI's Trashed view. Feature availability depends on the deployment and account. Keep request
+volume low and treat cleanup failures as test failures.
 
 ## Documentation site
 
@@ -126,6 +159,8 @@ node scripts/npm-downloads.ts /tmp/npm-downloads.json   # Node 22.18 or newer ru
 [`AGENTS.md`](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/AGENTS.md) in the
 repository root states the rules that must keep holding, the test expectations, and the release
 steps in a form meant for an agent working on the code. `CLAUDE.md` imports it for Claude Code.
+The Agent Skills in `skills/` are a different audience: they are for agents using the published
+package, and ship in it.
 
 ## Current exclusions
 
