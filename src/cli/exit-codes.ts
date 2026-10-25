@@ -24,7 +24,7 @@ export const EXIT_CODES = [
   {
     exitCode: 4,
     meaning:
-      'Read or plan again, then decide: the document or project changed, or a write is known not to have applied.',
+      'Read or plan again, then decide: the document or project changed, a write is known not to have applied, or part of it applied (details.created or details.applied).',
     errorCodes: ['REVISION_CONFLICT', 'REMOTE_DRIFT', 'TIMEOUT'],
   },
   {
@@ -49,16 +49,25 @@ export function isReadOnly(operation: OperationName | undefined): boolean {
   return operation !== undefined && operationContract(operation).annotations.readOnlyHint === true
 }
 
+/** Whether the error says part of a write already applied: a created document, or stored settings. */
+function partlyApplied(details: Record<string, unknown> | undefined): boolean {
+  const applied = details?.applied
+  return details?.created === true || (Array.isArray(applied) && applied.length > 0)
+}
+
 /**
  * The exit code for a failed operation command. An outcome that may have applied wins over
  * everything else, so a script never re-runs it; a usage error has no operation and exits 2.
+ * Exits 2 and 7 promise that nothing changed, so an error that says part of the call applied
+ * exits 4 instead, unless it is one of the codes that exit 3.
  */
 export function exitCodeForError(error: McpError, operation?: OperationName): number {
   const outcome = error.details?.outcome
   const readOnly = isReadOnly(operation)
   if (outcome === 'unknown' || error.code === 'OUTCOME_UNKNOWN') return 5
-  if (FIX_THE_CALL.has(error.code)) return 2
   if (NOT_ALLOWED.has(error.code)) return 3
+  if (!readOnly && operation !== undefined && partlyApplied(error.details)) return 4
+  if (FIX_THE_CALL.has(error.code)) return 2
   if (error.code === 'REVISION_CONFLICT' || error.code === 'REMOTE_DRIFT') return 4
   if (error.code === 'TIMEOUT') {
     if (readOnly) return 7

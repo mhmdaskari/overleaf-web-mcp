@@ -256,6 +256,21 @@ describe('operation command framing', () => {
     })
   })
 
+  test('a create_file error that says the document was created exits 4, never 2 or 7', async () => {
+    for (const [code, without] of [
+      ['INVALID_ARGUMENT', 2],
+      ['RATE_LIMITED', 7],
+    ] as const) {
+      const created = new McpError(code, 'The content was not written.', { details: { created: true } })
+      const run = await runCall('create_file', rejectAll(fakeServiceRuntime(), created))
+      expect(run.exitCode, code).toBe(4)
+      expect(expectError(run)).toEqual(created.toJSON())
+      // The same code without details.created keeps its own exit.
+      const plain = await runCall('create_file', rejectAll(fakeServiceRuntime(), new McpError(code, 'Refused.')))
+      expect(plain.exitCode, code).toBe(without)
+    }
+  })
+
   test('a partial bulk result exits 6 with the result on stdout', async () => {
     const cases = [
       ['sync_directory', (fake: FakeRuntime) => fake.sync.syncDirectory],
@@ -512,6 +527,56 @@ describe('safety checks with a real runtime', () => {
   })
 })
 
+describe('a write that was sent never exits as if nothing changed', () => {
+  test('reply_to_comment whose read-back is rate-limited exits 5, having posted once', async () => {
+    let threadReads = 0
+    const live = await realRuntime({
+      fetcher: async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input))
+        const method = init?.method ?? 'GET'
+        if (method === 'GET' && url.pathname === '/project/p/threads') {
+          threadReads += 1
+          return threadReads === 1 ? Response.json({ t: { messages: [] } }) : new Response(null, { status: 429 })
+        }
+        if (method === 'POST' && url.pathname === '/project/p/thread/t/messages') return Response.json({})
+        throw new Error(`unexpected ${method} ${url.pathname}`)
+      },
+    })
+    const request = JSON.stringify({ projectId: 'p', threadId: 't', content: 'A reply.' })
+    const run = await cli(['call', 'reply_to_comment', '--json', request], { runtime: live.runtime })
+    expect(run.exitCode).toBe(5)
+    expect(expectError(run)).toMatchObject({ code: 'OUTCOME_UNKNOWN', retryable: false, details: { threadId: 't' } })
+    expect(live.fetches).toEqual(['GET /project/p/threads', 'POST /project/p/thread/t/messages', 'GET /project/p/threads'])
+    expect(live.close).toHaveBeenCalledTimes(1)
+  })
+
+  test('update_project_settings rate-limited after storing the compiler exits 4, and 7 when nothing was stored', async () => {
+    const settings = (answers: number[]) => async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      if (init?.method === 'POST' && url.pathname === '/project/p/settings') {
+        return new Response(null, { status: answers.shift() ?? 500 })
+      }
+      throw new Error(`unexpected ${init?.method ?? 'GET'} ${url.pathname}`)
+    }
+    const argv = ['call', 'update_project_settings', '--json', JSON.stringify({ projectId: 'p', compiler: 'xelatex', imageName: 'texlive-full:2025.1' })]
+
+    const partly = await realRuntime({ fetcher: settings([204, 429]) })
+    const run = await cli(argv, { runtime: partly.runtime })
+    expect(run.exitCode).toBe(4)
+    expect(expectError(run)).toMatchObject({
+      code: 'RATE_LIMITED',
+      details: { applied: ['compiler'], failed: 'imageName' },
+    })
+    expect(partly.fetches).toEqual(['POST /project/p/settings', 'POST /project/p/settings'])
+
+    const none = await realRuntime({ fetcher: settings([429]) })
+    const refused = await cli(argv, { runtime: none.runtime })
+    expect(refused.exitCode).toBe(7)
+    expect(expectError(refused)).toMatchObject({ code: 'RATE_LIMITED', details: { applied: [], failed: 'compiler' } })
+    expect(none.fetches).toEqual(['POST /project/p/settings'])
+  })
+})
+
 describe('compile run --download', () => {
   test('prints the compile and the download, and downloads from the same build', async () => {
     const folder = await temporaryFolder()
@@ -668,6 +733,16 @@ function capabilities(run: CliRun) {
 }
 
 describe('capabilities', () => {
+  test('fails on an access policy every other command would refuse, without opening a session', async () => {
+    const missing = join(await temporaryFolder(), 'does-not-exist')
+    const run = await cli(['capabilities'], { env: { OVERLEAF_LOCAL_READ_ROOTS: missing } })
+    expect(run.exitCode).toBe(2)
+    expect(expectError(run).code).toBe('INVALID_ARGUMENT')
+    expect(run.createRuntime).not.toHaveBeenCalled()
+    const unsafe = await cli(['capabilities'], { env: { OVERLEAF_ALLOWED_PROJECTS: 'a/b' } })
+    expect(unsafe.exitCode).toBe(2)
+  })
+
   test('lists every operation without opening a session', async () => {
     const run = await cli(['capabilities'])
     expect(run.exitCode).toBe(0)
