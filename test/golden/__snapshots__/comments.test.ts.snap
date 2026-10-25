@@ -1,0 +1,116 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`set_comment_status golden results > recovers a ShareJS REST action that timed out 1`] = `
+{
+  "recoveredAfterTimeout": true,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoic2hhcmVqcyIsIm90VmVyc2lvbiI6NCwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > recovers a history-OT update whose otUpdateApplied never came 1`] = `
+{
+  "recoveredAfterTimeout": true,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6NSwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > recovers a history-OT update whose socket closed after it was sent 1`] = `
+{
+  "recoveredAfterTimeout": true,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6NSwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > recovers an acknowledged ShareJS REST action whose verification read failed 1`] = `
+{
+  "recoveredAfterTimeout": true,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoic2hhcmVqcyIsIm90VmVyc2lvbiI6NCwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > recovers an acknowledged history-OT update whose verification read failed 1`] = `
+{
+  "recoveredAfterTimeout": true,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6NSwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > reopens a resolved ShareJS comment through the REST action 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoic2hhcmVqcyIsIm90VmVyc2lvbiI6NCwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "open",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > reopens a resolved history-OT comment 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6NSwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "open",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > reports trackChangesActive from the project while the status change stays untracked 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6NSwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": true,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > resolves a ShareJS comment through the REST action 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoic2hhcmVqcyIsIm90VmVyc2lvbiI6NCwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > resolves a history-OT comment through an OT update 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6NSwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > resolves a history-OT comment whose anchored text was deleted 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6NSwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;

@@ -1,0 +1,171 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`create_file > an empty document 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoibmV3LWRvYy0xIiwicHJvdG9jb2wiOiJzaGFyZWpzIiwib3RWZXJzaW9uIjowLCJzaGEyNTYiOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`create_file > initial content recovered after a timeout 1`] = `
+{
+  "protocol": "sharejs",
+  "recoveredAfterTimeout": true,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoibmV3LWRvYy0xIiwicHJvdG9jb2wiOiJzaGFyZWpzIiwib3RWZXJzaW9uIjoxLCJzaGEyNTYiOiIzOWNkYjI2OGE2MDhlNTUzODAxMWYxZTI0MGMwZGI0NDk5NjM2YWY3Mjk5ZjU0YWM4NDM0ZDI1N2ZlYjU4OGE4In0",
+  "trackChangesActive": false,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`create_file > tracked initial content on a history-OT document with track changes on 1`] = `
+{
+  "protocol": "history-ot",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoibmV3LWRvYy0xIiwicHJvdG9jb2wiOiJoaXN0b3J5LW90Iiwib3RWZXJzaW9uIjoxLCJzaGEyNTYiOiIzOWNkYjI2OGE2MDhlNTUzODAxMWYxZTI0MGMwZGI0NDk5NjM2YWY3Mjk5ZjU0YWM4NDM0ZDI1N2ZlYjU4OGE4In0",
+  "trackChangesActive": true,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`create_file > untracked initial content on a ShareJS document 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoibmV3LWRvYy0xIiwicHJvdG9jb2wiOiJzaGFyZWpzIiwib3RWZXJzaW9uIjoxLCJzaGEyNTYiOiIzOWNkYjI2OGE2MDhlNTUzODAxMWYxZTI0MGMwZGI0NDk5NjM2YWY3Mjk5ZjU0YWM4NDM0ZDI1N2ZlYjU4OGE4In0",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`read_file > a ShareJS document 1`] = `
+{
+  "content": "First placeholder line.
+Second placeholder line.",
+  "newline": "LF",
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6IjRiNmIyOTRkM2I0Yjk4ZWYxYjEzMDM1NjA1ZDM5NmE2YWNkZWMxNDM0YjNiMGUxMzhlN2I4NjQ2YzMzMmU5YWEifQ",
+  "trackChangesActive": false,
+}
+`;
+
+exports[`read_file > a document in a project with track changes on 1`] = `
+{
+  "content": "Placeholder text.",
+  "newline": "LF",
+  "protocol": "history-ot",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjIsInNoYTI1NiI6Ijg1OTUzMWFhNzk2MDU2ZmE4ZmExMDg3ODZmZGQzOTFhM2RiZDEwYTE1ZjJmZGM3M2M1NmZlZDczYzcyYWM0NzkifQ",
+  "trackChangesActive": true,
+}
+`;
+
+exports[`read_file > a history-OT document, with a tracked deletion left out of content 1`] = `
+{
+  "content": "Kept text.",
+  "newline": "LF",
+  "protocol": "history-ot",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjEyLCJzaGEyNTYiOiJiMDdhNTViZmEwNzViZDcxN2ExNDA1OTYxYzZmZTE2MTBlODIyNmI0MmUyMGZkMzQxMDAyZDJmMjQzODhlNDQwIn0",
+  "trackChangesActive": false,
+}
+`;
+
+exports[`read_file > an empty document 1`] = `
+{
+  "content": "",
+  "newline": "LF",
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjAsInNoYTI1NiI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ",
+  "trackChangesActive": false,
+}
+`;
+
+exports[`write_file > content from a local file 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjQsInNoYTI1NiI6IjcyYzljNDdhOTYxOTVlY2FkMzY1MTg1NTJmYjM2ODY2NTdiZjJhYjQ1MmVmYzk4ZGM3M2UyNWQxYTIyMWI5YmQifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`write_file > emptying the document 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjEwLCJzaGEyNTYiOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`write_file > no-op tracked 1`] = `
+{
+  "protocol": "history-ot",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjQsInNoYTI1NiI6IjkxODE3MjhiNjExN2E0NDcyZTA0NTllMWUwMWQ1MjMzZjAxOTIxYTAwOTUxOTViOGZkZDM1MzMxNDdhZDUzZjcifQ",
+  "trackChangesActive": false,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`write_file > no-op untracked 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjQsInNoYTI1NiI6IjkxODE3MjhiNjExN2E0NDcyZTA0NTllMWUwMWQ1MjMzZjAxOTIxYTAwOTUxOTViOGZkZDM1MzMxNDdhZDUzZjcifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`write_file > recovered after a lost-socket once the update applied 1`] = `
+{
+  "protocol": "sharejs",
+  "recoveredAfterTimeout": true,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjQsInNoYTI1NiI6IjZhYjExYmFhYmY0MDUxMDhiMTBjNWU4MGEzZjM5ZGFlYTUzZTZlNDJiOTA4MzYxZDg0MTQwMzcxNmZkYmEwNzYifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`write_file > recovered after a timeout once the update applied 1`] = `
+{
+  "protocol": "sharejs",
+  "recoveredAfterTimeout": true,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjQsInNoYTI1NiI6IjZhYjExYmFhYmY0MDUxMDhiMTBjNWU4MGEzZjM5ZGFlYTUzZTZlNDJiOTA4MzYxZDg0MTQwMzcxNmZkYmEwNzYifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`write_file > tracked ShareJS 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjQsInNoYTI1NiI6IjZhYjExYmFhYmY0MDUxMDhiMTBjNWU4MGEzZjM5ZGFlYTUzZTZlNDJiOTA4MzYxZDg0MTQwMzcxNmZkYmEwNzYifQ",
+  "trackChangesActive": false,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`write_file > tracked history-OT 1`] = `
+{
+  "protocol": "history-ot",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjYsInNoYTI1NiI6IjVjN2I5NTZkNWFmMzNiY2M2ZGIyZDhmYWYyZDMzNWU4MjYwMjlhZWZjN2EzYzgwNDQyMTgzODZkYjQwZDFlZTIifQ",
+  "trackChangesActive": true,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`write_file > untracked ShareJS 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjQsInNoYTI1NiI6IjZhYjExYmFhYmY0MDUxMDhiMTBjNWU4MGEzZjM5ZGFlYTUzZTZlNDJiOTA4MzYxZDg0MTQwMzcxNmZkYmEwNzYifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`write_file > untracked history-OT 1`] = `
+{
+  "protocol": "history-ot",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjYsInNoYTI1NiI6IjVjN2I5NTZkNWFmMzNiY2M2ZGIyZDhmYWYyZDMzNWU4MjYwMjlhZWZjN2EzYzgwNDQyMTgzODZkYjQwZDFlZTIifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
