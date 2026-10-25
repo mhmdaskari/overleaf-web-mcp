@@ -1,12 +1,12 @@
 name: Download count
 
-# Once a week, sums the package's all-time npm downloads and publishes them as a shields.io
+# Once a day, sums the package's all-time npm downloads and publishes them as a shields.io
 # endpoint badge (npm-downloads.json) on the `badges` branch, which the README and the docs read.
 # The branch holds a single generated commit that each run replaces, so main never gets a commit
 # from this workflow, and the badge stays current on npmjs.com without a new release.
 on:
   schedule:
-    - cron: "23 6 * * 1" # Mondays, 06:23 UTC
+    - cron: "23 6 * * *" # Daily, 06:23 UTC
   workflow_dispatch:
 
 permissions:
