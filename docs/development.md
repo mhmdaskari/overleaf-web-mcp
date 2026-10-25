@@ -122,7 +122,7 @@ work on GitHub, npm, and the site alike.
 
 The npm count badge (labelled `installs`) in the README and on the site's home page reads `npm-downloads.json` from
 the `badges` branch through a shields.io endpoint badge. The `Download count` workflow
-(`.github/workflows/download-count.yml`) refreshes it every Monday and can be run by hand: it runs
+(`.github/workflows/download-count.yml`) refreshes it every day and can be run by hand: it runs
 `scripts/npm-downloads.ts`, which sums the package's all-time downloads from npm's downloads API,
 and replaces the branch's only commit when the number changed. npm cuts any range longer than 18
 months to its last 18 months without saying so, so the script asks for one year at a time from

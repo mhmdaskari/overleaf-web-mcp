@@ -5,7 +5,7 @@
  *
  * npm's downloads API answers a range longer than 18 months by silently cutting it to the last
  * 18 months, so the total is summed over one-year ranges from the day the package was created (or
- * from 2015-01-10, when npm's counts begin), and each answer must cover exactly the range asked for. The weekly `Download count` workflow
+ * from 2015-01-10, when npm's counts begin), and each answer must cover exactly the range asked for. The daily `Download count` workflow
  * runs this and publishes the file to the `badges` branch, which the README and docs badges read.
  */
 import { readFile, writeFile } from 'node:fs/promises'
