@@ -396,6 +396,75 @@ describe('download_compile_output', () => {
     expect(requests.at(-1)!.url.searchParams.get('clsiserverid')).toBe('clsi-1')
   })
 
+  describe('per-user compiles (Overleaf CE and Server Pro)', () => {
+    const PROJECT = '0123456789abcdef01234567'
+    const USER = '76543210fedcba9876543210'
+    const perUser = (path: string, project = PROJECT, user = USER, build = BUILD): Record<string, unknown> => ({
+      path,
+      type: path.split('.').at(-1),
+      build: BUILD,
+      url: `/project/${project}/user/${user}/build/${build}/output/${path}`,
+    })
+    const outputPaths = (requests: Array<{ url: URL }>): string[] =>
+      requests.map(request => request.url.pathname).filter(path => !path.endsWith('/compile'))
+
+    test('requests outputs under the user the compile response names, and returns neither url nor user', async () => {
+      const { api, requests } = harness({
+        compile: { status: 'success', outputFiles: [perUser('output.pdf'), perUser('output.log')], clsiServerId: 'clsi-1' },
+        files: { 'output.pdf': PDF, 'output.log': await fixture('clean.log') },
+      })
+      const result = await api.compileProject(PROJECT, 'main.tex')
+      expect(result.summary).toMatchObject({ builtCleanly: true, logRead: true })
+      expect(result.outputFiles).toEqual([
+        { path: 'output.pdf', type: 'pdf', build: BUILD },
+        { path: 'output.log', type: 'log', build: BUILD },
+      ])
+      expect(decodeBuildRef(result.buildRef!)).toMatchObject({ projectId: PROJECT, buildId: BUILD, userId: USER })
+
+      const dir = await mkdtemp(join(tmpdir(), 'compile-output-'))
+      await api.downloadCompileOutput(PROJECT, join(dir, 'paper.pdf'))
+      expect(outputPaths(requests)).toEqual([
+        `/project/${PROJECT}/user/${USER}/build/${BUILD}/output/output.log`,
+        `/project/${PROJECT}/user/${USER}/build/${BUILD}/output/output.pdf`,
+      ])
+      for (const request of requests) expect(request.url.origin).toBe('https://overleaf.test')
+      expect(requests.at(-1)!.url.searchParams.get('clsiserverid')).toBe('clsi-1')
+    })
+
+    test('a buildRef carries the user to a later process', async () => {
+      const first = harness({ compile: { status: 'timedout', outputFiles: [perUser('output.log')] } })
+      const error = await failure(() => first.api.compileProject(PROJECT, 'main.tex'))
+      const second = harness({ files: { 'output.log': await fixture('classic-errors.log') } })
+      await second.api.getCompileLog(PROJECT, { buildRef: error.details!.buildRef as string })
+      expect(outputPaths(second.requests)).toEqual([`/project/${PROJECT}/user/${USER}/build/${BUILD}/output/output.log`])
+    })
+
+    test.each([
+      ['another project', [perUser('output.log', 'fedcba9876543210fedcba98')]],
+      ['another build', [perUser('output.log', PROJECT, USER, '1a2b3c-4d5e6f')]],
+      ['another origin', [{ ...perUser('output.log'), url: `https://elsewhere.test/project/${PROJECT}/user/${USER}/build/${BUILD}/output/output.log` }]],
+      ['a malformed user', [{ ...perUser('output.log'), url: `/project/${PROJECT}/user/../build/${BUILD}/output/output.log` }]],
+      ['two different users', [perUser('output.log'), perUser('output.pdf', PROJECT, 'aaaaaaaaaaaaaaaaaaaaaaaa')]],
+    ])('a url naming %s is ignored, and the path stays the one without a user', async (_, outputFiles) => {
+      const { api, requests } = harness({
+        compile: { status: 'success', outputFiles },
+        files: { 'output.log': await fixture('clean.log') },
+      })
+      const result = await api.compileProject(PROJECT, 'main.tex')
+      expect(decodeBuildRef(result.buildRef!)).not.toHaveProperty('userId')
+      expect(outputPaths(requests)).toEqual([`/project/${PROJECT}/build/${BUILD}/output/output.log`])
+    })
+
+    test('a buildRef with a user that is not an ObjectId is INVALID_ARGUMENT', async () => {
+      const { api, fetcher } = harness()
+      for (const userId of ['../x', 'not-hex-not-hex-not-hex!', 'abc', 7]) {
+        const forged = Buffer.from(JSON.stringify({ format: 1, projectId: PROJECT, buildId: BUILD, userId })).toString('base64url')
+        await expect(api.getCompileLog(PROJECT, { buildRef: forged })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+      }
+      expect(fetcher).not.toHaveBeenCalled()
+    })
+  })
+
   test('refuses an unsafe file before any request', async () => {
     const { api, fetcher } = harness()
     for (const file of ['../x', '/etc/passwd', 'a/../b', 'a\\b', '']) {

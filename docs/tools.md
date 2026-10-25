@@ -854,7 +854,9 @@ Save a build's PDF, or another output file, to a local path on the server's disk
 
 `file` must be a relative path without `..`, `\`, or control characters, else `INVALID_ARGUMENT`
 before anything is requested. It is requested only from the project's own route,
-`/project/<projectId>/build/<buildId>/output/<file>`, never from a URL in Overleaf's response. An
+`/project/<projectId>/build/<buildId>/output/<file>` (with `/user/<userId>` after the project on a
+per-user compile, as Overleaf CE and Server Pro do by default), never from a URL in Overleaf's
+response. An
 existing `localPath` without `overwrite: true` is `CONFIRMATION_MISMATCH` and nothing is
 downloaded; a replacement is atomic, so a failed download leaves the old file. A `.pdf` that does
 not start with `%PDF-` is `PROTOCOL_UNSUPPORTED` and nothing is written. `NO_BUILD`, `NOT_FOUND`,

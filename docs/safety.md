@@ -213,8 +213,11 @@ in one call.
   A summary message is one error or warning line cut to 240 characters, never the source
   excerpt after `l.<n>`. `builtCleanly` is never `true` without a log that was read.
 - `download_compile_output` and `get_compile_log` request output only from
-  `/project/<projectId>/build/<buildId>/output/<file>`, with `file` checked to be a relative path
-  without `..` before any request; a URL from Overleaf's response is never followed.
+  `/project/<projectId>/build/<buildId>/output/<file>`, or
+  `/project/<projectId>/user/<userId>/build/<buildId>/output/<file>` for a per-user compile, with
+  `file` checked to be a relative path without `..` before any request; a URL from Overleaf's
+  response is never followed. Only a user ID of 24 hex digits is taken from it, when it names this
+  project and this build.
   `download_compile_output` replaces an existing local file only with `overwrite: true`, by an
   atomic rename. `get_compile_log` reads at most 1 MB.
 

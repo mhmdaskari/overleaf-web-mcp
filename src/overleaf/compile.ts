@@ -113,6 +113,14 @@ const COMPILE_STATUS_PATTERN = /^[a-z][a-z0-9-]{0,63}$/u
 /** Overleaf's own validation of these values, from its request schemas. */
 const BUILD_ID_PATTERN = /^[0-9a-f]{1,64}-[0-9a-f]{1,64}$/u
 const CLSI_SERVER_ID_PATTERN = /^[a-z0-9-]{1,128}$/u
+/** A Mongo ObjectId, as Overleaf uses for users. */
+const USER_ID_PATTERN = /^[0-9a-f]{24}$/u
+/**
+ * Overleaf CE and Server Pro compile per user by default and then serve outputs under
+ * /project/:id/user/:userId/build/:build/output/, a path the compile response names in each
+ * output file's url. That url is never requested; only the user ID is taken from it.
+ */
+const PER_USER_OUTPUT_URL = /^\/project\/([0-9a-f]{24})\/user\/([0-9a-f]{24})\/build\/([0-9a-f]{1,64}-[0-9a-f]{1,64})\/output\//u
 const OUTPUT_TYPE_PATTERN = /^[a-z0-9]{1,16}$/u
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/u
 const MAX_OUTPUT_PATH_LENGTH = 255
@@ -149,6 +157,8 @@ interface BuildRecord {
   projectId: string
   buildId: string
   clsiServerId?: string
+  /** The user a per-user compile serves this build's outputs for. */
+  userId?: string
   /** Every output path, when there were few enough to list. */
   files?: string[]
   /** BibTeX did not run for this build, so a listed output.blg or output.bbl is an earlier build's. */
@@ -181,16 +191,22 @@ function protocolError(raw: unknown): McpError {
 }
 
 /** Reduces Overleaf's response to what this server returns; nothing else of it goes further. */
-function validateResponse(raw: unknown): {
+function validateResponse(
+  raw: unknown,
+  projectId: string
+): {
   status: string
   outputFiles: CompileOutputFile[]
   stats: Record<string, number>
   clsiServerId?: string
+  outputUserId?: string
 } {
   if (!isRecord(raw) || typeof raw.status !== 'string') throw protocolError(raw)
   const listed = raw.outputFiles ?? []
   if (!Array.isArray(listed)) throw protocolError(raw)
   const outputFiles: CompileOutputFile[] = []
+  // Kept only while every output url that names a user names the same one.
+  const outputUserIds = new Set<string>()
   for (const file of listed) {
     if (!isRecord(file) || typeof file.path !== 'string') throw protocolError(raw)
     // A path this server would refuse to request is left out rather than passed on.
@@ -198,12 +214,12 @@ function validateResponse(raw: unknown): {
     const extension = /\.([a-z0-9]{1,16})$/u.exec(file.path)?.[1]
     const type =
       typeof file.type === 'string' && OUTPUT_TYPE_PATTERN.test(file.type) ? file.type : (extension ?? 'file')
-    outputFiles.push({
-      path: file.path,
-      type,
-      ...(typeof file.build === 'string' && BUILD_ID_PATTERN.test(file.build) ? { build: file.build } : {}),
-    })
+    const build = typeof file.build === 'string' && BUILD_ID_PATTERN.test(file.build) ? file.build : undefined
+    const perUser = typeof file.url === 'string' ? PER_USER_OUTPUT_URL.exec(file.url) : null
+    if (perUser?.[2] !== undefined && perUser[1] === projectId && perUser[3] === build) outputUserIds.add(perUser[2])
+    outputFiles.push({ path: file.path, type, ...(build === undefined ? {} : { build }) })
   }
+  const [outputUserId] = outputUserIds
   const stats: Record<string, number> = {}
   if (isRecord(raw.stats)) {
     for (const [key, value] of Object.entries(raw.stats)) {
@@ -217,6 +233,7 @@ function validateResponse(raw: unknown): {
     ...(typeof raw.clsiServerId === 'string' && CLSI_SERVER_ID_PATTERN.test(raw.clsiServerId)
       ? { clsiServerId: raw.clsiServerId }
       : {}),
+    ...(outputUserIds.size === 1 && outputUserId !== undefined ? { outputUserId } : {}),
   }
 }
 
@@ -235,6 +252,7 @@ export function decodeBuildRef(token: string): BuildRecord {
       !BUILD_ID_PATTERN.test(payload.buildId) ||
       (payload.clsiServerId !== undefined &&
         (typeof payload.clsiServerId !== 'string' || !CLSI_SERVER_ID_PATTERN.test(payload.clsiServerId))) ||
+      (payload.userId !== undefined && (typeof payload.userId !== 'string' || !USER_ID_PATTERN.test(payload.userId))) ||
       (payload.files !== undefined &&
         (!Array.isArray(payload.files) ||
           payload.files.length > MAX_LISTED_OUTPUTS ||
@@ -247,6 +265,7 @@ export function decodeBuildRef(token: string): BuildRecord {
       projectId: payload.projectId,
       buildId: payload.buildId,
       ...(payload.clsiServerId === undefined ? {} : { clsiServerId: payload.clsiServerId }),
+      ...(payload.userId === undefined ? {} : { userId: payload.userId }),
       ...(payload.files === undefined ? {} : { files: payload.files }),
       ...(payload.noBibliography === true ? { noBibliography: true } : {}),
     }
@@ -292,7 +311,8 @@ function statusError(status: string, rootFilePath: string, record: BuildRecord |
 
 function outputPath(record: BuildRecord, file: string): string {
   const encoded = file.split('/').map(segment => encodeURIComponent(segment)).join('/')
-  const path = `/project/${encodeURIComponent(record.projectId)}/build/${encodeURIComponent(record.buildId)}/output/${encoded}`
+  const user = record.userId === undefined ? '' : `/user/${encodeURIComponent(record.userId)}`
+  const path = `/project/${encodeURIComponent(record.projectId)}${user}/build/${encodeURIComponent(record.buildId)}/output/${encoded}`
   return record.clsiServerId === undefined ? path : `${path}?clsiserverid=${encodeURIComponent(record.clsiServerId)}`
 }
 
@@ -365,7 +385,7 @@ export class CompileApi {
     } catch (error) {
       throw this.#requestFailure(error, root.path)
     }
-    const response = validateResponse(raw)
+    const response = validateResponse(raw, projectId)
     const buildId = response.outputFiles.find(file => file.build !== undefined)?.build
     // Recorded before any throw, so a timed-out build's log stays reachable.
     const record = buildId === undefined ? undefined : this.#remember(projectId, buildId, response)
@@ -521,11 +541,16 @@ export class CompileApi {
     return error
   }
 
-  #remember(projectId: string, buildId: string, response: { outputFiles: CompileOutputFile[]; clsiServerId?: string }): BuildRecord {
+  #remember(
+    projectId: string,
+    buildId: string,
+    response: { outputFiles: CompileOutputFile[]; clsiServerId?: string; outputUserId?: string }
+  ): BuildRecord {
     const record: BuildRecord = {
       projectId,
       buildId,
       ...(response.clsiServerId === undefined ? {} : { clsiServerId: response.clsiServerId }),
+      ...(response.outputUserId === undefined ? {} : { userId: response.outputUserId }),
       ...(response.outputFiles.length <= MAX_LISTED_OUTPUTS ? { files: response.outputFiles.map(file => file.path) } : {}),
     }
     this.#latest.delete(projectId)
