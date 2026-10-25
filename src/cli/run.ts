@@ -95,16 +95,22 @@ function progressContext(io: CliIo, enabled: boolean): OperationContext {
 
 interface Run {
   /** The operation whose failure decides the exit code. */
-  operation?: OperationName
+  operation?: OperationName | undefined
 }
 
 async function withRuntime<T>(
   dependencies: CliDependencies,
+  run: Run,
   work: (runtime: CliRuntime) => Promise<T>
 ): Promise<T> {
   const config = readConfig(dependencies.env)
   const create = dependencies.createRuntime ?? (async (runtimeConfig: AppConfig) => await OverleafRuntime.create(runtimeConfig))
+  // Opening the session only reads (GET /project), so its failure exits as a read's would, even
+  // for a command that writes: nothing of the operation was sent yet.
+  const operation = run.operation
+  run.operation = 'auth_status'
   const runtime = await create(config)
+  run.operation = operation
   try {
     return await work(runtime)
   } finally {
@@ -137,7 +143,7 @@ async function runOperation(
         })
       : undefined
   const context = progressContext(io, command.progress)
-  const result = await withRuntime(dependencies, async runtime => {
+  const result = await withRuntime(dependencies, run, async runtime => {
     const service = createOverleafService(runtime)
     const call = service[command.tool] as (input: unknown, context: OperationContext) => Promise<unknown>
     const value = await call(input, context)
@@ -169,7 +175,7 @@ async function runCapabilities(projectId: string | undefined, io: CliIo, depende
     } else {
       // The lookup is the project listing list_projects reads, so its failures exit as that read's would.
       run.operation = 'list_projects'
-      const summary = await withRuntime(dependencies, async runtime => await runtime.account.findProject(projectId))
+      const summary = await withRuntime(dependencies, run, async runtime => await runtime.account.findProject(projectId))
       lookup = { projectId, summary }
     }
   }
