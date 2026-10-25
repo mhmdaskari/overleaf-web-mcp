@@ -166,4 +166,15 @@ describe('inline verbatim', () => {
     expect(titles('\\lstinline[language=TeX]{\\section{V}} \\section{B}')).toEqual(['B'])
     expect(titles('\\lstinline{50%} \\section{B}')).toEqual(['B'])
   })
+
+  test('reads a heading inside another heading title as part of that title', () => {
+    const source = '\\section{Outer \\section{Inner}}\nOuter body.\n\\section[Short \\section{S}]{Next}\nNext body.\n'
+    const sections = findSections(source)
+    expect(sections.map(section => section.title)).toEqual(['Outer \\section{Inner}', 'Next'])
+    for (const section of sections) expect(section.end).toBeGreaterThanOrEqual(section.bodyStart)
+    // The body is replaced exactly; nothing of the heading is written twice.
+    expect(replaceSection(source, sections[0]!.id, 'New body.\n')).toBe(
+      '\\section{Outer \\section{Inner}}\nNew body.\n\\section[Short \\section{S}]{Next}\nNext body.\n'
+    )
+  })
 })

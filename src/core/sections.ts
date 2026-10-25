@@ -145,6 +145,7 @@ export function findSections(input: string): LatexSection[] {
   const masked = maskIgnored(source)
   const candidates: Omit<LatexSection, 'index' | 'id' | 'end'>[] = []
   const commandPattern = new RegExp(String.raw`\\(${SECTION_COMMANDS.join('|')})(\*)?`, 'gu')
+  let previousHeadingEnd = 0
 
   for (const match of masked.matchAll(commandPattern)) {
     // The pattern's alternation names exactly the section commands.
@@ -152,6 +153,9 @@ export function findSections(input: string): LatexSection[] {
     const start = match.index
     // After an odd run, this backslash ends a `\\` line break, so the name that follows is text.
     if (backslashesBefore(masked, start) % 2 === 1) continue
+    // A heading inside another heading's title is part of that title, or the outer section would
+    // end before its own body starts.
+    if (start < previousHeadingEnd) continue
     let cursor = start + match[0].length
     cursor = skipWhitespace(masked, cursor)
     let shortTitle: string | undefined
@@ -164,6 +168,7 @@ export function findSections(input: string): LatexSection[] {
     if (!titleRange) continue
     const title = source.slice(cursor + 1, titleRange.end - 1)
     const headingEnd = titleRange.end
+    previousHeadingEnd = headingEnd
     const bodyStart = source[headingEnd] === '\n' ? headingEnd + 1 : headingEnd
     candidates.push({
       command,
