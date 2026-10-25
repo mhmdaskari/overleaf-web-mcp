@@ -49,7 +49,8 @@ same service, checks, and safety defaults as the MCP server. Every tool now decl
 - **`createOverleafClient`** in `overleaf-web-mcp/core`: one camelCase method per tool
   (`readFile`, `syncDirectory`, `authStatus()`), each resolving with the same object as the MCP
   `structuredContent`, typed by the tool's contract, and rejecting with `McpError` and the same
-  codes, plus `close()`. The [SDK page](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) names
+  codes, plus `close()`, which lets calls still running finish before it closes the project
+  connections. The [SDK page](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) names
   the stable surface of `overleaf-web-mcp/core`.
 - **Three Agent Skills** in the package's `skills/` folder, which drive the command line:
   `overleaf-revise-manuscript`, `overleaf-reviewer-comments`, and `overleaf-sync-sources`. They
