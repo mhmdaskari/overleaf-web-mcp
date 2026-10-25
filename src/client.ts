@@ -2,15 +2,15 @@ import { readConfig, type AppConfig } from './config.js'
 import type { OperationContext } from './contracts/context.js'
 import { OPERATION_NAMES, type OperationInput, type OperationName, type OperationOutput } from './contracts/operations.js'
 import { parseOperationInput } from './contracts/parse.js'
-import { McpError } from './core/errors.js'
+import { asMcpError, McpError } from './core/errors.js'
 import { OverleafRuntime, type RuntimeDependencies } from './runtime.js'
 import { createOverleafService } from './service/operations.js'
 
 /** `read_file` → `readFile`. */
 export type CamelCase<S extends string> = S extends `${infer Head}_${infer Tail}` ? `${Head}${Capitalize<CamelCase<Tail>>}` : S
 
-/** One operation as a client method: an operation without parameters may be called with none. */
-export type OperationMethod<N extends OperationName> = OperationInput<N> extends Record<string, never>
+/** One operation as a client method: one whose parameters are all optional may be called with none. */
+export type OperationMethod<N extends OperationName> = Record<string, never> extends OperationInput<N>
   ? (input?: OperationInput<N>, context?: OperationContext) => Promise<OperationOutput<N>>
   : (input: OperationInput<N>, context?: OperationContext) => Promise<OperationOutput<N>>
 
@@ -20,7 +20,10 @@ export type OperationMethod<N extends OperationName> = OperationInput<N> extends
  * and rejects with `McpError` and the same codes.
  */
 export type OverleafClient = { readonly [N in OperationName as CamelCase<N>]: OperationMethod<N> } & {
-  /** Closes the project sockets the client opened. A method called afterwards is refused. */
+  /**
+   * Waits for calls still running, then closes the project sockets the client opened. A method
+   * called once `close()` has been called is refused with `INVALID_ARGUMENT`.
+   */
   close(): Promise<void>
 }
 
@@ -52,22 +55,43 @@ function camelCase(name: string): string {
  * ```
  */
 export async function createOverleafClient(options: OverleafClientOptions = {}): Promise<OverleafClient> {
-  const runtime = await OverleafRuntime.create(options.config ?? readConfig(), options.dependencies)
+  let runtime: OverleafRuntime
+  try {
+    runtime = await OverleafRuntime.create(options.config ?? readConfig(), options.dependencies)
+  } catch (error) {
+    // Opening fails the way a method does: an unreadable cookie jar surfaces from Node as a plain Error.
+    throw asMcpError(error)
+  }
   const service = createOverleafService(runtime)
-  let closed = false
+  const running = new Set<Promise<unknown>>()
+  let closing: Promise<void> | undefined
   const client: Record<string, unknown> = {
     close: async () => {
-      if (closed) return
-      closed = true
-      await runtime.close()
+      // Calls still running finish first: closing a socket under a submitted write would force a
+      // recovery, and the recovery's fresh socket would outlive the close.
+      closing ??= Promise.allSettled(running).then(async () => {
+        try {
+          await runtime.close()
+        } catch (error) {
+          throw asMcpError(error)
+        }
+      })
+      await closing
     },
   }
   for (const name of OPERATION_NAMES) {
     const call = service[name] as (input: unknown, context?: OperationContext) => Promise<unknown>
     client[camelCase(name)] = async (input?: unknown, context?: OperationContext) => {
-      if (closed) throw new McpError('INVALID_ARGUMENT', 'This client is closed; create a new one.')
-      return await call(parseOperationInput(name, input ?? {}), context)
+      if (closing !== undefined) throw new McpError('INVALID_ARGUMENT', 'This client is closed; create a new one.')
+      // Only a missing input means none; null is refused like any other value that is not an object.
+      const pending = call(parseOperationInput(name, input === undefined ? {} : input), context)
+      running.add(pending)
+      try {
+        return await pending
+      } finally {
+        running.delete(pending)
+      }
     }
   }
-  return client as OverleafClient
+  return Object.freeze(client) as OverleafClient
 }
