@@ -38,6 +38,8 @@ interface ServerState {
   trackChanges: boolean
   outcome: Outcome
   failNextJoin: boolean
+  /** Each ShareJS REST status action Overleaf received, in order. */
+  restActions: string[]
 }
 
 function server(protocol: OtProtocol, overrides: Partial<ServerState> = {}): ServerState {
@@ -49,6 +51,7 @@ function server(protocol: OtProtocol, overrides: Partial<ServerState> = {}): Ser
     trackChanges: false,
     outcome: 'acknowledged',
     failNextJoin: false,
+    restActions: [],
     ...overrides,
   }
 }
@@ -160,6 +163,7 @@ async function withRuntime(
         if (method === 'GET' && url.pathname === `/project/${PROJECT}/threads`) return json(threadsReply(state))
         const action = statusPath.exec(url.pathname)?.[1]
         if (method === 'POST' && action !== undefined && state.protocol === 'sharejs') {
+          state.restActions.push(action)
           state.resolved = action === 'resolve'
           if (state.outcome === 'request-timeout') return await abortion(init?.signal)
           if (state.outcome === 'verification-read-fails') state.failNextJoin = true
@@ -251,6 +255,26 @@ describe('set_comment_status golden results', () => {
     const state = server('sharejs', { resolved: true })
     expectGolden('set_comment_status', await setStatus(state, 'open'))
     expect(state.resolved).toBe(false)
+  })
+
+  // Asking for the status a thread already has still sends the change and verifies the result.
+  test('resolves a history-OT comment that is already resolved', async () => {
+    const state = server('history-ot', { resolved: true })
+    const result = await setStatus(state, 'resolved')
+    expect(result).toMatchObject({ status: 'resolved' })
+    expect(result).not.toHaveProperty('recoveredAfterTimeout')
+    expectGolden('set_comment_status', result)
+    // The OT update was applied, so the returned revision is one version on.
+    expect(state).toMatchObject({ resolved: true, version: 5 })
+  })
+
+  test('reopens a ShareJS comment that is already open', async () => {
+    const state = server('sharejs')
+    const result = await setStatus(state, 'open')
+    expect(result).toMatchObject({ status: 'open' })
+    expect(result).not.toHaveProperty('recoveredAfterTimeout')
+    expectGolden('set_comment_status', result)
+    expect(state).toMatchObject({ resolved: false, version: 4, restActions: ['reopen'] })
   })
 
   test('recovers a history-OT update whose otUpdateApplied never came', async () => {

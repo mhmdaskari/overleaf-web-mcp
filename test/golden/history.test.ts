@@ -174,6 +174,47 @@ describe('monitor_project_history golden results', () => {
     expectGolden('monitor_project_history', result)
   })
 
+  test('a cursor inside a group: a label below it and a remove at it; a label without a display name; a kind-and-version origin', async () => {
+    const result = (await monitor(
+      {
+        updates: [
+          {
+            fromV: 20,
+            toV: 25,
+            meta: {
+              users: [user('user-1', 'Author', 'One')],
+              start_ts: 1_700_000_300_000,
+              end_ts: 1_700_000_360_000,
+              origin: { kind: 'history-resync', version: 19 },
+            },
+            labels: [
+              { id: 'label-below', comment: 'Below the cursor', version: 21, created_at: '2023-11-14T22:18:20.000Z', user_id: 'user-1' },
+            ],
+            pathnames: ['main.tex'],
+            project_ops: [
+              { atV: 23, add: { pathname: 'notes.tex' } },
+              { atV: 22, remove: { pathname: 'old.tex' } },
+              { atV: 21, rename: { pathname: 'draft.tex', newPathname: 'paper.tex' } },
+            ],
+          },
+        ],
+      },
+      22
+    )) as { updates: Array<Record<string, unknown>> }
+    const [group] = result.updates
+    // Only project operations are cut at the cursor: one at the cursor produced the next version, so it is new.
+    expect(group?.projectOperations).toEqual([
+      { type: 'add', atVersion: 23, path: 'notes.tex' },
+      { type: 'remove', atVersion: 22, path: 'old.tex' },
+    ])
+    // The contract cuts only project operations, so a label below the cursor is still listed.
+    expect(group?.labels).toEqual([
+      expect.objectContaining({ id: 'label-below', version: 21, userId: 'user-1', userDisplayName: null }),
+    ])
+    expect(group?.origin).toEqual({ kind: 'history-resync', version: 19 })
+    expectGolden('monitor_project_history', result)
+  })
+
   test('a cursor at the current version returns no updates', async () => {
     const result = await monitor({ updates: [restoredGroup, bridgedGroup] }, 10)
     expectGolden('monitor_project_history', result)

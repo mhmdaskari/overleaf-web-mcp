@@ -55,6 +55,16 @@ exports[`set_comment_status golden results > recovers an acknowledged history-OT
 }
 `;
 
+exports[`set_comment_status golden results > reopens a ShareJS comment that is already open 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoic2hhcmVqcyIsIm90VmVyc2lvbiI6NCwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "open",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
 exports[`set_comment_status golden results > reopens a resolved ShareJS comment through the REST action 1`] = `
 {
   "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoic2hhcmVqcyIsIm90VmVyc2lvbiI6NCwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
@@ -88,6 +98,16 @@ exports[`set_comment_status golden results > reports trackChangesActive from the
 exports[`set_comment_status golden results > resolves a ShareJS comment through the REST action 1`] = `
 {
   "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoic2hhcmVqcyIsIm90VmVyc2lvbiI6NCwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
+  "status": "resolved",
+  "threadId": "thread-a",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`set_comment_status golden results > resolves a history-OT comment that is already resolved 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1hIiwiZG9jSWQiOiJkb2MtYSIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6NSwic2hhMjU2IjoiNDVlZjkxN2Q1MGJmYTc5YzFmY2NjZDM5OGNjOTM4OGQzM2I5NGZkNWI0MGM3ZTUzNDQ1Y2IzMTBkMjFlYjQ3ZiJ9",
   "status": "resolved",
   "threadId": "thread-a",
   "trackChangesActive": false,

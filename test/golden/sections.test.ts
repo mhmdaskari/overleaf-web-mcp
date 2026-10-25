@@ -200,6 +200,22 @@ Old body.
 Second body.
 `
 
+/**
+ * Headings a parser can misread: an empty short title, two headings on one line, a command that
+ * only starts with \section, a heading inside another heading's title, and a final heading with no
+ * newline after it, which ends the document.
+ */
+const ADVERSARIAL = [
+  String.raw`\section[]{Empty Short}`,
+  'Short body.',
+  String.raw`\section{A}\section{B}`,
+  'B body.',
+  String.raw`\sectionmark{X}`,
+  String.raw`\section{Outer \section{Inner}}`,
+  'Outer body.',
+  String.raw`\section{Final}`,
+].join('\n')
+
 /** A history-OT snapshot whose tracked deletion hides a heading from the visible text. */
 const TRACKED_DELETION: HistorySnapshot = {
   content: '\\section{Kept}\nKept body.\n\\section{Deleted}\nGone.\n\\section{After}\nAfter body.\n',
@@ -240,6 +256,24 @@ describe('get_sections', () => {
     expectGolden('get_sections', result)
   })
 
+  test('adversarial headings', async () => {
+    const project = createProject({ 'main.tex': { protocol: 'sharejs', content: ADVERSARIAL } })
+    const result = (await withService(project, async service =>
+      await service.get_sections({ projectId: PROJECT, filePath: 'main.tex' })
+    )) as { sections: Array<{ title: string; shortTitle?: string; start: number; bodyStart: number; end: number }> }
+    const { sections } = result
+    // \sectionmark is not a heading, and the inner heading belongs to the outer title.
+    expect(sections.map(section => section.title)).toEqual(['Empty Short', 'A', 'B', String.raw`Outer \section{Inner}`, 'Final'])
+    expect(sections[0]).toHaveProperty('shortTitle', '')
+    for (const section of sections) expect(section.end).toBeGreaterThanOrEqual(section.bodyStart)
+    // A heading followed on its line by the next one has an empty body.
+    expect(sections[1]).toMatchObject({ end: sections[2]!.start })
+    expect(sections[1]!.bodyStart).toBe(sections[1]!.end)
+    // The final heading ends the document, so its body is empty and ends there too.
+    expect(sections[4]).toMatchObject({ bodyStart: ADVERSARIAL.length, end: ADVERSARIAL.length })
+    expectGolden('get_sections', result)
+  })
+
   test('a history-OT document whose tracked deletion hides a heading', async () => {
     const project = createProject({ 'paper.tex': { protocol: 'history-ot', snapshot: TRACKED_DELETION } })
     const result = await withService(project, async service =>
@@ -265,6 +299,19 @@ describe('get_section_content', () => {
       const { id } = await sectionId(service, 'main.tex', title)
       return await service.get_section_content({ projectId: PROJECT, filePath: 'main.tex', sectionId: id })
     })
+    expectGolden('get_section_content', result)
+  })
+
+  test.each([
+    ['adversarial headings: an empty short title', 'Empty Short', 'Short body.\n'],
+    ['adversarial headings: a final heading with no trailing newline', 'Final', ''],
+  ])('%s', async (_label, title, content) => {
+    const project = createProject({ 'main.tex': { protocol: 'sharejs', content: ADVERSARIAL } })
+    const result = await withService(project, async service => {
+      const { id } = await sectionId(service, 'main.tex', title)
+      return await service.get_section_content({ projectId: PROJECT, filePath: 'main.tex', sectionId: id })
+    })
+    expect(result).toMatchObject({ content })
     expectGolden('get_section_content', result)
   })
 

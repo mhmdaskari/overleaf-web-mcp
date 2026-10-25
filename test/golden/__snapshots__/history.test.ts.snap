@@ -60,6 +60,59 @@ exports[`monitor_project_history golden results > a cursor inside a group keeps 
 }
 `;
 
+exports[`monitor_project_history golden results > a cursor inside a group: a label below it and a remove at it; a label without a display name; a kind-and-version origin 1`] = `
+{
+  "currentVersion": 25,
+  "gapDetected": false,
+  "hasEarlierHistory": false,
+  "nextSinceVersion": 25,
+  "projectId": "p",
+  "updates": [
+    {
+      "authors": [
+        {
+          "displayName": "Author One",
+          "id": "user-1",
+        },
+      ],
+      "endedAt": "2023-11-14T22:19:20.000Z",
+      "fromVersion": 20,
+      "labels": [
+        {
+          "comment": "Below the cursor",
+          "createdAt": "2023-11-14T22:18:20.000Z",
+          "id": "label-below",
+          "userDisplayName": null,
+          "userId": "user-1",
+          "version": 21,
+        },
+      ],
+      "origin": {
+        "kind": "history-resync",
+        "version": 19,
+      },
+      "paths": [
+        "main.tex",
+      ],
+      "projectOperations": [
+        {
+          "atVersion": 23,
+          "path": "notes.tex",
+          "type": "add",
+        },
+        {
+          "atVersion": 22,
+          "path": "old.tex",
+          "type": "remove",
+        },
+      ],
+      "startedAt": "2023-11-14T22:18:20.000Z",
+      "toVersion": 25,
+    },
+  ],
+}
+`;
+
 exports[`monitor_project_history golden results > a cursor older than the returned window reports a gap 1`] = `
 {
   "currentVersion": 110,

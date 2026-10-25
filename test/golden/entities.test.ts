@@ -24,15 +24,17 @@ type ProjectSettings = Partial<
 >
 
 const PROJECT = 'project'
+/** The account id BOOTSTRAP_PAGE carries as ol-user_id. */
+const USER = 'user'
 const PLOT_BYTES = Buffer.from('placeholder image bytes')
 const PLOT_HASH = gitBlobHash(PLOT_BYTES)
 const MAIN_TEXT = '\\documentclass{article}\n\\begin{document}\nPlaceholder.\n\\end{document}\n'
 
 /**
- * Raw entities carry more than id, name, and hash on the wire; the extra keys here show the tree
- * is rebuilt key by key rather than passed through.
+ * Raw entities carry more than id, name, and hash on the wire, and a hash need not be a string;
+ * the extra keys here show the tree is rebuilt key by key rather than passed through.
  */
-function raw(entity: RawEntity & Record<string, unknown>): RawEntity {
+function raw(entity: { _id: string; name: string } & Record<string, unknown>): RawEntity {
   return entity
 }
 
@@ -115,6 +117,8 @@ async function goldenRuntime(rootFolder: RawFolder, settings: ProjectSettings = 
             protocolVersion: 2,
           },
           supportedProtocolVersions: [2],
+          // The runtime passes the bootstrap page's user id, so per-user track changes resolve as in production.
+          currentUserId: USER,
         }),
     }
   )
@@ -175,7 +179,48 @@ describe('get_project_tree golden results', () => {
       { rootDoc_id: 'doc-gone', compiler: '', imageName: '', spellCheckLanguage: '', trackChangesState: { 'user-other': true } }
     )
     try {
-      expectGolden('get_project_tree', await run(harness.service, 'get_project_tree', { projectId: PROJECT }))
+      const result = await run(harness.service, 'get_project_tree', { projectId: PROJECT })
+      // Track changes on for another collaborator only is off for this account.
+      expect(result).toMatchObject({ trackChangesActive: false })
+      expectGolden('get_project_tree', result)
+    } finally {
+      await harness.close()
+    }
+  })
+
+  test('track changes on for this account only', async () => {
+    const harness = await goldenRuntime(
+      { _id: 'folder-root', name: 'rootFolder', docs: [raw({ _id: 'doc-main', name: 'main.tex' })], fileRefs: [], folders: [] },
+      { trackChangesState: { [USER]: true, 'user-other': false, __guests__: false } }
+    )
+    try {
+      const result = await run(harness.service, 'get_project_tree', { projectId: PROJECT })
+      expect(result).toMatchObject({ trackChangesActive: true })
+      expectGolden('get_project_tree', result)
+    } finally {
+      await harness.close()
+    }
+  })
+
+  test('a binary file whose hash is null in the joined tree has no hash key', async () => {
+    const harness = await goldenRuntime({
+      _id: 'folder-root',
+      name: 'rootFolder',
+      docs: [],
+      fileRefs: [
+        raw({ _id: 'file-pending', name: 'pending.png', hash: null }),
+        raw({ _id: 'file-plot', name: 'plot.png', hash: PLOT_HASH }),
+      ],
+      folders: [],
+    })
+    try {
+      const result = (await run(harness.service, 'get_project_tree', { projectId: PROJECT })) as {
+        entities: Array<{ id: string }>
+      }
+      const byId = new Map(result.entities.map(entity => [entity.id, entity]))
+      expect(byId.get('file-pending')).not.toHaveProperty('hash')
+      expect(byId.get('file-plot')).toHaveProperty('hash', PLOT_HASH)
+      expectGolden('get_project_tree', result)
     } finally {
       await harness.close()
     }
@@ -263,6 +308,56 @@ describe('manage_entity golden results', () => {
         path: 'chapters/appendix',
         confirmPath: 'chapters/appendix',
       }))
+    } finally {
+      await harness.close()
+    }
+  })
+
+  // Overleaf's answer to a rename or delete is not part of the result: none of its keys, an
+  // address among them, may reach the caller.
+  test('delete a document whose response is a JSON body with extra keys', async () => {
+    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({
+      [`DELETE /project/${PROJECT}/doc/doc-proofs`]: json({
+        _id: 'doc-proofs',
+        deleted: true,
+        deletedBy: { id: 'user-other', email: 'collaborator@example.test' },
+        project: { name: 'Placeholder project' },
+      }),
+    }))
+    try {
+      const result = await run(harness.service, 'manage_entity', {
+        projectId: PROJECT,
+        action: 'delete',
+        path: 'chapters/appendix/proofs.tex',
+        confirmPath: 'chapters/appendix/proofs.tex',
+      })
+      expect(harness.requests).toEqual([`DELETE /project/${PROJECT}/doc/doc-proofs`])
+      expect(JSON.stringify(result)).not.toContain('example.test')
+      expectGolden('manage_entity', result)
+    } finally {
+      await harness.close()
+    }
+  })
+
+  test('rename a binary file whose response is a JSON body with extra keys', async () => {
+    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({
+      [`POST /project/${PROJECT}/file/file-data/rename`]: json({
+        _id: 'file-data',
+        name: 'values.csv',
+        rev: 3,
+        owner: { email: 'owner@example.test', first_name: 'Placeholder' },
+      }),
+    }))
+    try {
+      const result = await run(harness.service, 'manage_entity', {
+        projectId: PROJECT,
+        action: 'rename',
+        path: 'chapters/appendix/data.csv',
+        newName: 'values.csv',
+      })
+      expect(harness.requests).toEqual([`POST /project/${PROJECT}/file/file-data/rename`])
+      expect(JSON.stringify(result)).not.toContain('example.test')
+      expectGolden('manage_entity', result)
     } finally {
       await harness.close()
     }
