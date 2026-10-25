@@ -39,7 +39,7 @@ from v0.7.0, CLI commands and SDK methods are derived from them.
   declared next to its effects in the contract entry from v0.5.0 on, and checked against them.
   `readOnlyHint` means the call changes nothing on Overleaf **and** writes nothing locally. From
   v0.2.0 on, every **new** tool that returns structured data also declares an `outputSchema` and
-  returns `structuredContent`, mirrored as a JSON text block for older clients; v0.7.0 back-fills
+  returns `structuredContent`, mirrored as a JSON text block for older clients; v0.7.0 back-filled
   the rest, because the CLI and SDK return the same validated objects.
 - Bulk and sync tools are **compositions** of existing primitives (`upload_file`, `manage_entity`,
   `read_file` / `write_file`), never parallel reimplementations.
@@ -61,7 +61,7 @@ from v0.7.0, CLI commands and SDK methods are derived from them.
   naming the enforcing version, and a `deprecations` entry in the affected result), then enforced
   in the next minor under `Changed`. New interfaces start strict, with one exception:
   `overleaf-web-mcp/core` in v0.5.0 exposes the same service as the MCP server during the
-  announce minor, and v0.7.0 documents which parts of it are stable.
+  announce minor, and since v0.7.0 `docs/sdk.md` names the parts of it that are stable.
 
 ## Stages
 
@@ -73,14 +73,14 @@ from v0.7.0, CLI commands and SDK methods are derived from them.
 | v0.4.0 | Bulk and sync | 3, then 2 | shipped | 24 one-at-a-time calls to sync one folder |
 | v0.5.0 | Shared core and safety | 0 | shipped | Operations reachable only through MCP; safety that depends on the caller picking the safe option |
 | v0.6.0 | Compile and build ergonomics | 2 | shipped | Success inferred from counters; no PDF or log access. Also enforces the safety defaults v0.5.0 announced |
-| v0.7.0 | CLI, SDK, and Skills | 0 | L | Every Overleaf operation needs an MCP client |
+| v0.7.0 | CLI, SDK, and Skills | 0 | shipped | Every Overleaf operation needs an MCP client |
 | v0.8.0 | Tracked-change review: accept and reject | 2 | L | Tracked changes can be written but not listed, accepted, or rejected |
 | v0.9.0 | Multi-file documents | 1 | M | Section tools stop at `\input` boundaries |
 | v1.0.0 | Hardening and compatibility | 0 | M | Failure modes that are not yet legible; no way to check an install before relying on it |
 
 Effort is a relative size (S, M, L) of the work still open in a stage, not a date.
 
-**v0.1.3 shipped on 1 September 2026**, followed the same day by **v0.1.4**, a documentation release: a human-first README, the documentation site at <https://mhmdaskari.github.io/overleaf-web-mcp/>, and usage instructions sent to MCP clients at connect time. **v0.2.0 shipped on 10 September 2026** with the five project lifecycle tools, filtered `list_projects`, and the `RATE_LIMITED` and `CONFIRMATION_MISMATCH` error codes, followed the same day by **v0.2.1**, a documentation patch. **v0.3.0 shipped on 14 September 2026** with the `keepalive` command, `sessionExpiresAt` on `auth_status`, and a cookie-jar fix that persists the session deadline, followed on 22 September by **v0.3.1** (proxy support) and **v0.3.2** (documentation). **v0.4.0 shipped on 27 September 2026** with `plan_sync`, `sync_directory`, and `delete_entities`, ignore rules, progress notifications, and the `REMOTE_DRIFT` and `PATH_OUTSIDE_ROOT` error codes. **v0.4.1 shipped on 6 October 2026**, the stage's point release, with `batch_upload` and `download_project_zip`, the move to the v2 MCP SDK, and the documentation corrections planned for v0.5.0. **v0.5.0 shipped on 10 October 2026** with the operation registry under `src/contracts/`, `createOverleafService`, the `overleaf-web-mcp/core` export, the access policy and `POLICY_DENIED`, path-safe ids, sanitized error details, and the announced plan and replacement defaults that v0.6.0 enforces, followed on 12 October by **v0.5.1**, the MCP Registry listing. **v0.6.0 shipped on 19 October 2026** with a parsed compile `summary` and `builtCleanly`, `buildRef`, `get_compile_log`, `download_compile_output`, the compile output resources, five compile error codes, and the plan and replacement defaults enforced. See the [changelog](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/CHANGELOG.md) for what landed.
+**v0.1.3 shipped on 1 September 2026**, followed the same day by **v0.1.4**, a documentation release: a human-first README, the documentation site at <https://mhmdaskari.github.io/overleaf-web-mcp/>, and usage instructions sent to MCP clients at connect time. **v0.2.0 shipped on 10 September 2026** with the five project lifecycle tools, filtered `list_projects`, and the `RATE_LIMITED` and `CONFIRMATION_MISMATCH` error codes, followed the same day by **v0.2.1**, a documentation patch. **v0.3.0 shipped on 14 September 2026** with the `keepalive` command, `sessionExpiresAt` on `auth_status`, and a cookie-jar fix that persists the session deadline, followed on 22 September by **v0.3.1** (proxy support) and **v0.3.2** (documentation). **v0.4.0 shipped on 27 September 2026** with `plan_sync`, `sync_directory`, and `delete_entities`, ignore rules, progress notifications, and the `REMOTE_DRIFT` and `PATH_OUTSIDE_ROOT` error codes. **v0.4.1 shipped on 6 October 2026**, the stage's point release, with `batch_upload` and `download_project_zip`, the move to the v2 MCP SDK, and the documentation corrections planned for v0.5.0. **v0.5.0 shipped on 10 October 2026** with the operation registry under `src/contracts/`, `createOverleafService`, the `overleaf-web-mcp/core` export, the access policy and `POLICY_DENIED`, path-safe ids, sanitized error details, and the announced plan and replacement defaults that v0.6.0 enforces, followed on 12 October by **v0.5.1**, the MCP Registry listing. **v0.6.0 shipped on 19 October 2026** with a parsed compile `summary` and `builtCleanly`, `buildRef`, `get_compile_log`, `download_compile_output`, the compile output resources, five compile error codes, and the plan and replacement defaults enforced, followed on 20 October by **v0.6.1**, a README and dependency refresh, and **v0.6.2**, fixes from a live test run. **v0.7.0 shipped on 25 October 2026** with the command line (`call`, `schema`, `capabilities`, and shorthand commands, with exit codes that say what is safe to do next), `createOverleafClient` in `overleaf-web-mcp/core`, three Agent Skills, and an `outputSchema` on every tool. See the [changelog](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/CHANGELOG.md) for what landed.
 
 **The MCP SDK (v0.4.1):** the server moved from `@modelcontextprotocol/sdk` 1.29 to `@modelcontextprotocol/server` 2.3, the v2 SDK, and `serve` answers both protocol eras over stdio. Protocol 2026-07-28 removes the `initialize` handshake (each request carries its protocol version and client capabilities in `_meta`) and adds `server/discover`, which servers must implement and clients may call, and whose result carries the server instructions; clients on the 2025-era versions still receive them in the `initialize` result. A 2026-07-28 client that never calls `server/discover` never sees the instructions, so tool descriptions must stay self-sufficient. The existing tools' names, inputs, and result shapes did not change.
 
@@ -100,14 +100,14 @@ After v1.0.0 the server would register 34 tools (31 today, after the two the v0.
 
 ## Interfaces beyond MCP
 
-**Decision: keep MCP, with one engine behind several interfaces.** What this project offers is Overleaf operations that stay correct under concurrent editing: revision-checked writes verified against a fresh join, tracked writes that never fall back, timed-out writes observed and never replayed, and syncs that stop when either side drifted from the plan. None of that depends on MCP; access does. `parseCliCommand` (`src/cli-command.ts`) accepts only `serve`, `login`, `keepalive`, and `help`, and the package's one entry loads the MCP SDK and exposes the engine only as the undocumented `OverleafRuntime`, whose domain classes skip the tool handlers' argument shaping. A CI step or a shell-driven coding agent needs an MCP client to reach anything, and a TypeScript program has no supported API. MCP itself is still developing (protocol 2026-07-28 changed how clients connect), so the plan adds interfaces rather than swapping one.
+**Decision: keep MCP, with one engine behind several interfaces.** What this project offers is Overleaf operations that stay correct under concurrent editing: revision-checked writes verified against a fresh join, tracked writes that never fall back, timed-out writes observed and never replayed, and syncs that stop when either side drifted from the plan. None of that depends on MCP; access did. Until v0.5.0, `parseCliCommand` (`src/cli-command.ts`) accepted only `serve`, `login`, `keepalive`, and `help`, and the package's one entry loaded the MCP SDK and exposed the engine only as the undocumented `OverleafRuntime`, whose domain classes skip the tool handlers' argument shaping: a CI step or a shell-driven coding agent needed an MCP client to reach anything, and a TypeScript program had no supported API. v0.5.0 added `overleaf-web-mcp/core`, and v0.7.0 the command line and `createOverleafClient`. MCP itself is still developing (protocol 2026-07-28 changed how clients connect), so the plan adds interfaces rather than swapping one.
 
 **Two boundaries.** The caller-facing one (MCP, the CLI, the library, Skills, perhaps HTTP) decides how an operation is invoked, confirmed, and rendered, and is replaceable. The Overleaf-facing one, private REST routes and Socket.IO 0.9 OT through a saved web session (the [private API catalogue](https://mhmdaskari.github.io/overleaf-web-mcp/private-api/)), carries the maintenance risk, which only boundary validation, sanitized fixtures, `doctor` (v1.0.0), and a future official-API backend reduce.
 
 **Architecture.** Each layer calls only the one below it.
 
 - **Adapters.** `src/mcp/`; `src/cli/` (v0.7.0); `src/sdk.ts`, published as `overleaf-web-mcp/core` from v0.5.0 with a client facade from v0.7.0; Skills (v0.7.0), which call only the public CLI; HTTP only if a trigger below fires.
-- **Contracts and service (v0.5.0).** `src/contracts/` holds operation schemas, effects, error codes, and capability types. `src/service/` holds one function per operation with its argument shaping, and checks effects against the access policy in `src/core/policy.ts` before any work starts.
+- **Contracts and service (v0.5.0).** `src/contracts/` holds operation schemas, effects, error codes, and capability types. `src/service/` holds one function per operation with its argument shaping, and checks the project the call names against the access policy in `src/core/policy.ts` before any work starts; the domain engine checks each effect before the request that has it.
 - **Domain engine.** `src/overleaf/`, `src/protocol/`, `src/http/`, `src/auth/`. The domain APIs check every effect they perform against the same policy, so a direct call through the exported runtime is covered. Plan and apply stay in `SyncApi` (`src/overleaf/sync.ts`), with the per-project queue and every verification rule.
 - **Backends.** One today, the web session. An official-API or Git backend would advertise its own capabilities (v1.0.0) and never be substituted silently; a Git backend cannot make tracked changes or revision-checked live edits, and Overleaf's Git integration is paid.
 
@@ -139,7 +139,7 @@ After v1.0.0 the server would register 34 tools (31 today, after the two the v0.
 | Someone needs Git-based sync | An optional backend with its own capabilities, chosen explicitly | a recorded need |
 | The product becomes an agent other agents delegate to | Consider an agent-to-agent (A2A) interface | not planned |
 
-**How the change is judged.** v0.7.0 adds an opt-in comparison on disposable projects that runs four tasks through MCP, the CLI, and the library, and records per task:
+**How the change is judged.** v0.7.0 added an opt-in comparison on disposable projects that runs four tasks through MCP, the CLI, and the library, and records per task:
 
 - **revise one section:** success, bytes an agent reads, round trips, conflict outcome;
 - **sync figures and sources:** skips, upstream requests and bytes, drift, partial failure;
@@ -156,7 +156,7 @@ The code moves on between releases. Confirm the following before touching anythi
 what you find:
 
 - [ ] `npm view overleaf-web-mcp version` and `git tag` agree with `package.json` and
-      `SERVER_VERSION` in `src/version.ts`. Current release: `0.6.0`.
+      `SERVER_VERSION` in `src/version.ts`. Current release: `0.7.0`.
 - [ ] `TOOL_NAMES` in `src/mcp/tools.ts` lists the 31 registered tools: `auth_status`,
       `list_projects`, `create_project`, `clone_project`, `import_project_zip`, `manage_project`,
       `update_project_settings`, `get_project_tree`, `read_file`, `write_file`, `create_file`,
@@ -167,7 +167,8 @@ what you find:
       `set_comment_status`, `monitor_project_history`. The README badge and
       `docs/tools.md` must agree (`test/mcp/tools.test.ts` enforces it). Since v0.5.0, every name
       is an entry in the operation registry, `OPERATIONS` in `src/contracts/operations.ts`, and
-      `tools/list` matches `test/__snapshots__/list-tools.json`.
+      `tools/list` matches `test/__snapshots__/list-tools.json`. Since v0.7.0 every entry declares an
+      `outputSchema`, and the golden results under `test/golden/` still validate against it.
 - [ ] The MCP SDK is v2: `@modelcontextprotocol/server` 2.x in `dependencies`,
       `@modelcontextprotocol/client` 2.x in `devDependencies` (tests only),
       `npm ls @modelcontextprotocol/sdk` prints `(empty)`, and
@@ -179,7 +180,8 @@ what you find:
       `server/discover` results.
 - [ ] `SERVER_INSTRUCTIONS` stays under the 450-word bound in `test/server.test.ts` (444 words at
       0.4.0, 445 at 0.4.1, 392 at 0.5.0, which brought it under 400 once so v0.6.0 and v0.8.0 can
-      spend the headroom, 417 at 0.6.0); after that, a stage that adds guidance trims elsewhere.
+      spend the headroom, 417 at 0.6.0, 440 at 0.6.2 and 0.7.0); after that, a stage that adds
+      guidance trims elsewhere.
 - [ ] The limits and their environment variables still hold: `OVERLEAF_MAX_DOC_LENGTH` (fallback
       2,097,152 UTF-16 code units → `DOC_TOO_LARGE`) and `OVERLEAF_MAX_UPDATE_CHARS` (7,340,032
       serialized characters → `UPDATE_TOO_LARGE`).
@@ -192,7 +194,8 @@ what you find:
       Check it with `overwrite: true` (or `uncheckedDocumentReplace: true` for a document), which
       v0.6.0 requires.
 - [ ] `get_project_tree` `hash` equals `git hash-object <file>` for at least one binary entity.
-- [ ] The gated live tests (`RUN_OVERLEAF_LIVE_TESTS=1`, `test/live/`) and the CI workflows under
+- [ ] The gated live tests (`RUN_OVERLEAF_LIVE_TESTS=1`, `test/live/`, with
+      `RUN_OVERLEAF_LIVE_CLI_TESTS=1` and `RUN_OVERLEAF_LIVE_COMPARE_TESTS=1` since v0.7.0) and the CI workflows under
       `.github/workflows` (`ci.yml`, `publish.yml`, `docs.yml`, `download-count.yml`) are as
       described in `docs/development.md`. From v0.7.0, every command `renderHelp` prints appears
       in `docs/cli.md`.
@@ -749,42 +752,43 @@ get_compile_log({ projectId: string, buildRef?: string, kind?: "latex" | "bibtex
 
 ---
 
-## v0.7.0 — CLI, SDK, and Skills
+## v0.7.0 — CLI, SDK, and Skills (shipped)
 
-**Motivation:** the first complete Overleaf workflow that needs no MCP client. The command line reaches no operation today, and a TypeScript program has only the `./core` runtime. Since v0.5.0 every operation is one service function with one contract, so a CLI and an SDK are thin adapters, and multi-process use needs no new state, because revision tokens, plan tokens, and `buildRef` are self-contained. `keepalive` already shows the output convention (`main` in `src/cli.ts`). One gap remains: 17 tools at 0.4.0 return only a JSON text block (`handler()` in `src/mcp/tools.ts`); `upload_file` and `compile_project` gain an `outputSchema` in v0.5.0 and v0.6.0, `list_comments`, `reply_to_comment`, and `add_comment` in v0.6.2, and the other 12 gain one here.
+**Motivation:** the first complete Overleaf workflow that needs no MCP client. Before v0.7.0 the command line reached no operation, and a TypeScript program had only the `./core` runtime. Since v0.5.0 every operation is one service function with one contract, so a CLI and an SDK are thin adapters, and multi-process use needs no new state, because revision tokens, plan tokens, and `buildRef` are self-contained. `keepalive` already showed the output convention (`main` in `src/cli.ts`). One gap remained: 17 tools at 0.4.0 returned only a JSON text block; `upload_file` and `compile_project` gained an `outputSchema` in v0.5.0 and v0.6.0, `list_comments`, `reply_to_comment`, and `add_comment` in v0.6.2, and the other 12 in v0.7.0.
 
 **Design decisions:**
 
-- **One generic command, plus aliases.** `call <tool_name>` reaches every operation; aliases only build its input. Input is validated with the operation's contract, so defaults equal MCP's. An unknown key is refused (`INVALID_ARGUMENT`), because a misspelled `writeMode` would otherwise write untracked; whether MCP strips unknown keys depends on the SDK *(verify against the v2 SDK)*, and `docs/cli.md` states any difference.
+- **One generic command, plus aliases.** `call <tool_name>` reaches every operation; aliases only build its input. Input is validated with the operation's contract, so defaults equal MCP's. An unknown key is refused (`INVALID_ARGUMENT`), because a misspelled `writeMode` would otherwise write untracked. The v2 SDK parses MCP input with the zod schema, and `z.object` drops an unknown key without failing, so MCP silently falls back to the default; `docs/cli.md` states the difference.
 - **Output framing.** An operation command prints exactly one JSON value on stdout, the tool's `structuredContent`. On failure stdout stays empty and stderr gets one line of `{ code, message, retryable, details? }`, which may contain local paths the caller supplied. Progress goes to stderr as JSON lines only with `--progress`. `serve`, `login`, `keepalive`, and an unknown command keep their output and exit 1 on any failure.
 - **Exit codes say what is safe to do next.** The HTTP client marks every timeout `retryable: true`, uploads and deletes included, so the code depends on whether the operation is read-only and on `details.outcome`; a wrapper that re-runs on "retry later" must never resubmit a write that may have applied.
 - **Noninteractive and strict.** No browser, no terminal input, no confirm value supplied, no `--yes` or `--force`, no retry, and the defaults v0.6.0 enforced.
-- **Each invocation is a session.** Every run bootstraps `GET /project` and may open a project socket, so the account can appear online and a shell loop multiplies requests; neither the per-project queue nor the in-memory allowlist reaches across processes. `docs/cli.md` points loops at `sync_directory` and `delete_entities`.
+- **Each invocation is a session.** Every run bootstraps `GET /project` and may open a project socket, so the account can appear online and a shell loop multiplies requests; neither the per-project queue nor the in-memory allowlist reaches across processes. `docs/cli.md` points loops at `sync_directory`, `batch_upload`, and `delete_entities`.
 - **Build references cross processes explicitly.** `compile log` and `compile download` require `--build-ref`, since a new process has no latest build; `compile run --download` does both in one process.
 - **No document text in argv**, which process listings and shell history show: content goes through `--content-file`, `--stdin`, or `--request <file>`.
 - **The SDK is a client facade over the same service.** `createOverleafClient(options?)` returns one camelCase method per operation plus `close()`, generated from the registry; each returns the contract output as a plain object and throws `McpError` with the same codes.
-- **Output contracts for every tool.** Private pass-through fields (`list_comments` threads, the `thread` of `reply_to_comment` and `add_comment`) stay loose. Read-only operations validate their result at run time; mutating ones are only typed, because an error after a write applied invites a resubmission.
-- **Skills come after the CLI**: revise a manuscript, handle reviewer comments, sync figures and sources, each a folder with a `SKILL.md` *(verify the current Agent Skills format)*. They call only public CLI commands, duplicate no authentication or OT logic, and treat manuscript text and reviewer comments as data, never instructions.
+- **Output contracts for every tool.** Since v0.6.2 the comment tools rebuild their threads, so nothing stays loose. The service checks read-only results against their schema at run time; it only types mutating ones, because an error after a write applied invites a resubmission. The MCP SDK, though, validates every result it returns, writes included, so each schema must hold on every return path; golden results through the real domain classes pin that.
+- **Skills come after the CLI**: revise a manuscript, handle reviewer comments, sync figures and sources, each a folder with a `SKILL.md` in the open Agent Skills format (`name`, `description`, `license`, `compatibility`; no `allowed-tools`, so no destructive command is pre-approved). They call only public CLI commands, duplicate no authentication or OT logic, and treat manuscript text and reviewer comments as data, never instructions.
 
 ### Commands
 
 ```text
-overleaf-web-mcp call <tool_name> (--request <file> | --request - | --json '<object>') [--progress]
+overleaf-web-mcp call <tool_name> [--request <file> | --request - | --json <object>] [--progress]
 overleaf-web-mcp schema <tool_name> (--input | --output)
 overleaf-web-mcp capabilities [projectId]
 
-overleaf-web-mcp projects list [--query <q>] [--limit <n>]
+overleaf-web-mcp projects list [--query <q>] [--limit <n>] [--sort lastUpdated|name] [--include-archived] [--include-trashed]
 overleaf-web-mcp tree <projectId>
 overleaf-web-mcp files read <projectId> <path>
 overleaf-web-mcp files write <projectId> <path> --revision <r> (--content-file <f> | --stdin) [--tracked]
 overleaf-web-mcp files download <projectId> <path> <localPath> [--overwrite]
-overleaf-web-mcp sync plan <projectId> <localFolder> [--destination <path>] [--ignore <glob>]... [--verbose]
+overleaf-web-mcp sync plan <projectId> <localFolder> [--destination <path>] [--ignore <glob>]... [--verbose] [--progress]
 overleaf-web-mcp sync apply <projectId> <localFolder> --mode additive|mirror (--plan-token <t> | --unplanned)
-                 [--confirm-delete-count <n>] [--tracked] [--stop-on-error] [--progress]
-overleaf-web-mcp compile run <projectId> [--root <path>] [--download <localPath>] [--overwrite]
-overleaf-web-mcp compile log <projectId> --build-ref <r> [--tail <n>]
+                 [--destination <path>] [--ignore <glob>]... [--confirm-delete-count <n>] [--tracked]
+                 [--stop-on-error] [--progress]
+overleaf-web-mcp compile run <projectId> [--root <path>] [--draft] [--stop-on-first-error] [--download <localPath>] [--overwrite]
+overleaf-web-mcp compile log <projectId> --build-ref <r> [--tail <n>] [--kind latex|bibtex] [--errors-only]
 overleaf-web-mcp compile download <projectId> <localPath> --build-ref <r> [--file <f>] [--overwrite]
-overleaf-web-mcp comments list <projectId> [--status open|resolved|all] [--file <path>]
+overleaf-web-mcp comments list <projectId> [--status open|resolved|all] [--file <path>] [--author <a>]
 ```
 
 Every other operation is reached through `call`. Exit codes apply to operation commands only:
@@ -795,21 +799,21 @@ Every other operation is reached through `call`. Exit codes apply to operation c
 | 1 | Anything else | |
 | 2 | Fix the call | usage errors, `INVALID_ARGUMENT`, `CONFIRMATION_MISMATCH`, `PATH_OUTSIDE_ROOT` |
 | 3 | Not allowed or not available; do not retry | `AUTH_EXPIRED`, `PERMISSION_DENIED`, `POLICY_DENIED` |
-| 4 | Read or plan again, then decide | `REVISION_CONFLICT`, `REMOTE_DRIFT`, unless `details.outcome` is `unknown`; `TIMEOUT` with `details.outcome: "not_applied"` from an operation that is not read-only |
-| 5 | Outcome unknown; read before acting, never re-run blindly | `OUTCOME_UNKNOWN`; any error with `details.outcome: "unknown"`; `TIMEOUT` from an operation that is not read-only, unless `details.outcome` is `not_applied` (exit 4) |
+| 4 | Read or plan again, then decide | `REVISION_CONFLICT`, `REMOTE_DRIFT`; any error with `details.outcome: "not_applied"` from an operation that is not read-only, `TIMEOUT` included |
+| 5 | Outcome unknown; read before acting, never re-run blindly | `OUTCOME_UNKNOWN`; any error with `details.outcome: "unknown"`, which wins over every other rule; `TIMEOUT` from an operation that is not read-only, unless `details.outcome` is `not_applied` (exit 4) |
 | 6 | `status: "partial"`; the result is still on stdout | |
-| 7 | Safe to retry later | `RATE_LIMITED`, `COMPILE_RATE_LIMITED`, `COMPILE_UNAVAILABLE`, `TIMEOUT` from a read-only operation |
+| 7 | Safe to retry later | `RATE_LIMITED`, `COMPILE_RATE_LIMITED`, `COMPILE_UNAVAILABLE`; `TIMEOUT` or any other `retryable` error from a read-only operation |
 
 ### Tasks
 
-- [ ] **Output contracts** for the 12 remaining tools, with golden snapshots of their results taken first through the real domain classes over an injected fetcher and connection factory. Every tool registers through `structured()` with a byte-identical text block, and `handler()` goes. `errorCodeSchema` becomes `z.enum(ERROR_CODES)`; the narrower `createMcpServer` parameter type is listed under `Changed`.
-- [ ] **CLI.** `src/cli/parse.ts` on `node:util` `parseArgs`, delegating anything else to the untouched `parseCliCommand`; `call`, `schema`, `capabilities` (effects and annotations from the contract entry, error and exit codes; with a `projectId`, project-level fields, else `unknown`), the aliases, `src/cli/exit-codes.ts`, and `runtime.close()` in `finally`.
-- [ ] **Docs.** AGENTS.md and `docs/safety.md`: every command but `serve` and `help` prints exactly one JSON result. `docs/cli.md` in the `mkdocs.yml` nav: commands, request format, exit codes (never re-run on 5), no cross-process serialization or allowlist, presence and request volume, and the Skills. README: a "Without an MCP client" section and a lead sentence naming MCP, the CLI, and the SDK; `docs/install.md`: a CLI-only path.
-- [ ] **SDK.** `createOverleafClient` in `src/sdk.ts`; `docs/sdk.md` in the nav names the stable surface (`createOverleafClient`, `createOverleafService`, the contract types, `McpError`, `ERROR_CODES`, `readConfig`, `OverleafRuntime.create` and `close`), marks runtime fields and `connectionFactory` internal, and shows a minimal program.
-- [ ] **Skills** under `skills/`, using only commands `renderHelp` lists, and `skills` in `package.json` `files`; a test parses every command line in them and rejects any mention of `@modelcontextprotocol`, `src/`, or the cookie jar.
-- [ ] **Comparison.** `test/live/compare-interfaces.test.ts`, gated by `RUN_OVERLEAF_LIVE_TESTS=1` and `RUN_OVERLEAF_LIVE_COMPARE_TESTS=1` on a throwaway project it creates and trashes, runs the four tasks in **Interfaces beyond MCP** (review on comment threads) through a spawned `serve`, `node dist/cli.js`, and the SDK, and writes a JSON report of those metrics plus round trips, upstream requests and bytes, bytes an agent would read, and start-up versus Overleaf time, for a cold and a warm run of each task.
-- [ ] **Live CLI test** (`RUN_OVERLEAF_LIVE_TESTS=1` and `RUN_OVERLEAF_LIVE_CLI_TESTS=1`): `node dist/cli.js` alone, from `call create_project` through `files write`, `sync apply --plan-token`, and `compile run` to a trash of that throwaway project.
-- [ ] **CHANGELOG 0.7.0:** `Added` (commands, exit codes, `createOverleafClient`, Skills, 15 output schemas); `Changed` (`errorCode` enum, `createMcpServer` parameter type).
+- [x] **Output contracts** for the 12 remaining tools, with golden results taken first through the real domain classes over an injected fetcher and connection factory (`test/golden/`). Every tool registers with an `outputSchema` and a byte-identical text block, and the adapter's text-only branch is gone. `errorCodeSchema` became `z.enum(ERROR_CODES)`; the narrower runtime type of `createMcpServer` and `createOverleafService` is listed under `Changed`.
+- [x] **CLI.** `src/cli/parse.ts` on `node:util` `parseArgs`, delegating anything else to the untouched `parseCliCommand`; `call`, `schema`, `capabilities` (effects and annotations from the contract entry, error and exit codes; with a `projectId`, project-level fields, else `unknown`), the aliases, `src/cli/exit-codes.ts`, and `runtime.close()` in `finally`.
+- [x] **Docs.** AGENTS.md and `docs/safety.md`: every command but `serve` and `help` prints exactly one JSON result. `docs/cli.md` in the `mkdocs.yml` nav: commands, request format, exit codes (never re-run on 5), no cross-process serialization or allowlist, presence and request volume, and the Skills. README: a "Without an MCP client" section and a lead sentence naming MCP, the CLI, and the SDK; `docs/install.md`: a CLI-only path.
+- [x] **SDK.** `createOverleafClient` in `overleaf-web-mcp/core` (`src/client.ts`); `docs/sdk.md` in the nav names the stable surface (`createOverleafClient`, `createOverleafService`, the contract types, `McpError`, `ERROR_CODES`, `readConfig`, `OverleafRuntime.create` and `close`), marks runtime fields and `connectionFactory` internal, and shows a minimal program.
+- [x] **Skills** under `skills/`, using only commands `renderHelp` lists, and `skills` in `package.json` `files`; a test parses every command line in them and rejects any mention of `@modelcontextprotocol`, `src/`, or the cookie jar.
+- [x] **Comparison.** `test/live/compare-interfaces.test.ts`, gated by `RUN_OVERLEAF_LIVE_TESTS=1` and `RUN_OVERLEAF_LIVE_COMPARE_TESTS=1` on a throwaway project it creates and trashes, runs the four tasks in **Interfaces beyond MCP** (review on comment threads) through a spawned `serve`, `node dist/cli.js`, and the SDK, and writes a JSON report of those metrics plus round trips, upstream requests and bytes, bytes an agent would read, and start-up versus Overleaf time, for a cold and a warm run of each task.
+- [x] **Live CLI test** (`RUN_OVERLEAF_LIVE_TESTS=1` and `RUN_OVERLEAF_LIVE_CLI_TESTS=1`): `node dist/cli.js` alone, from `call create_project` through `files write`, `sync apply --plan-token`, and `compile run` to a trash of that throwaway project.
+- [x] **CHANGELOG 0.7.0:** `Added` (commands, exit codes, `createOverleafClient`, Skills, 12 output schemas); `Changed` (`errorCode` enum, the runtime parameter type, read-only result checks).
 
 ### Acceptance
 
@@ -820,10 +824,21 @@ Every other operation is reached through `call`. Exit codes apply to operation c
 - `files write` with a stale revision against the real `DocumentsApi` exits 4 with zero `submitUpdate` calls; `manage_entity` delete without `confirmPath` and mirror `sync apply` without `--confirm-delete-count` exit 2 with zero DELETE requests; an unknown request key exits 2 and never calls the service.
 - `captureBrowserSession` is never called by an operation command; stderr is empty after a successful `sync apply` without `--progress`; and across every CLI test stderr never contains a seeded cookie-jar value or a comment-body sentinel.
 - Parity: for every tool, MCP `structuredContent`, the MCP text block, CLI stdout, and the SDK return value are deep-equal, and an injected `McpError` gives an identical `{ code, message, retryable, details }` through all three. A real `PATH_OUTSIDE_ROOT` (`download_file` outside `OVERLEAF_LOCAL_WRITE_ROOTS`) and a real `POLICY_DENIED` (`OVERLEAF_ALLOWED_PROJECTS`) give the same error through all three with 0 fetches.
-- Every tool has an `outputSchema` its `structuredContent` validates against over the in-memory transport, `grep -n "handler(async" src/mcp/tools.ts` prints nothing, and the 15 golden result snapshots are unchanged.
+- Every tool has an `outputSchema` its `structuredContent` validates against over the in-memory transport, `grep -n "handler(async" src/mcp/tools.ts` prints nothing, and the 12 tools' golden results are unchanged.
 - `createOverleafClient` over injected fakes has a method per `TOOL_NAMES` entry, performs `readFile`, `writeFile` with the returned revision, and `close()`, and throws `McpError` with `REVISION_CONFLICT` on a stale revision.
 - `capabilities` lists every tool, reports `download_file` with a `local-write` effect, and without a `projectId` reports project-level fields as `unknown`; every `renderHelp` command appears in `docs/cli.md`.
 - `npm pack --dry-run` lists the three `SKILL.md` files, and the comparison, with its flags set, reports every task and interface with the same outcome through all three.
+
+**How the design settled (recorded while building 0.7.0).**
+
+- The aliases gained flags the plan left out because the contract already takes them: `--sort`, `--include-archived`, and `--include-trashed` on `projects list`; `--draft` and `--stop-on-first-error` on `compile run`; `--kind` and `--errors-only` on `compile log`; `--author` on `comments list`; and `--progress` on `sync plan`. `sync apply` takes `--destination` and `--ignore`, because a `planToken` is bound to the folder, the destination, and the ignore list. `call` without a request sends `{}`.
+- `files write --content-file` becomes `write_file`'s `localPath`, so the operation reads the file and `OVERLEAF_LOCAL_READ_ROOTS` applies; `--stdin` is decoded as UTF-8 like a file, a leading byte order mark dropped. A terminal on stdin is refused.
+- `compile run --download` prints `{ status, compile, download }`. When the download fails after the compile, the compile result stays on stdout with `status: "partial"`, `download: null`, and the download's error as `downloadError`, and the command exits 6, so the build reference the compile spent its allowance on is never lost.
+- Input is parsed strictly before any session opens, by one function the CLI and the SDK client share (`parseOperationInput` in `src/contracts/parse.ts`), so a refused call sends nothing, not even the bootstrap. Usage and parse messages name options and paths, never values.
+- Two exit rules extend the table: a write whose error says `details.outcome: "not_applied"`, such as `REMOTE_ERROR` after a lost socket (0.6.2), exits 4 like a stale revision; and any `retryable` failure of a read-only operation exits 7. `details.outcome: "unknown"` is checked first.
+- `capabilities` without a `projectId` opens no session. With one, the project lookup is the account's project list (one request), a project outside `OVERLEAF_ALLOWED_PROJECTS` is reported `allowedByPolicy: false` without a request, and each operation lists the `blockedEffects` the access policy refuses; an operation fails only when a call needs one of them.
+- `serve` imports the MCP server lazily, so no operation command loads the MCP SDK, and `src/cli/` writes through injected streams, so only `src/cli.ts` touches the process streams.
+- Typing the service by contract surfaced three gaps the SDK would have turned into failed calls: `upload_file`'s declared result admitted a skipped upload only `batch_upload` can produce, and three comment results declared `recoveredAfterTimeout` as a boolean; both were narrowed. Deriving the schemas found a tree `hash` passed through unvalidated and a heading nested in a heading title that made `write_section` write part of the heading twice; both were fixed.
 
 ---
 
@@ -1047,21 +1062,21 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 - **v0.9.0, multi-file (M), last before 1.0.** `\input` flattening is the most novel item and is self-contained, so it can slip without hurting the core zero-to-PDF story.
 - **v1.0.0, hardening and compatibility (M), last**, because `doctor`, backend capabilities, and the compatibility matrix describe every interface.
 - **Conditional interfaces are not stages.** An HTTP service (L), a Git backend, WebMCP, or A2A each needs a real consumer first; built speculatively, it adds a surface to keep safe without reducing the upstream risk.
-- **Annotations and `outputSchema` are not deferred to 1.0.** Every new tool ships with them, v0.7.0 back-fills the rest, and v1.0.0 adds only the cross-cutting protocol features (elicitation, resources, progress).
+- **Annotations and `outputSchema` are not deferred to 1.0.** Every new tool ships with them, v0.7.0 back-filled the rest, and v1.0.0 adds only the cross-cutting protocol features (elicitation, resources, progress).
 
 ## Competitive position this roadmap targets
 
-| Capability | v0.5.0 (today) | After roadmap | `olcli` | `@netique/overleaf-mcp` | Git-bridge MCPs |
+| Capability | v0.7.0 (today) | After roadmap | `olcli` | `@netique/overleaf-mcp` | Git-bridge MCPs |
 | --- | :---: | :---: | :---: | :---: | :---: |
 | Works on a free plan | ✅ | ✅ | ✅ | ✅ | ❌ (paid) |
 | Create / clone / import / rename / trash project, set root | ✅ | ✅ | create and rename only | ❌ | partial |
 | Filtered `list_projects` | ✅ | ✅ | ❌ (lists, no search) | ✅ | ❌ |
 | Dry-run diff + safe mirror sync + ignore rules | ✅ | ✅ (plan required since v0.6.0) | folder diff; rest re-check | ❌ | via git |
 | Typed compile summary + PDF/log download | ✅ v0.6.0 | ✅ v0.6.0 | compiles, no log; PDF re-check | summary + log, no PDF | varies |
-| Full workflow without an MCP client | ❌ | ✅ v0.7.0 (CLI and library) | ✅ (CLI) | re-check | via git |
+| Full workflow without an MCP client | ✅ v0.7.0 (CLI and library) | ✅ v0.7.0 (CLI and library) | ✅ (CLI and library) | ❌ (login only) | via git |
 | Tracked changes as suggestions | ✅ | ✅ | ❌ | ✅ | ❌ (bypassed) |
-| Accept or reject tracked changes | ❌ | ✅ v0.8.0 | ❌ | ✅ | ❌ |
+| Accept or reject tracked changes | ❌ | ✅ v0.8.0 | partial (accepts; rejects on ShareJS documents only, since 0.15.0) | ✅ | ❌ |
 | `\input`/`\include` flattening with source map | ❌ | ✅ v0.9.0 | re-check | ❌ | ❌ |
 | Comments + version history | ✅ | ✅ | comments only | comments only | git log |
 
-The differentiator: **autonomous zero-to-compiled-PDF on a free account, tracked-change- and revision-safe, with safe bulk sync, review decisions, and multi-file awareness, from an MCP client, a shell, or a TypeScript program.** No existing tool covers that combination. A command line alone is not the difference, since `olcli` already has one; the same revision, plan, and policy checks behind every interface are. Review decisions may need a paid plan on `www.overleaf.com` *(verify live)*; the zero-to-PDF workflow does not. Re-check competitors before each release; if a peer ships sync or PDF download first, lean harder on sync safety and `\input` flattening.
+The differentiator: **autonomous zero-to-compiled-PDF on a free account, tracked-change- and revision-safe, with safe bulk sync, review decisions, and multi-file awareness, from an MCP client, a shell, or a TypeScript program.** No existing tool covers that combination. A command line alone is not the difference, since `olcli` already has one; the same revision, plan, and policy checks behind every interface are. Review decisions may need a paid plan on `www.overleaf.com` *(verify live)*; the zero-to-PDF workflow does not. Re-check competitors before each release (last done on 25 October 2026 for v0.7.0: `olcli` 0.15 added tracked-change accept and a partial reject, which makes v0.8.0's history-ot reject a difference); if a peer ships sync or PDF download first, lean harder on sync safety and `\input` flattening.
