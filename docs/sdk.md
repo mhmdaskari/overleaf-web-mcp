@@ -88,7 +88,11 @@ would invite resubmitting it.
 
 Every method rejects with an `McpError`. It has `code`, one of `ERROR_CODES`; `message`;
 `retryable`; and optional `details`. `toJSON()` returns `{ code, message, retryable, details? }`,
-exactly what the MCP server and the command line report for the same failure. The
+exactly what the command line reports, and what the MCP server reports for any failure of the
+operation itself. Input the schema refuses is the exception: the MCP SDK checks it before the
+server runs the tool and answers with its own plain-text error, with no code or details, where the
+client and the command line report `INVALID_ARGUMENT` with `details.issues`, or
+`details.unknownKeys` for a key the schema does not list. The
 [safety model](safety.md#error-codes) lists the codes, and the command line's
 [exit codes](cli.md#exit-codes) are a good rule for deciding what to do next.
 

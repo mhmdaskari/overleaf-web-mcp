@@ -34,7 +34,10 @@ same service, checks, and safety defaults as the MCP server. Every tool now decl
   3 not allowed (`AUTH_EXPIRED`, `PERMISSION_DENIED`, `POLICY_DENIED`), 4 read or plan again, 5
   outcome unknown (a write may have applied: read before acting, never re-run it blindly), 6
   partial (the result is on stdout), and 7 safe to retry later. A `TIMEOUT` exits 7 from a
-  read-only tool and 5 from any other, because a timed-out write may have applied.
+  read-only tool or while the session is being opened, 4 from a write known not to have applied
+  (`details.outcome: "not_applied"`), and 5 from any other write, because a timed-out write may
+  have applied. An error that says part of a write applied (`details.created`, or a non-empty
+  `details.applied`) exits 4, never 2 or 7, which promise that nothing changed.
 - **Strict input.** The command line and the SDK client refuse a key the tool's schema does not
   list, at any depth, with `INVALID_ARGUMENT` and `details.unknownKeys`, before any request; a
   schema violation is `INVALID_ARGUMENT` with `details.issues`. The MCP server, through the MCP
@@ -48,14 +51,14 @@ same service, checks, and safety defaults as the MCP server. Every tool now decl
   when only the download failed. `--progress` writes progress as JSON lines on stderr.
 - **`createOverleafClient`** in `overleaf-web-mcp/core`: one camelCase method per tool
   (`readFile`, `syncDirectory`, `authStatus()`), each resolving with the same object as the MCP
-  `structuredContent`, typed by the tool's contract, and rejecting with `McpError` and the same
-  codes, plus `close()`, which lets calls still running finish before it closes the project
+  `structuredContent`, typed by the tool's contract, and rejecting with `McpError` and the codes
+  the command line reports, plus `close()`, which lets calls still running finish before it closes the project
   connections. The [SDK page](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) names
   the stable surface of `overleaf-web-mcp/core`.
 - **Three Agent Skills** in the package's `skills/` folder, which drive the command line:
   `overleaf-revise-manuscript`, `overleaf-reviewer-comments`, and `overleaf-sync-sources`. They
-  use only public commands, ask before anything destructive, and treat manuscript text and
-  reviewer comments as data, never instructions.
+  use only public commands, ask before anything destructive, treat manuscript text and reviewer
+  comments as data, never instructions, and keep project paths off the shell command line.
 - **Output schemas for the last 12 tools**: `get_project_tree`, `read_file`, `write_file`,
   `create_file`, `manage_entity`, `download_file`, `get_sections`, `get_section_content`,
   `write_section`, `stop_compile`, `set_comment_status`, and `monitor_project_history` declare an
@@ -75,8 +78,13 @@ same service, checks, and safety defaults as the MCP server. Every tool now decl
 - **`createMcpServer`, `serveOverStdio`, and `createOverleafService` take a narrower runtime
   type.** `OverleafServiceRuntime.authStatus`, `createFile`, and `entities.manageEntity` now
   declare the results the `auth_status`, `create_file`, and `manage_entity` contracts describe,
-  where they returned `Record<string, unknown>` or `unknown`, and `recoveredAfterTimeout` is
-  `true` where it was any boolean, so a hand-written runtime must return those shapes.
+  where they returned `Record<string, unknown>` or `unknown`; `recoveredAfterTimeout` is `true`
+  where it was any boolean; `sections.getSections` and `getSectionContent` return sections whose
+  `command` is one of `part`, `chapter`, `section`, `subsection`, `subsubsection`, `paragraph`,
+  or `subparagraph`, where it was any string; and `entities.uploadFile` has two overloads:
+  without `ifExists: "skip"` it resolves with an upload, never a skipped entry. A hand-written
+  runtime must return those shapes, and a caller that forwards `options` to `uploadFile` passes a
+  defined value.
 - **`set_comment_status` reports the status it verified**, not the string it was given; the two
   differ only for a library caller that passed something other than `open` or `resolved`.
 - The descriptions of `read_file`, `stop_compile`, and `monitor_project_history` now name the
@@ -88,6 +96,19 @@ same service, checks, and safety defaults as the MCP server. Every tool now decl
 
 ### Fixed
 
+- **A comment change is never reported as safe to retry after it was sent.** When the read-back
+  after a posted reply failed, `reply_to_comment` passed that read's error on, for example a
+  retryable `RATE_LIMITED`, and posting again duplicated the reply. It is now `OUTCOME_UNKNOWN`
+  with `details.threadId`, as is a failed read-back after `add_comment` timed out creating its
+  thread and after `set_comment_status` applied a change. When only the final read of the new
+  thread fails, `add_comment` returns its result without `thread`, as its description allows.
+- **A progress callback that throws never fails the call.** Progress is advisory, but a library
+  caller's `onProgress` that threw or rejected failed `batch_upload`, `plan_sync`,
+  `sync_directory`, or `delete_entities`, possibly after deletes or writes applied. The MCP server
+  already ignored failed progress notifications.
+- **Exactly one leading byte order mark is dropped** from a local file's text, as for
+  `write_file` with `localPath` and the files `plan_sync` and `sync_directory` compare. A
+  zero-width no-break space right after it was dropped too.
 - **`get_project_tree` reports `hash` only when it is a string.** A binary file whose `hash` in
   the joined project was `null` or another non-string value was listed with that value, which the
   new output schema, like the documentation, does not allow; the entity now has no `hash`.

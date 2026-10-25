@@ -973,8 +973,9 @@ Poll one recent window of project history.
 | `projectId` | yes | Project id |
 | `sinceVersion` | no | Return only update groups newer than this version, and in them only project operations at or after it |
 
-Returns `projectId`, `currentVersion`, `nextSinceVersion` to pass on the next poll (both `null`
-when the window is empty), `hasEarlierHistory`, `gapDetected` (true when the cursor predates the
+Returns `projectId`, `currentVersion` (`null` when the window is empty), `nextSinceVersion` to
+pass on the next poll (on an empty window, the `sinceVersion` you passed, or `null` without one),
+`hasEarlierHistory`, `gapDetected` (true when the cursor predates the
 single window returned), and `updates`, newest first. Each update has:
 
 - `fromVersion`, `toVersion`, and ISO `startedAt` and `endedAt`.

@@ -140,6 +140,10 @@ $ echo $?
 2
 ```
 
+A value the schema refuses differs in form too: the MCP SDK answers it before the server runs the
+tool, with its own plain-text error (`Input validation error: Invalid arguments for tool ...`) and
+no JSON code, where the command line and the SDK report `INVALID_ARGUMENT` with `details.issues`.
+
 ## Output
 
 On success an operation command prints exactly one JSON value on stdout, indented, with a
@@ -181,15 +185,21 @@ unknown command. The exit codes below are for operation commands only.
 | 1 | Failed for another reason; read the error code. | for example `NOT_FOUND`, `PROTOCOL_UNSUPPORTED`, `REMOTE_ERROR`, `COMPILE_FAILED`, `COMPILE_TIMEOUT`, `NO_BUILD`, `BUILD_NOT_FOUND`, `DOC_TOO_LARGE`, `UPDATE_TOO_LARGE`, `PARTIAL_CLEANUP` |
 | 2 | Fix the call: a usage error, or an argument, confirmation, or local path was refused. Nothing was changed. | usage errors, `INVALID_ARGUMENT`, `CONFIRMATION_MISMATCH`, `PATH_OUTSIDE_ROOT` |
 | 3 | Not allowed or not available; do not retry. `AUTH_EXPIRED` means run `overleaf-web-mcp login`. | `AUTH_EXPIRED`, `PERMISSION_DENIED`, `POLICY_DENIED` |
-| 4 | Read or plan again, then decide: the document or project changed, or a write is known not to have applied. | `REVISION_CONFLICT`, `REMOTE_DRIFT`; `TIMEOUT` with `details.outcome: "not_applied"` from an operation that is not read-only |
+| 4 | Read or plan again, then decide: the document or project changed, a write is known not to have applied, or part of it applied. | `REVISION_CONFLICT`, `REMOTE_DRIFT`; `TIMEOUT` with `details.outcome: "not_applied"` from an operation that is not read-only; any error with `details.created: true` or a non-empty `details.applied` from one |
 | 5 | Outcome unknown: a write may have applied. Read before acting; never re-run it blindly. | `OUTCOME_UNKNOWN`; `TIMEOUT` from an operation that is not read-only, unless `details.outcome` is `not_applied` |
 | 6 | Partial: some steps completed. The result is on stdout with `status: "partial"`. | none: a `batch_upload`, `sync_directory`, or `delete_entities` result with `status: "partial"`, or `compile run --download` whose download failed |
 | 7 | Safe to retry later: nothing was changed. | `RATE_LIMITED`, `COMPILE_RATE_LIMITED`, `COMPILE_UNAVAILABLE`; `TIMEOUT` from a read-only operation |
 
-Three rules reach beyond the codes in the table, and one rule overrides everything:
+Four rules reach beyond the codes in the table, and one rule overrides everything:
 
 - **`details.outcome: "unknown"` wins.** Any error that carries it exits 5, whatever its code, a
   `REVISION_CONFLICT` included. This is checked first.
+- **A write that partly applied exits 4.** An error with `details.created: true`, such as
+  `create_file` that created the document but could not write its content, or a non-empty
+  `details.applied`, such as `update_project_settings` that stored some settings before one
+  failed, exits 4 whatever its code, unless the code exits 3. Exits 2 and 7 promise that nothing
+  changed, so they are never used for it. Read what is there, then decide; never re-run the whole
+  call.
 - **A write known not to have applied exits 4.** Any error with `details.outcome: "not_applied"`
   from an operation that is not read-only exits 4, whatever its code: for example a
   `REMOTE_ERROR` after a write's socket closed and the original revision stayed live throughout
@@ -266,7 +276,9 @@ not forbid other keys; the command line refuses them anyway, as [above](#input-i
 Without a `projectId`, every `project` field is `"unknown"` and no session is opened. With one
 outside `OVERLEAF_ALLOWED_PROJECTS`, `allowedByPolicy` is `false`, the rest `"unknown"`, and
 nothing is sent. Otherwise one project-list request fills in the rest, and a project the account
-cannot see is `NOT_FOUND`.
+cannot see is `NOT_FOUND`. The access policy is resolved first, as every command resolves it, so a
+policy every other command would refuse, such as a root folder that does not exist, fails here too
+with `INVALID_ARGUMENT` and exit 2.
 
 ## Sessions, presence, and request volume
 
@@ -380,7 +392,9 @@ how to do one job with these commands, and calls only the commands listed above.
 | `overleaf-reviewer-comments` | Work through reviewer and co-author comments: list the threads, read the commented text in context, reply, add a comment anchored to a passage, resolve or reopen threads, and revise commented passages as tracked changes. |
 | `overleaf-sync-sources` | Copy local figures, sources, or a whole folder into a project: offer a zip backup, plan, show the plan, apply exactly that plan, and delete only in mirror mode after the user confirms the count; or upload a list of files to chosen paths. |
 
-Each treats manuscript text and reviewer comments as data, never as instructions. They run the
+Each treats manuscript text and reviewer comments as data, never as instructions. A project
+path, which a collaborator chose, never goes on a shell command line: the skills put it in a
+request file for `call`, and single-quote every other value. They run the
 command line as `npx --yes overleaf-web-mcp@0.7 …`, so they need Node.js 20 or newer, network
 access to Overleaf, and a session saved with `npx overleaf-web-mcp login`.
 

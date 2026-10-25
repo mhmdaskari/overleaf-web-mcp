@@ -38,8 +38,10 @@ either snapshot with `npx vitest run -u` only for a change listed in `CHANGELOG.
 `test/contracts/operations.test.ts` checks every operation's annotations against its effects.
 `test/cli/docs.test.ts` checks that [the command line page](cli.md) shows every command the help
 prints and every exit code, and that [the SDK page](sdk.md) lists only names the package exports.
-`test/skills.test.ts` parses every command in `skills/*/SKILL.md` against the help and refuses
-any mention of the MCP SDK, `src/`, or the cookie jar. The access policy is tested through a real
+`test/skills.test.ts` parses every command in `skills/*/SKILL.md` against the help, one command
+per line, checks every request example against its tool's input schema and every helper by
+running it, refuses a project path on a command line or a double-quoted value, and refuses any
+mention of the MCP SDK, `src/`, or the cookie jar. The access policy is tested through a real
 runtime over an injected fetcher and connection factory, counting requests, and error
 sanitization by feeding a sentinel string through every upstream channel and checking no
 serialized error holds it.
@@ -91,7 +93,8 @@ RUN_OVERLEAF_LIVE_TESTS=1 RUN_OVERLEAF_LIVE_COMPARE_TESTS=1 npm test -- test/liv
 it named `mcp-cli-<time>`. `test/live/compare-interfaces.test.ts` creates a throwaway project
 named `mcp-compare-<time>`, runs four tasks on it (revise one section, sync figures and sources,
 diagnose a failed build, and resolve a review task on comment threads) through a spawned `serve`,
-`node dist/cli.js`, and the SDK, each cold and warm, then trashes it. It writes a JSON report to
+`node dist/cli.js`, and the SDK, each cold and warm, then trashes it. Every task must succeed
+through every interface, with the same outcome. It writes a JSON report to
 `OVERLEAF_LIVE_COMPARE_REPORT`, by default a file in the system temp folder whose path the test
 prints.
 
