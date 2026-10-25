@@ -137,6 +137,34 @@ describe('createOverleafService', () => {
     const runtime = fakeRuntime()
     const onProgress = vi.fn(async () => undefined)
     await createOverleafService(runtime).plan_sync({ projectId: 'p', localFolderPath: '/w' }, { onProgress })
-    expect(runtime.sync.planSync).toHaveBeenCalledWith('p', '/w', expect.objectContaining({ onProgress }))
+    const forwarded = runtime.sync.planSync.mock.calls[0]?.[2].onProgress as (p: number, t: number, m: string) => Promise<void>
+    await forwarded(1, 2, 'Read 1 of 2 documents')
+    expect(onProgress).toHaveBeenCalledWith(1, 2, 'Read 1 of 2 documents')
+  })
+
+  test('a progress callback that throws never fails the call, which may already have applied', async () => {
+    const runtime = fakeRuntime()
+    runtime.sync.deleteEntities.mockImplementation(async (_projectId: string, _paths: string[], _count: number, options: {
+      onProgress?: (progress: number, total: number, message: string) => Promise<void>
+    }) => {
+      await options.onProgress?.(1, 1, 'Deleted 1 of 1')
+      return { status: 'complete', completed: [{ path: 'a.png', type: 'file', entityId: 'f' }], failed: [], remaining: [] }
+    })
+    const failing = [
+      vi.fn(async () => {
+        throw new Error('progress sink failed')
+      }),
+      vi.fn(() => {
+        throw new Error('progress sink failed')
+      }),
+    ]
+    for (const onProgress of failing) {
+      const result = await createOverleafService(runtime).delete_entities(
+        { projectId: 'p', paths: ['a.png'], confirmCount: 1 },
+        { onProgress }
+      )
+      expect(result.status).toBe('complete')
+      expect(onProgress).toHaveBeenCalledTimes(1)
+    }
   })
 })

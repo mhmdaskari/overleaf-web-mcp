@@ -1,4 +1,4 @@
-import type { OperationContext, OperationDiagnostic } from '../contracts/context.js'
+import type { OperationContext, OperationDiagnostic, ProgressReporter } from '../contracts/context.js'
 import { operationContract, type OperationInput, type OperationName, type OperationOutput } from '../contracts/operations.js'
 import type { OperationHandler, OverleafService, OverleafServiceRuntime } from '../contracts/service.js'
 import { asMcpError, McpError } from '../core/errors.js'
@@ -56,6 +56,21 @@ function checkReadResult(name: OperationName, result: unknown): void {
     `Overleaf answered ${name} in a shape this release does not understand; nothing was changed.`,
     { details: { kind: 'response_shape', paths: parsed.error.issues.slice(0, 5).map(issue => issue.path.join('.')) } }
   )
+}
+
+/**
+ * Progress is advisory: a reporter that throws or rejects never fails the call, which may already
+ * have applied a write by then.
+ */
+function guardProgress(onProgress: ProgressReporter | undefined): ProgressReporter | undefined {
+  if (onProgress === undefined) return undefined
+  return async (progress, total, message) => {
+    try {
+      await onProgress(progress, total, message)
+    } catch {
+      // The call's own result is what matters.
+    }
+  }
 }
 
 function notify(context: OperationContext, diagnostic: OperationDiagnostic): void {
@@ -161,7 +176,7 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
         onConflict: input.onConflict,
         uncheckedDocumentReplace: input.uncheckedDocumentReplace,
         stopOnError: input.stopOnError,
-        onProgress: context.onProgress,
+        onProgress: guardProgress(context.onProgress),
       })
     ),
     download_file: operation('download_file', async input =>
@@ -178,7 +193,7 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
         destinationFolderPath: input.destinationFolderPath,
         ignore: input.ignore,
         verbose: input.verbose,
-        onProgress: context.onProgress,
+        onProgress: guardProgress(context.onProgress),
       })
     ),
     sync_directory: operation('sync_directory', async (input, context) =>
@@ -191,13 +206,13 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
         ignore: input.ignore,
         writeMode: input.writeMode,
         stopOnError: input.stopOnError,
-        onProgress: context.onProgress,
+        onProgress: guardProgress(context.onProgress),
       })
     ),
     delete_entities: operation('delete_entities', async (input, context) =>
       await runtime.sync.deleteEntities(input.projectId, input.paths, input.confirmCount, {
         stopOnError: input.stopOnError,
-        onProgress: context.onProgress,
+        onProgress: guardProgress(context.onProgress),
       })
     ),
     get_sections: operation('get_sections', async input =>
