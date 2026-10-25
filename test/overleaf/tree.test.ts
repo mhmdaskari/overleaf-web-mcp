@@ -37,6 +37,20 @@ describe('project trees', () => {
     expect(() => resolveProjectPath(tree, '../main.tex')).toThrow(/invalid project path/u)
   })
 
+  test('leaves out a hash Overleaf sent as null, so get_project_tree still matches its schema', () => {
+    const tree = flattenProjectTree({
+      _id: 'root',
+      name: 'rootFolder',
+      fileRefs: [
+        { _id: 'old', name: 'old.png', hash: null as unknown as string },
+        { _id: 'new', name: 'new.png', hash: 'a'.repeat(40) },
+      ],
+    })
+
+    expect(tree.find(entity => entity.id === 'old')).not.toHaveProperty('hash')
+    expect(tree.find(entity => entity.id === 'new')).toHaveProperty('hash', 'a'.repeat(40))
+  })
+
   test('gives each nested folder the id of the folder that holds it', () => {
     const tree = flattenProjectTree({
       _id: 'root',
