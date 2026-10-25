@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { OPERATION_NAMES } from '../../src/contracts/operations.js'
 import { parseOperationInput, unknownKeys } from '../../src/contracts/parse.js'
+import { INPUTS } from '../helpers/operation-inputs.js'
 
 describe('strict operation input', () => {
   test('refuses a misspelled key instead of falling back to its default', () => {
@@ -61,6 +62,22 @@ describe('strict operation input', () => {
     expect((caught as Error).message).not.toContain(secret)
   })
 
+  test('reports a key named after an Object.prototype member as unknown, at any depth', () => {
+    for (const key of ['constructor', 'toString', 'hasOwnProperty']) {
+      expect(() => parseOperationInput('read_file', { projectId: 'p', filePath: 'f', [key]: 1 })).toThrow(
+        expect.objectContaining({ code: 'INVALID_ARGUMENT', details: { unknownKeys: [key] } })
+      )
+    }
+    const nested = { projectId: 'p', files: [{ localPath: '/a.png', destinationPath: 'a.png', toString: 1 }] }
+    expect(() => parseOperationInput('batch_upload', nested)).toThrow(
+      expect.objectContaining({ details: { unknownKeys: ['files.0.toString'] } })
+    )
+    const proto = JSON.parse('{"projectId":"p","filePath":"f","__proto__":{"x":1}}') as unknown
+    expect(() => parseOperationInput('read_file', proto)).toThrow(
+      expect.objectContaining({ code: 'INVALID_ARGUMENT', details: { unknownKeys: ['__proto__'] } })
+    )
+  })
+
   test('accepts every key of a loose object and of a record', () => {
     const schema = z.object({ known: z.object({}).loose(), map: z.record(z.string(), z.object({ a: z.number() })) })
     expect(unknownKeys(schema, { known: { anything: 1 }, map: { x: { a: 1, b: 2 } } })).toEqual(['map.x.b'])
@@ -79,14 +96,35 @@ describe('strict operation input', () => {
     expect(unknownKeys(schema, { operations: [{ type: 'add', path: 'a', newPath: 'b' }] })).toEqual(['operations.0.newPath'])
   })
 
-  test('parses every operation from its own minimal valid input without unknown keys', () => {
-    // Every operation's schema can be walked; an empty object has no unknown keys.
+  test('names an unknown key at every object position of every operation\'s valid input', () => {
+    const injected = 'zzUnknown'
+    const positions = new Set<string>()
     for (const name of OPERATION_NAMES) {
-      try {
-        parseOperationInput(name, {})
-      } catch (error) {
-        expect((error as { details?: { unknownKeys?: unknown } }).details?.unknownKeys, name).toBeUndefined()
+      for (const path of objectPaths(INPUTS[name])) {
+        positions.add(path)
+        // Copied as JSON, since INPUTS shares one object between add_comment's start and end.
+        const input = JSON.parse(JSON.stringify(INPUTS[name])) as Record<string, unknown>
+        objectAt(input, path)[injected] = 1
+        expect(() => parseOperationInput(name, input), `${name} at "${path}"`).toThrow(
+          expect.objectContaining({ code: 'INVALID_ARGUMENT', details: { unknownKeys: [`${path}${injected}`] } })
+        )
       }
     }
+    // The walk reaches nested objects, in arrays and out of them, not only the top level.
+    expect([...positions]).toEqual(expect.arrayContaining(['', 'files.0.', 'start.', 'end.']))
   })
 })
+
+/** The dotted path, ending in a dot, of the value's top-level object and every object inside it. */
+function objectPaths(value: unknown, path = ''): string[] {
+  if (Array.isArray(value)) return value.flatMap((item, index) => objectPaths(item, `${path}${index}.`))
+  if (typeof value !== 'object' || value === null) return []
+  return [path, ...Object.entries(value).flatMap(([key, item]) => objectPaths(item, `${path}${key}.`))]
+}
+
+function objectAt(value: Record<string, unknown>, path: string): Record<string, unknown> {
+  return path
+    .split('.')
+    .filter(key => key !== '')
+    .reduce<Record<string, unknown>>((object, key) => object[key] as Record<string, unknown>, value)
+}

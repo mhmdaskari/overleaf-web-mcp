@@ -120,12 +120,15 @@ function parseCapabilities(args: string[]): OperationCommand {
 export function parseCommandLine(argv: string[]): ParsedCommandLine {
   const first = argv[0]
   if (first === undefined || !OPERATION_COMMAND_WORDS.has(first)) return { kind: 'legacy' }
+  // --help or -h anywhere before a -- separator wins, even over an option the command does not take.
+  const end = argv.indexOf('--')
+  const head = end === -1 ? argv : argv.slice(0, end)
+  if (head.includes('--help') || head.includes('-h')) return { kind: 'help' }
   if (first === 'call') return parseCall(argv.slice(1))
   if (first === 'schema') return parseSchema(argv.slice(1))
   if (first === 'capabilities') return parseCapabilities(argv.slice(1))
   const alias = findAlias(argv)
   if (alias === undefined) {
-    if (argv.includes('--help') || argv.includes('-h')) return { kind: 'help' }
     const known = ALIASES.filter(candidate => candidate.words[0] === first).map(candidate => candidate.words.join(' '))
     throw usageError(`Unknown ${first} command; use one of: ${known.join(', ')}.`)
   }

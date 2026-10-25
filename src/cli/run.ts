@@ -8,7 +8,7 @@ import { parseOperationInput } from '../contracts/parse.js'
 import type { OverleafServiceRuntime } from '../contracts/service.js'
 import { asMcpError, McpError } from '../core/errors.js'
 import { decodeUtf8Text } from '../core/local-file.js'
-import { assertPathSafeId } from '../core/policy.js'
+import { AccessPolicy, assertPathSafeId } from '../core/policy.js'
 import type { AccountApi } from '../overleaf/account.js'
 import { OverleafRuntime } from '../runtime.js'
 import { createOverleafService } from '../service/operations.js'
@@ -167,6 +167,16 @@ async function runOperation(
 
 async function runCapabilities(projectId: string | undefined, io: CliIo, dependencies: CliDependencies, run: Run): Promise<number> {
   const config = readConfig(dependencies.env)
+  // The policy is resolved as every other command resolves it, local paths only, so a root that
+  // does not exist fails here too instead of being reported as configured.
+  await AccessPolicy.create({
+    allowedProjects: config.allowedProjects,
+    localReadRoots: config.localReadRoots,
+    localWriteRoots: config.localWriteRoots,
+    allowedEffects: config.allowedEffects,
+    cookieJarFile: config.cookieJarFile,
+    browserProfileDir: config.browserProfileDir,
+  })
   let lookup: ProjectLookup | undefined
   if (projectId !== undefined) {
     assertPathSafeId(projectId, 'projectId')

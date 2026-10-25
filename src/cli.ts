@@ -3,9 +3,10 @@
 import { runKeepaliveCommand } from './auth/keepalive-command.js'
 import { runLoginCommand } from './auth/login-command.js'
 import { runCommandLine, type CliIo } from './cli/run.js'
+import { readStdinStream } from './cli/stdin.js'
 import { parseCliCommand, renderHelp } from './cli-command.js'
 import { readConfig } from './config.js'
-import { asMcpError, McpError } from './core/errors.js'
+import { asMcpError } from './core/errors.js'
 import { OverleafRuntime } from './runtime.js'
 
 async function serve(): Promise<void> {
@@ -32,14 +33,7 @@ const processIo: CliIo = {
   stderr: text => {
     process.stderr.write(text)
   },
-  readStdin: async () => {
-    if (process.stdin.isTTY) {
-      throw new McpError('INVALID_ARGUMENT', 'stdin is a terminal; pipe the input in. Operation commands never wait for typed input.')
-    }
-    const chunks: Buffer[] = []
-    for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
-    return Buffer.concat(chunks)
-  },
+  readStdin: async () => await readStdinStream(process.stdin),
 }
 
 async function main(): Promise<void> {

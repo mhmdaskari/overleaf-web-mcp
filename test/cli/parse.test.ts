@@ -132,6 +132,10 @@ describe('CLI command line', () => {
       expect(parseCommandLine([...alias.words, '--help'])).toEqual({ kind: 'help' })
     }
     expect(parseCommandLine(['call', '--help'])).toEqual({ kind: 'help' })
+    // Help wins over an option the command does not take, or one missing its value.
+    expect(parseCommandLine(['call', 'read_file', '--bogus', '--help'])).toEqual({ kind: 'help' })
+    expect(parseCommandLine(['files', 'read', '--bogus', '-h'])).toEqual({ kind: 'help' })
+    expect(parseCommandLine(['files', 'write', 'p', 'm', '--revision', '--help'])).toEqual({ kind: 'help' })
     expect(parseCommandLine(['files', '-h'])).toEqual({ kind: 'help' })
   })
 })

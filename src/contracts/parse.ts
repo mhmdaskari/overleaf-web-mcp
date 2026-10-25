@@ -51,7 +51,8 @@ export function unknownKeys(schema: z.ZodType, value: unknown, path = ''): strin
       const shape = def.shape ?? {}
       const open = def.catchall !== undefined && definition(def.catchall).type !== 'never'
       return Object.entries(value).flatMap(([key, item]) => {
-        const field = shape[key]
+        // Own keys only, so a key such as constructor or __proto__ is unknown, not an inherited field.
+        const field = Object.hasOwn(shape, key) ? shape[key] : undefined
         if (field === undefined) return open ? [] : [`${path}${key}`]
         return unknownKeys(field, item, `${path}${key}.`)
       })
