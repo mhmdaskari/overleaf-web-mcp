@@ -5,7 +5,10 @@ All notable changes to this project are documented here. This project follows
 shapes, and the command line's commands and exit codes may change in a minor or patch release;
 each such change is listed below.
 
-## [Unreleased]
+## [0.7.1] - 2026-10-25
+
+Compile outputs on self-hosted Overleaf. No tool was added or removed, and no result shape
+changed; the server still registers 31 tools.
 
 ### Fixed
 
@@ -19,6 +22,13 @@ each such change is listed below.
   user. The path gains `/user/<userId>` then and is unchanged otherwise, as on overleaf.com.
   `buildRef` carries the user ID to a later process; an old `buildRef` without one still decodes,
   and one whose user ID is not 24 hex digits is `INVALID_ARGUMENT`. Result shapes are unchanged.
+  Contributed by [@chek1337](https://github.com/chek1337) in
+  [#21](https://github.com/mhmdaskari/overleaf-web-mcp/pull/21).
+
+### Documentation
+
+- The npm description and the README tagline lead with what the package does and name its three
+  interfaces: an MCP client, the command line, and TypeScript.
 
 ## [0.7.0] - 2026-10-25
 
@@ -1162,6 +1172,7 @@ still registers 19 tools. Planned in [ROADMAP.md](https://github.com/mhmdaskari/
 - First release: browser-assisted session capture, project and file management, revision-checked
   and section-level writing, compilation, and review comments.
 
+[0.7.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.7.1
 [0.7.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.7.0
 [0.6.2]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.6.2
 [0.6.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.6.1
