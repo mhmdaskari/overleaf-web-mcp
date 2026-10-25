@@ -426,6 +426,19 @@ export class CommentsApi {
         (this.#currentUserId === undefined ||
           mapAuthor(message.user_id, message.user)?.id === this.#currentUserId)
       )
+    // Once the reply was sent, a read-back that fails leaves its outcome unknown: a retryable
+    // error from that read would invite posting the reply twice.
+    const readBack = async (): Promise<ThreadData | undefined> => {
+      try {
+        return (await this.getThreads(projectId))[threadId]
+      } catch (error) {
+        throw new McpError(
+          'OUTCOME_UNKNOWN',
+          'The reply was sent but the thread could not be read back to confirm it. Do not retry it; list the comments first.',
+          { cause: error, details: { threadId } }
+        )
+      }
+    }
     try {
       await this.#http.postJson(`/project/${encodeURIComponent(projectId)}/thread/${encodeURIComponent(threadId)}/messages`, {
         content: normalized,
@@ -437,7 +450,7 @@ export class CommentsApi {
       // A timed-out POST is accepted only when author, content, and request window identify one reply.
       const matched = this.#currentUserId === undefined
         ? []
-        : created((await this.getThreads(projectId))[threadId]).filter(message => {
+        : created(await readBack()).filter(message => {
           const timestamp = new Date(message.timestamp ?? 0).getTime()
           return timestamp >= started - 1_000 && timestamp <= this.#now() + 60_000
         })
@@ -450,7 +463,7 @@ export class CommentsApi {
         { details: { threadId } }
       )
     }
-    const replies = created((await this.getThreads(projectId))[threadId])
+    const replies = created(await readBack())
     if (replies.length !== 1) {
       throw new McpError(
         'OUTCOME_UNKNOWN',
@@ -520,7 +533,11 @@ export class CommentsApi {
           if (!(error instanceof McpError) || !['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(error.code)) {
             throw asMcpError(error)
           }
-          const thread = (await this.getThreads(input.projectId))[threadId]
+          // A failed read-back cannot tell whether the thread was created, so it is not retryable either.
+          const thread = await this.getThreads(input.projectId).then(
+            threads => threads[threadId],
+            () => undefined
+          )
           const created = thread?.messages?.some(message => message.content === messageContent)
           if (!created) {
             throw new McpError('OUTCOME_UNKNOWN', 'Could not confirm creation of the comment thread.', {
@@ -688,7 +705,11 @@ export class CommentsApi {
       })
     }
 
-    const thread = (await this.getThreads(input.projectId))[threadId]
+    // The comment is attached and verified; a thread that cannot be read back is left out of the result.
+    const thread = await this.getThreads(input.projectId).then(
+      threads => threads[threadId],
+      () => undefined
+    )
     return {
       threadId,
       ...(thread === undefined ? {} : { thread: mapThread(threadId, thread) }),
@@ -855,7 +876,7 @@ export class CommentsApi {
         )
       }
       recoveredAfterTimeout = true
-    } else if (!(await this.#statusMatches(input.projectId, live, input.threadId, resolved))) {
+    } else if (!(await this.#statusMatches(input.projectId, live, input.threadId, resolved).catch(() => false))) {
       throw new McpError('OUTCOME_UNKNOWN', 'Could not verify the requested comment status.', {
         details: { threadId: input.threadId },
       })
