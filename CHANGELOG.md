@@ -1,8 +1,9 @@
 # Changelog
 
 All notable changes to this project are documented here. This project follows
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
-result shapes may change in a minor or patch release; each such change is listed below.
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas, result
+shapes, and the command line's commands and exit codes may change in a minor or patch release;
+each such change is listed below.
 
 ## [Unreleased]
 
@@ -18,6 +19,127 @@ result shapes may change in a minor or patch release; each such change is listed
   user. The path gains `/user/<userId>` then and is unchanged otherwise, as on overleaf.com.
   `buildRef` carries the user ID to a later process; an old `buildRef` without one still decodes,
   and one whose user ID is not 24 hex digits is `INVALID_ARGUMENT`. Result shapes are unchanged.
+
+## [0.7.0] - 2026-10-25
+
+The operations without an MCP client. A command line reaches every tool, `call <tool>` with a
+JSON request plus shorthand commands for the common ones, and prints one JSON result, with exit
+codes that say what is safe to do next. `overleaf-web-mcp/core` gains `createOverleafClient`, one
+typed method per tool, and three Agent Skills drive the command line. All three go through the
+same service, checks, and safety defaults as the MCP server. Every tool now declares an
+`outputSchema`. No tool was added or removed; the server still registers 31 tools. Planned in
+[ROADMAP.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/ROADMAP.md).
+
+### Added
+
+- **A command line for every operation.** `overleaf-web-mcp call <tool>` runs any tool with a
+  JSON request from `--request <file>`, `--request -` (stdin), or `--json <object>`, and prints
+  its result. `schema <tool> --input|--output` prints the JSON Schema `tools/list` advertises, and
+  `capabilities [projectId]` lists each operation's effects, annotations, the effects the access
+  policy refuses, the error codes, and the exit codes, with the project's access level when a
+  `projectId` is given. Shorthand commands build the input of the common tools: `projects list`,
+  `tree`, `files read`, `files write`, `files download`, `sync plan`, `sync apply`,
+  `compile run`, `compile log`, `compile download`, and `comments list`. `overleaf-web-mcp --help`
+  lists them all; the [command line page](https://mhmdaskari.github.io/overleaf-web-mcp/cli/)
+  documents them.
+- **One JSON result per command, and exit codes that say what is safe to do next.** A command
+  prints exactly one JSON value on stdout, the object the MCP server returns as
+  `structuredContent`. On failure stdout stays empty and stderr gets one line of
+  `{ code, message, retryable, details? }`. The exit code is 0 complete, 1 failed, 2 fix the call,
+  3 not allowed (`AUTH_EXPIRED`, `PERMISSION_DENIED`, `POLICY_DENIED`), 4 read or plan again, 5
+  outcome unknown (a write may have applied: read before acting, never re-run it blindly), 6
+  partial (the result is on stdout), and 7 safe to retry later. A `TIMEOUT` exits 7 from a
+  read-only tool or while the session is being opened, 4 from a write known not to have applied
+  (`details.outcome: "not_applied"`), and 5 from any other write, because a timed-out write may
+  have applied. An error that says part of a write applied (`details.created`, or a non-empty
+  `details.applied`) exits 4, never 2 or 7, which promise that nothing changed.
+- **Strict input.** The command line and the SDK client refuse a key the tool's schema does not
+  list, at any depth, with `INVALID_ARGUMENT` and `details.unknownKeys`, before any request; a
+  schema violation is `INVALID_ARGUMENT` with `details.issues`. The MCP server, through the MCP
+  SDK, still drops unknown keys silently, so a misspelled `writeMode` there falls back to
+  `untracked`.
+- **No document text in argv.** `files write` takes the text from `--content-file`, read by the
+  operation itself so `OVERLEAF_LOCAL_READ_ROOTS` applies, or from `--stdin`; `call` takes any
+  request from a file or stdin. `compile log` and `compile download` need `--build-ref`, since a
+  new process has no latest build; `compile run --download <localPath>` compiles and saves the
+  PDF in one process, and keeps the compile result on stdout with `status: "partial"` and exit 6
+  when only the download failed. `--progress` writes progress as JSON lines on stderr.
+- **`createOverleafClient`** in `overleaf-web-mcp/core`: one camelCase method per tool
+  (`readFile`, `syncDirectory`, `authStatus()`), each resolving with the same object as the MCP
+  `structuredContent`, typed by the tool's contract, and rejecting with `McpError` and the codes
+  the command line reports, plus `close()`, which lets calls still running finish before it closes the project
+  connections. The [SDK page](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) names
+  the stable surface of `overleaf-web-mcp/core`.
+- **Three Agent Skills** in the package's `skills/` folder, which drive the command line:
+  `overleaf-revise-manuscript`, `overleaf-reviewer-comments`, and `overleaf-sync-sources`. They
+  use only public commands, ask before anything destructive, treat manuscript text and reviewer
+  comments as data, never instructions, and keep project paths off the shell command line.
+- **Output schemas for the last 12 tools**: `get_project_tree`, `read_file`, `write_file`,
+  `create_file`, `manage_entity`, `download_file`, `get_sections`, `get_section_content`,
+  `write_section`, `stop_compile`, `set_comment_status`, and `monitor_project_history` declare an
+  `outputSchema` and return the same object as `structuredContent`, mirrored in the JSON text
+  block as before. Every tool now does. The shapes are the ones these tools already returned,
+  recorded first as golden results taken through the real domain classes.
+
+### Changed
+
+- **`errorCode` in the `failed` entries of `batch_upload`, `sync_directory`, and
+  `delete_entities` is an enum of the error codes** in their output schemas, where it was any
+  string.
+- **A read-only tool whose result does not match its output schema fails with
+  `PROTOCOL_UNSUPPORTED`** and `details: { kind: "response_shape", paths }`, the same way through
+  every interface. The MCP SDK used to report such a mismatch as an untyped text error. A tool that
+  changes something is never failed this way after the change applied.
+- **`createMcpServer`, `serveOverStdio`, and `createOverleafService` take a narrower runtime
+  type.** `OverleafServiceRuntime.authStatus`, `createFile`, and `entities.manageEntity` now
+  declare the results the `auth_status`, `create_file`, and `manage_entity` contracts describe,
+  where they returned `Record<string, unknown>` or `unknown`; `recoveredAfterTimeout` is `true`
+  where it was any boolean; `sections.getSections` and `getSectionContent` return sections whose
+  `command` is one of `part`, `chapter`, `section`, `subsection`, `subsubsection`, `paragraph`,
+  or `subparagraph`, where it was any string; and `entities.uploadFile` has two overloads:
+  without `ifExists: "skip"` it resolves with an upload, never a skipped entry. A hand-written
+  runtime must return those shapes, and a caller that forwards `options` to `uploadFile` passes a
+  defined value.
+- **`set_comment_status` reports the status it verified**, not the string it was given; the two
+  differ only for a library caller that passed something other than `open` or `resolved`.
+- The descriptions of `read_file`, `stop_compile`, and `monitor_project_history` now name the
+  fields they return, and those of `add_comment` and `set_comment_status` say that
+  `recoveredAfterTimeout` also marks a change confirmed after its read-back failed.
+
+- **`overleaf-web-mcp serve` loads the MCP SDK only when it runs**, so operation commands start
+  without it. `help`, `login`, `keepalive`, an unknown command, and `serve` behave as before.
+
+### Fixed
+
+- **A comment change is never reported as safe to retry after it was sent.** When the read-back
+  after a posted reply failed, `reply_to_comment` passed that read's error on, for example a
+  retryable `RATE_LIMITED`, and posting again duplicated the reply. It is now `OUTCOME_UNKNOWN`
+  with `details.threadId`, as is a failed read-back after `add_comment` timed out creating its
+  thread and after `set_comment_status` applied a change. When only the final read of the new
+  thread fails, `add_comment` returns its result without `thread`, as its description allows.
+- **A progress callback that throws never fails the call.** Progress is advisory, but a library
+  caller's `onProgress` that threw or rejected failed `batch_upload`, `plan_sync`,
+  `sync_directory`, or `delete_entities`, possibly after deletes or writes applied. The MCP server
+  already ignored failed progress notifications.
+- **Exactly one leading byte order mark is dropped** from a local file's text, as for
+  `write_file` with `localPath` and the files `plan_sync` and `sync_directory` compare. A
+  zero-width no-break space right after it was dropped too.
+- **`get_project_tree` reports `hash` only when it is a string.** A binary file whose `hash` in
+  the joined project was `null` or another non-string value was listed with that value, which the
+  new output schema, like the documentation, does not allow; the entity now has no `hash`.
+- **A heading inside another heading's title is part of that title.** For
+  `\section{Outer \section{Inner}}`, `get_sections` listed both, the outer section ending before
+  its own body started, and `write_section` on it wrote part of the heading a second time. Section
+  tools now read a heading inside a title or a short title as part of it.
+
+### Documentation
+
+- New pages for the [command line](https://mhmdaskari.github.io/overleaf-web-mcp/cli/) and the
+  [TypeScript SDK](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/). The README and the
+  installation guide describe using the package without an MCP client, the tool reference
+  documents the result of every tool, and the safety model and AGENTS.md state the output rule:
+  every command but `serve` and `help` prints exactly one JSON result.
+- The roadmap records v0.7.0 as shipped, with the commands and exit codes as built.
 
 ## [0.6.2] - 2026-10-20
 
@@ -1040,6 +1162,8 @@ still registers 19 tools. Planned in [ROADMAP.md](https://github.com/mhmdaskari/
 - First release: browser-assisted session capture, project and file management, revision-checked
   and section-level writing, compilation, and review comments.
 
+[0.7.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.7.0
+[0.6.2]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.6.2
 [0.6.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.6.1
 [0.6.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.6.0
 [0.5.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.5.1

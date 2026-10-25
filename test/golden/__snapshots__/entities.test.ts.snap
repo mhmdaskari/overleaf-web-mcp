@@ -1,0 +1,206 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`download_file golden results > a binary file replacing an existing local file with overwrite 1`] = `
+{
+  "bytes": 23,
+  "localPath": "<download-folder>/plot.png",
+}
+`;
+
+exports[`download_file golden results > a text document to a new local file 1`] = `
+{
+  "bytes": 69,
+  "localPath": "<download-folder>/main.tex",
+}
+`;
+
+exports[`get_project_tree golden results > a binary file whose hash is null in the joined tree has no hash key 1`] = `
+{
+  "entities": [
+    {
+      "id": "file-pending",
+      "name": "pending.png",
+      "parentFolderId": "folder-root",
+      "path": "pending.png",
+      "type": "file",
+    },
+    {
+      "hash": "555b33f8c5a4d3b1abff8b4393d9a2908cd43554",
+      "id": "file-plot",
+      "name": "plot.png",
+      "parentFolderId": "folder-root",
+      "path": "plot.png",
+      "type": "file",
+    },
+  ],
+  "hashNote": "hash is a git blob hash, sha1("blob " + byteLength + "\\0" + content), identical to \`git hash-object <file>\`. It is present only on binary file entities; doc entities have no hash.",
+  "trackChangesActive": false,
+}
+`;
+
+exports[`get_project_tree golden results > a nested tree with every project setting and track changes on 1`] = `
+{
+  "compiler": "xelatex",
+  "entities": [
+    {
+      "id": "doc-main",
+      "name": "main.tex",
+      "parentFolderId": "folder-root",
+      "path": "main.tex",
+      "type": "doc",
+    },
+    {
+      "hash": "555b33f8c5a4d3b1abff8b4393d9a2908cd43554",
+      "id": "file-plot",
+      "name": "plot.png",
+      "parentFolderId": "folder-root",
+      "path": "plot.png",
+      "type": "file",
+    },
+    {
+      "id": "folder-chapters",
+      "name": "chapters",
+      "parentFolderId": "folder-root",
+      "path": "chapters",
+      "type": "folder",
+    },
+    {
+      "id": "doc-intro",
+      "name": "intro.tex",
+      "parentFolderId": "folder-chapters",
+      "path": "chapters/intro.tex",
+      "type": "doc",
+    },
+    {
+      "id": "folder-appendix",
+      "name": "appendix",
+      "parentFolderId": "folder-chapters",
+      "path": "chapters/appendix",
+      "type": "folder",
+    },
+    {
+      "id": "doc-proofs",
+      "name": "proofs.tex",
+      "parentFolderId": "folder-appendix",
+      "path": "chapters/appendix/proofs.tex",
+      "type": "doc",
+    },
+    {
+      "hash": "cfa20f81071245f292f0b52b37beb7adf9259a26",
+      "id": "file-data",
+      "name": "data.csv",
+      "parentFolderId": "folder-appendix",
+      "path": "chapters/appendix/data.csv",
+      "type": "file",
+    },
+    {
+      "id": "folder-figures",
+      "name": "figures",
+      "parentFolderId": "folder-root",
+      "path": "figures",
+      "type": "folder",
+    },
+    {
+      "id": "file-legacy",
+      "name": "legacy.pdf",
+      "parentFolderId": "folder-figures",
+      "path": "figures/legacy.pdf",
+      "type": "file",
+    },
+  ],
+  "hashNote": "hash is a git blob hash, sha1("blob " + byteLength + "\\0" + content), identical to \`git hash-object <file>\`. It is present only on binary file entities; doc entities have no hash.",
+  "imageName": "texlive-full:2025.1",
+  "rootDocPath": "main.tex",
+  "spellCheckLanguage": "en",
+  "trackChangesActive": true,
+}
+`;
+
+exports[`get_project_tree golden results > an empty project with no settings, empty-string settings, and a root document that is gone 1`] = `
+{
+  "entities": [],
+  "hashNote": "hash is a git blob hash, sha1("blob " + byteLength + "\\0" + content), identical to \`git hash-object <file>\`. It is present only on binary file entities; doc entities have no hash.",
+  "trackChangesActive": false,
+}
+`;
+
+exports[`get_project_tree golden results > track changes on for this account only 1`] = `
+{
+  "entities": [
+    {
+      "id": "doc-main",
+      "name": "main.tex",
+      "parentFolderId": "folder-root",
+      "path": "main.tex",
+      "type": "doc",
+    },
+  ],
+  "hashNote": "hash is a git blob hash, sha1("blob " + byteLength + "\\0" + content), identical to \`git hash-object <file>\`. It is present only on binary file entities; doc entities have no hash.",
+  "trackChangesActive": true,
+}
+`;
+
+exports[`manage_entity golden results > create_folder when Overleaf answers without the folder 1`] = `
+{
+  "action": "create_folder",
+  "trackChangesActive": true,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`manage_entity golden results > create_folder, reducing the folder Overleaf returns to its id and name 1`] = `
+{
+  "action": "create_folder",
+  "created": {
+    "_id": "folder-tables",
+    "name": "tables",
+  },
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`manage_entity golden results > delete a document whose response is a JSON body with extra keys 1`] = `
+{
+  "action": "delete",
+  "id": "doc-proofs",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`manage_entity golden results > delete a folder 1`] = `
+{
+  "action": "delete",
+  "id": "folder-appendix",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`manage_entity golden results > move a binary file, with track changes on 1`] = `
+{
+  "action": "move",
+  "id": "file-plot",
+  "trackChangesActive": true,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`manage_entity golden results > rename a binary file whose response is a JSON body with extra keys 1`] = `
+{
+  "action": "rename",
+  "id": "file-data",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`manage_entity golden results > rename a document 1`] = `
+{
+  "action": "rename",
+  "id": "doc-intro",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;

@@ -1,8 +1,10 @@
 # Using it
 
-You do not call tools yourself. You describe what you want, and the assistant chooses tools and
-sequences them. This page shows what to ask for and what happens underneath, so you can predict
-and check the assistant's behaviour.
+Through an assistant, you do not call tools yourself. You describe what you want, and the
+assistant chooses tools and sequences them. This page shows what to ask for and what happens
+underneath, so you can predict and check the assistant's behaviour. From a shell or a program you
+can call the same operations directly, with the [command line](cli.md) or the
+[TypeScript SDK](sdk.md).
 
 ## Example prompts
 
@@ -64,7 +66,8 @@ and check the assistant's behaviour.
 
 ### From nothing to a compiled PDF
 
-Everything below happens through MCP tools; no step needs the web UI.
+Everything below happens through MCP tools, or the same operations as commands and SDK methods;
+no step needs the web UI.
 
 1. `create_project` with a name returns `projectId`, `url`, and `rootDocPath: "main.tex"`, the
    stub Overleaf puts in every blank project. `import_project_zip` does the same from a local
@@ -200,7 +203,10 @@ so `summary.builtCleanly` is the answer to "did it build?".
 For more context, `get_compile_log` returns the end of the LaTeX log, or only its error lines,
 without compiling again, and `download_compile_output` saves the PDF, or any other output such as
 `output.synctex.gz`, to a local path. Both take the `buildRef` and default to the latest build in
-this server process. `stopOnFirstError` gives a short log with the one error that matters, and
+this process. Each command line call is a new process with no latest build, so there
+`compile log` and `compile download` require `--build-ref`, `call get_compile_log` without a
+`buildRef` fails with `NO_BUILD`, and `compile run --download` compiles and saves the PDF in one
+process. `stopOnFirstError` gives a short log with the one error that matters, and
 `draft` skips images for faster text-only builds. `stop_compile` stops a running build. Compiles
 use your account's compile allowance, so the assistant should read the summary rather than
 compile in a loop.
@@ -221,3 +227,11 @@ Call `monitor_project_history` without a cursor to establish the current window,
 returned `nextSinceVersion` on later polls. Only update groups newer than the cursor come back.
 If `gapDetected` is true, the cursor predates the single window returned; the tool does not page
 backward or compute diffs.
+
+### From a shell
+
+The same workflows run as commands, each printing one JSON result: `files read`, then
+`files write` with the `revision` it returned; `sync plan`, then `sync apply` with the plan's
+`planToken`; `compile run`, then `compile log` with its `buildRef`. The
+[command line guide](cli.md#examples) shows each one, and its exit codes say whether to read
+again, plan again, or wait.

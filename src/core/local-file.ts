@@ -15,7 +15,8 @@ export interface TextContentSource {
 export function decodeUtf8Text(bytes: Uint8Array): string | undefined {
   let decoded: string
   try {
-    decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    // ignoreBOM keeps the decoder from dropping a byte order mark itself, so exactly one is removed below.
+    decoded = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
   } catch {
     return undefined
   }

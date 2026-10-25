@@ -1,0 +1,83 @@
+import type { AppConfig } from '../config.js'
+import type { Effect } from '../contracts/effects.js'
+import { ERROR_CODES } from '../contracts/error-codes.js'
+import { OPERATION_NAMES, OPERATIONS, type OperationAnnotations } from '../contracts/operations.js'
+import type { ProjectSummary } from '../overleaf/account.js'
+import { SERVER_VERSION } from '../version.js'
+import { ALIASES } from './commands.js'
+import { EXIT_CODES } from './exit-codes.js'
+
+type Unknown = 'unknown'
+
+export interface CapabilitiesReport {
+  version: string
+  operations: Array<{
+    name: string
+    effects: readonly Effect[]
+    annotations: OperationAnnotations
+    /** Effects of this operation that OVERLEAF_ALLOWED_EFFECTS refuses; the operation fails when it needs one. */
+    blockedEffects: Effect[]
+    /** Shorthand commands for this operation besides `call <name>`. */
+    commands: string[]
+  }>
+  policy: {
+    projectsRestricted: boolean
+    effectsRestricted: boolean
+    localReadRestricted: boolean
+    localWriteRestricted: boolean
+  }
+  /** Each field is "unknown" without a projectId, or when the policy refused the project. */
+  project: {
+    projectId: string
+    allowedByPolicy: boolean | Unknown
+    accessLevel: string
+    archived: boolean | Unknown
+    trashed: boolean | Unknown
+  }
+  errorCodes: readonly string[]
+  exitCodes: typeof EXIT_CODES
+}
+
+/** What the project lookup found: the project, or that the policy refused it before any request. */
+export type ProjectLookup = { projectId: string; summary: ProjectSummary } | { projectId: string; denied: true }
+
+/**
+ * Describes what this install can do from its contracts and its configuration alone; only the
+ * project fields need a request, and without a projectId they are `unknown`.
+ */
+export function buildCapabilities(config: AppConfig, lookup?: ProjectLookup): CapabilitiesReport {
+  const allowed = config.allowedEffects === undefined ? undefined : new Set<Effect>(config.allowedEffects)
+  return {
+    version: SERVER_VERSION,
+    operations: OPERATION_NAMES.map(name => {
+      const contract = OPERATIONS[name]
+      return {
+        name,
+        effects: contract.effects,
+        annotations: contract.annotations,
+        blockedEffects: allowed === undefined ? [] : contract.effects.filter(effect => !allowed.has(effect)),
+        commands: ALIASES.filter(alias => alias.tool === name).map(alias => alias.words.join(' ')),
+      }
+    }),
+    policy: {
+      projectsRestricted: config.allowedProjects !== undefined,
+      effectsRestricted: config.allowedEffects !== undefined,
+      localReadRestricted: config.localReadRoots !== undefined,
+      localWriteRestricted: config.localWriteRoots !== undefined,
+    },
+    project:
+      lookup === undefined
+        ? { projectId: 'unknown', allowedByPolicy: 'unknown', accessLevel: 'unknown', archived: 'unknown', trashed: 'unknown' }
+        : 'denied' in lookup
+          ? { projectId: lookup.projectId, allowedByPolicy: false, accessLevel: 'unknown', archived: 'unknown', trashed: 'unknown' }
+          : {
+              projectId: lookup.projectId,
+              allowedByPolicy: true,
+              accessLevel: lookup.summary.accessLevel,
+              archived: lookup.summary.archived,
+              trashed: lookup.summary.trashed,
+            },
+    errorCodes: ERROR_CODES,
+    exitCodes: EXIT_CODES,
+  }
+}

@@ -98,7 +98,8 @@ export function flattenProjectTree(input: RawFolder[] | RawFolder): ProjectEntit
         path: normalizeProjectPath(posix.join(folderPath, file.name)),
         type: 'file',
         parentFolderId: folder._id,
-        ...(file.hash === undefined ? {} : { hash: file.hash }),
+        // The joined payload is not validated; only a string is a hash.
+        ...(typeof file.hash === 'string' ? { hash: file.hash } : {}),
       })
     }
     for (const child of folder.folders ?? []) visit(child, folderPath, folder._id)

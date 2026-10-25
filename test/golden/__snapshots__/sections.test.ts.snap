@@ -1,0 +1,445 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`get_section_content > a heading with an empty body 1`] = `
+{
+  "content": "",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImVhYzJjZGNjZmY3MGIyZGE1YjRmN2IyZWI4M2NiMDdhYmZhODkyYTJkNWFiZjBkZGMzNDJhZDZhYjY0MDYxOWUifQ",
+  "section": {
+    "bodyStart": 349,
+    "command": "section",
+    "end": 349,
+    "headingEnd": 348,
+    "id": "section:333",
+    "index": 7,
+    "level": 2,
+    "starred": false,
+    "start": 333,
+    "title": "Empty",
+  },
+}
+`;
+
+exports[`get_section_content > a history-OT document 1`] = `
+{
+  "content": "Kept body.
+",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImUxZjA3MGYxNTc2Mjk1OTU0NjZjMmU3Njc0Nzg5MjFhZWVhM2E5M2I1YTY4ZDMyNDllMjg2YzVmYzUyOTAyN2UifQ",
+  "section": {
+    "bodyStart": 15,
+    "command": "section",
+    "end": 26,
+    "headingEnd": 14,
+    "id": "section:0",
+    "index": 0,
+    "level": 2,
+    "starred": false,
+    "start": 0,
+    "title": "Kept",
+  },
+}
+`;
+
+exports[`get_section_content > a short-titled chapter holding nested sections 1`] = `
+{
+  "content": "\\section{Introduction}
+Introduction text.
+\\subsection*{Starred Background}
+Background text.
+\\subsubsection{Detail}
+\\paragraph{Paragraph Heading}
+Paragraph text.
+\\subparagraph{Subparagraph Heading}
+% \\section{Commented out}
+\\section{Empty}
+\\section[Short]{Long {Nested} Title}
+Final text.
+\\end{document}
+",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImVhYzJjZGNjZmY3MGIyZGE1YjRmN2IyZWI4M2NiMDdhYmZhODkyYTJkNWFiZjBkZGMzNDJhZDZhYjY0MDYxOWUifQ",
+  "section": {
+    "bodyStart": 110,
+    "command": "chapter",
+    "end": 413,
+    "headingEnd": 109,
+    "id": "chapter:65",
+    "index": 1,
+    "level": 1,
+    "shortTitle": "Short chapter",
+    "starred": false,
+    "start": 65,
+    "title": "Placeholder Chapter",
+  },
+}
+`;
+
+exports[`get_section_content > a starred subsection 1`] = `
+{
+  "content": "Background text.
+\\subsubsection{Detail}
+\\paragraph{Paragraph Heading}
+Paragraph text.
+\\subparagraph{Subparagraph Heading}
+% \\section{Commented out}
+",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImVhYzJjZGNjZmY3MGIyZGE1YjRmN2IyZWI4M2NiMDdhYmZhODkyYTJkNWFiZjBkZGMzNDJhZDZhYjY0MDYxOWUifQ",
+  "section": {
+    "bodyStart": 185,
+    "command": "subsection",
+    "end": 333,
+    "headingEnd": 184,
+    "id": "subsection:152",
+    "index": 3,
+    "level": 3,
+    "starred": true,
+    "start": 152,
+    "title": "Starred Background",
+  },
+}
+`;
+
+exports[`get_section_content > adversarial headings: a final heading with no trailing newline 1`] = `
+{
+  "content": "",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImYzMTg0NjcwN2ZhOTE3ZGY4NmRkODdiMGU2OTU0NjljMzIzNTNmMDMzMjE5YTUyZGNiZTU0ZjVlZjlmZDRkMTkifQ",
+  "section": {
+    "bodyStart": 142,
+    "command": "section",
+    "end": 142,
+    "headingEnd": 142,
+    "id": "section:127",
+    "index": 4,
+    "level": 2,
+    "starred": false,
+    "start": 127,
+    "title": "Final",
+  },
+}
+`;
+
+exports[`get_section_content > adversarial headings: an empty short title 1`] = `
+{
+  "content": "Short body.
+",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImYzMTg0NjcwN2ZhOTE3ZGY4NmRkODdiMGU2OTU0NjljMzIzNTNmMDMzMjE5YTUyZGNiZTU0ZjVlZjlmZDRkMTkifQ",
+  "section": {
+    "bodyStart": 24,
+    "command": "section",
+    "end": 36,
+    "headingEnd": 23,
+    "id": "section:0",
+    "index": 0,
+    "level": 2,
+    "shortTitle": "",
+    "starred": false,
+    "start": 0,
+    "title": "Empty Short",
+  },
+}
+`;
+
+exports[`get_section_content > the last section, through \\end{document} 1`] = `
+{
+  "content": "Final text.
+\\end{document}
+",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImVhYzJjZGNjZmY3MGIyZGE1YjRmN2IyZWI4M2NiMDdhYmZhODkyYTJkNWFiZjBkZGMzNDJhZDZhYjY0MDYxOWUifQ",
+  "section": {
+    "bodyStart": 386,
+    "command": "section",
+    "end": 413,
+    "headingEnd": 385,
+    "id": "section:349",
+    "index": 8,
+    "level": 2,
+    "shortTitle": "Short",
+    "starred": false,
+    "start": 349,
+    "title": "Long {Nested} Title",
+  },
+}
+`;
+
+exports[`get_sections > a ShareJS document with every heading level, starred, short-titled, and empty sections 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImVhYzJjZGNjZmY3MGIyZGE1YjRmN2IyZWI4M2NiMDdhYmZhODkyYTJkNWFiZjBkZGMzNDJhZDZhYjY0MDYxOWUifQ",
+  "sections": [
+    {
+      "bodyStart": 65,
+      "command": "part",
+      "end": 413,
+      "headingEnd": 64,
+      "id": "part:41",
+      "index": 0,
+      "level": 0,
+      "starred": false,
+      "start": 41,
+      "title": "Placeholder Part",
+    },
+    {
+      "bodyStart": 110,
+      "command": "chapter",
+      "end": 413,
+      "headingEnd": 109,
+      "id": "chapter:65",
+      "index": 1,
+      "level": 1,
+      "shortTitle": "Short chapter",
+      "starred": false,
+      "start": 65,
+      "title": "Placeholder Chapter",
+    },
+    {
+      "bodyStart": 133,
+      "command": "section",
+      "end": 333,
+      "headingEnd": 132,
+      "id": "section:110",
+      "index": 2,
+      "level": 2,
+      "starred": false,
+      "start": 110,
+      "title": "Introduction",
+    },
+    {
+      "bodyStart": 185,
+      "command": "subsection",
+      "end": 333,
+      "headingEnd": 184,
+      "id": "subsection:152",
+      "index": 3,
+      "level": 3,
+      "starred": true,
+      "start": 152,
+      "title": "Starred Background",
+    },
+    {
+      "bodyStart": 225,
+      "command": "subsubsection",
+      "end": 333,
+      "headingEnd": 224,
+      "id": "subsubsection:202",
+      "index": 4,
+      "level": 4,
+      "starred": false,
+      "start": 202,
+      "title": "Detail",
+    },
+    {
+      "bodyStart": 255,
+      "command": "paragraph",
+      "end": 333,
+      "headingEnd": 254,
+      "id": "paragraph:225",
+      "index": 5,
+      "level": 5,
+      "starred": false,
+      "start": 225,
+      "title": "Paragraph Heading",
+    },
+    {
+      "bodyStart": 307,
+      "command": "subparagraph",
+      "end": 333,
+      "headingEnd": 306,
+      "id": "subparagraph:271",
+      "index": 6,
+      "level": 6,
+      "starred": false,
+      "start": 271,
+      "title": "Subparagraph Heading",
+    },
+    {
+      "bodyStart": 349,
+      "command": "section",
+      "end": 349,
+      "headingEnd": 348,
+      "id": "section:333",
+      "index": 7,
+      "level": 2,
+      "starred": false,
+      "start": 333,
+      "title": "Empty",
+    },
+    {
+      "bodyStart": 386,
+      "command": "section",
+      "end": 413,
+      "headingEnd": 385,
+      "id": "section:349",
+      "index": 8,
+      "level": 2,
+      "shortTitle": "Short",
+      "starred": false,
+      "start": 349,
+      "title": "Long {Nested} Title",
+    },
+  ],
+  "singleFileOnly": true,
+}
+`;
+
+exports[`get_sections > a history-OT document whose tracked deletion hides a heading 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImUxZjA3MGYxNTc2Mjk1OTU0NjZjMmU3Njc0Nzg5MjFhZWVhM2E5M2I1YTY4ZDMyNDllMjg2YzVmYzUyOTAyN2UifQ",
+  "sections": [
+    {
+      "bodyStart": 15,
+      "command": "section",
+      "end": 26,
+      "headingEnd": 14,
+      "id": "section:0",
+      "index": 0,
+      "level": 2,
+      "starred": false,
+      "start": 0,
+      "title": "Kept",
+    },
+    {
+      "bodyStart": 42,
+      "command": "section",
+      "end": 54,
+      "headingEnd": 41,
+      "id": "section:26",
+      "index": 1,
+      "level": 2,
+      "starred": false,
+      "start": 26,
+      "title": "After",
+    },
+  ],
+  "singleFileOnly": true,
+}
+`;
+
+exports[`get_sections > adversarial headings 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImYzMTg0NjcwN2ZhOTE3ZGY4NmRkODdiMGU2OTU0NjljMzIzNTNmMDMzMjE5YTUyZGNiZTU0ZjVlZjlmZDRkMTkifQ",
+  "sections": [
+    {
+      "bodyStart": 24,
+      "command": "section",
+      "end": 36,
+      "headingEnd": 23,
+      "id": "section:0",
+      "index": 0,
+      "level": 2,
+      "shortTitle": "",
+      "starred": false,
+      "start": 0,
+      "title": "Empty Short",
+    },
+    {
+      "bodyStart": 47,
+      "command": "section",
+      "end": 47,
+      "headingEnd": 47,
+      "id": "section:36",
+      "index": 1,
+      "level": 2,
+      "starred": false,
+      "start": 36,
+      "title": "A",
+    },
+    {
+      "bodyStart": 59,
+      "command": "section",
+      "end": 83,
+      "headingEnd": 58,
+      "id": "section:47",
+      "index": 2,
+      "level": 2,
+      "starred": false,
+      "start": 47,
+      "title": "B",
+    },
+    {
+      "bodyStart": 115,
+      "command": "section",
+      "end": 127,
+      "headingEnd": 114,
+      "id": "section:83",
+      "index": 3,
+      "level": 2,
+      "starred": false,
+      "start": 83,
+      "title": "Outer \\section{Inner}",
+    },
+    {
+      "bodyStart": 142,
+      "command": "section",
+      "end": 142,
+      "headingEnd": 142,
+      "id": "section:127",
+      "index": 4,
+      "level": 2,
+      "starred": false,
+      "start": 127,
+      "title": "Final",
+    },
+  ],
+  "singleFileOnly": true,
+}
+`;
+
+exports[`get_sections > an empty document 1`] = `
+{
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ",
+  "sections": [],
+  "singleFileOnly": true,
+}
+`;
+
+exports[`write_section > a tracked ShareJS write with track changes on 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjgsInNoYTI1NiI6IjNlNDU5ZmM4YmY5YjQ3YmZlMGJkMjYwN2NmYjJlMGQyMTMzZmM4MTg1M2ExODMzZmI5NDI3N2NiM2IxMzU3NjQifQ",
+  "trackChangesActive": true,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`write_section > a tracked history-OT write 1`] = `
+{
+  "protocol": "history-ot",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjgsInNoYTI1NiI6IjNlNDU5ZmM4YmY5YjQ3YmZlMGJkMjYwN2NmYjJlMGQyMTMzZmM4MTg1M2ExODMzZmI5NDI3N2NiM2IxMzU3NjQifQ",
+  "trackChangesActive": false,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`write_section > a tracked write that changes nothing sends no update and keeps the revision 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjcsInNoYTI1NiI6ImI2NDg4NTllYzg2YmRhZThiYzZjNzU3MzhiYWViYjBkOTZmODk3YTM2NTZiNTgyOTFlNGM1NDZkZmFiYzE5NTIifQ",
+  "trackChangesActive": false,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`write_section > a write whose acknowledgement timed out, confirmed by observation 1`] = `
+{
+  "protocol": "sharejs",
+  "recoveredAfterTimeout": true,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjgsInNoYTI1NiI6IjNlNDU5ZmM4YmY5YjQ3YmZlMGJkMjYwN2NmYjJlMGQyMTMzZmM4MTg1M2ExODMzZmI5NDI3N2NiM2IxMzU3NjQifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`write_section > an untracked ShareJS write with writeMode left out 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjgsInNoYTI1NiI6IjNlNDU5ZmM4YmY5YjQ3YmZlMGJkMjYwN2NmYjJlMGQyMTMzZmM4MTg1M2ExODMzZmI5NDI3N2NiM2IxMzU3NjQifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
+exports[`write_section > an untracked history-OT write 1`] = `
+{
+  "protocol": "history-ot",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdC1pZCIsImRvY0lkIjoiZG9jLTEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjgsInNoYTI1NiI6IjNlNDU5ZmM4YmY5YjQ3YmZlMGJkMjYwN2NmYjJlMGQyMTMzZmM4MTg1M2ExODMzZmI5NDI3N2NiM2IxMzU3NjQifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;

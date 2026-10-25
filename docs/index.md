@@ -1,7 +1,8 @@
 # Overleaf Web MCP
 
 Let Claude, Codex, Cursor, or any [Model Context Protocol](https://modelcontextprotocol.io) client
-read, edit, compile, and review your Overleaf projects, signed in as you.
+read, edit, compile, and review your Overleaf projects, signed in as you. Or do the same yourself
+from a shell or a TypeScript program.
 
 [![npm version](https://img.shields.io/npm/v/overleaf-web-mcp?style=flat-square&logo=npm&label=npm&color=1F6FEB)](https://www.npmjs.com/package/overleaf-web-mcp)
 [![Total npm installs](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmhmdaskari%2Foverleaf-web-mcp%2Fbadges%2Fnpm-downloads.json&style=flat-square&label=installs)](https://www.npmjs.com/package/overleaf-web-mcp)
@@ -9,10 +10,12 @@ read, edit, compile, and review your Overleaf projects, signed in as you.
 ![An MCP client connected through an authenticated web session to an Overleaf workspace](assets/overleaf-web-mcp-workflow.webp#only-light)
 ![An MCP client connected through an authenticated web session to an Overleaf workspace](assets/overleaf-web-mcp-workflow-dark.webp#only-dark)
 
-Overleaf Web MCP is a server that signs in to Overleaf once through a browser window
-you control, then lets an AI assistant work on your projects the way you would in the web editor.
-It uses the same browser-facing endpoints the Overleaf editor uses, so it needs no Git
-integration and no premium plan for the core workflow.
+Overleaf Web MCP is an MCP server, the `overleaf-web-mcp` [command line](cli.md), and a
+[TypeScript library](sdk.md), all over one engine with the same safety checks. It signs in to
+Overleaf once through a browser window you control, then lets an AI assistant, a script, or your
+own program work on your projects the way you would in the web editor. It uses the same
+browser-facing endpoints the Overleaf editor uses, so it needs no Git integration and no premium
+plan for the core workflow.
 
 !!! note
     It relies on Overleaf's private web APIs, which can change without notice, and automating
@@ -73,7 +76,7 @@ text, and resolve or reopen threads.
   folders, and kinds of change the server may touch.
 - A write that times out is observed, never resubmitted, so nothing is applied twice.
 - Your session cookie stays on your machine in a file only you can read, and is never returned by
-  any tool.
+  any tool, command, or SDK method.
 
 Details are in the [safety model](safety.md).
 
@@ -82,3 +85,5 @@ Details are in the [safety model](safety.md).
 - [Install](install.md) the server and connect your client.
 - See [example prompts and workflows](using.md).
 - Look up any tool in the [reference](tools.md).
+- Run the same operations from a shell with the [command line](cli.md), or from TypeScript with
+  the [SDK](sdk.md).

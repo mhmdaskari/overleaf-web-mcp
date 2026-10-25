@@ -1,14 +1,15 @@
 # Configuration
 
-Everything is configured through environment variables set where the MCP client starts the
-server, for example in the `env` block of the client's MCP configuration. Defaults suit
-`www.overleaf.com`.
+Everything is configured through environment variables: for the server, set where the MCP client
+starts it, for example in the `env` block of the client's MCP configuration; for the
+[command line](cli.md), in the shell that runs each command; for the [SDK](sdk.md), in the
+process, which `readConfig()` reads from `process.env`. Defaults suit `www.overleaf.com`.
 
 ## Reference
 
 | Variable | Default | Purpose |
 | --- | ---: | --- |
-| `OVERLEAF_BASE_URL` | `https://www.overleaf.com` | Target Overleaf origin. Use the same value for `login` and `serve`. |
+| `OVERLEAF_BASE_URL` | `https://www.overleaf.com` | Target Overleaf origin. Use the same value for `login`, `serve`, and every other command. |
 | `OVERLEAF_COOKIE_JAR_FILE` | Platform configuration directory | Saved-session path override |
 | `OVERLEAF_BROWSER_PATH` | Auto-detected | Chrome-family executable used by `login` |
 | `OVERLEAF_BROWSER_PROFILE_DIR` | Platform configuration directory | Dedicated login profile |
@@ -34,8 +35,8 @@ An `ol-maxDocLength` value advertised by the Overleaf deployment takes precedenc
 fallback. Content at or above the limit returns `DOC_TOO_LARGE`; an oversized serialized update
 returns `UPDATE_TOO_LARGE` and must be split into smaller, independently revisioned writes.
 
-`compile_project.timeoutMs` accepts 1 second through 15 minutes. It changes only how long the MCP
-call waits, not the account's server-side compile allowance.
+`compile_project.timeoutMs` accepts 1 second through 15 minutes. It changes only how long the call
+waits, not the account's server-side compile allowance.
 
 `download_project_zip.timeoutMs` (1 second to 15 minutes, default 5 minutes) bounds a whole-project
 download, the whole transfer included, in place of `OVERLEAF_REQUEST_TIMEOUT_MS`.
@@ -129,9 +130,9 @@ active, `command -v node` and `npm root -g` print the two paths used below; adju
 schtasks /Create /SC DAILY /ST 09:00 /TN "overleaf-web-mcp keepalive" /TR "\"C:\Program Files\nodejs\node.exe\" \"%APPDATA%\npm\node_modules\overleaf-web-mcp\dist\cli.js\" keepalive"
 ```
 
-Running a keepalive while an MCP client has the server open is safe. Cookie refreshes are merged
-under the jar's advisory lock, and the jar is re-read under that lock before it is written, so
-neither process can overwrite the other's refresh.
+Running a keepalive while an MCP client has the server open is safe, and so is running several
+commands at once. Cookie refreshes are merged under the jar's advisory lock, and the jar is
+re-read under that lock before it is written, so no process can overwrite another's refresh.
 
 ## Behind a proxy
 
@@ -165,7 +166,7 @@ proxy support, so it works on Node 20 and needs no `NODE_USE_ENV_PROXY`.
   `NO_PROXY`, is not checked.
 
 `login` signs in through Chrome, which applies its own proxy settings. The check that follows
-sign-in uses the proxy above, as `serve` and `keepalive` do.
+sign-in uses the proxy above, as `serve`, `keepalive`, and every operation command do.
 
 ## Access policy
 
@@ -173,11 +174,11 @@ Four variables limit what the server may touch. Each one is unset by default, wh
 everything of its kind, and the server checks every operation against all four before it sends
 anything, so a refused call costs no request. A misconfigured value, such as a relative root or a
 root that does not exist, stops the server at startup with `INVALID_ARGUMENT` naming the
-variable.
+variable, and fails an operation command with exit 2.
 
 | Variable | Limits | Refusal |
 | --- | --- | --- |
-| `OVERLEAF_ALLOWED_PROJECTS` | Which projects any tool may read or change, by id. `list_projects` and `auth_status` show and count only these. A project created by this process (`create_project`, `clone_project`, `import_project_zip`) is allowed for the rest of the process. | `POLICY_DENIED` |
+| `OVERLEAF_ALLOWED_PROJECTS` | Which projects any tool may read or change, by id. `list_projects` and `auth_status` show and count only these. A project created by this process (`create_project`, `clone_project`, `import_project_zip`) is allowed for the rest of the process; each command line call is a process of its own, so the next command refuses it until its id is added here. | `POLICY_DENIED` |
 | `OVERLEAF_LOCAL_READ_ROOTS` | Which local files and folders may be read: `write_file` and `upload_file` with `localPath`, `batch_upload`, `import_project_zip`, `plan_sync`, and `sync_directory`. | `PATH_OUTSIDE_ROOT`, `details.kind: "outside_read_roots"` |
 | `OVERLEAF_LOCAL_WRITE_ROOTS` | Where `download_file` and `download_project_zip` may write. | `PATH_OUTSIDE_ROOT`, `details.kind: "outside_write_roots"` |
 | `OVERLEAF_ALLOWED_EFFECTS` | Which kinds of change any operation may make. | `POLICY_DENIED`, `details.effect` |
@@ -225,6 +226,18 @@ For example, an assistant that may only read one project and save copies of its 
 }
 ```
 
+The same variables limit a command run from a shell:
+
+```bash
+export OVERLEAF_ALLOWED_PROJECTS=64b7f1c2e4b0a1b2c3d4e5f6
+export OVERLEAF_ALLOWED_EFFECTS=overleaf-read,local-write
+export OVERLEAF_LOCAL_WRITE_ROOTS=/home/me/overleaf-drafts
+overleaf-web-mcp files download 64b7f1c2e4b0a1b2c3d4e5f6 main.tex /home/me/overleaf-drafts/main.tex
+```
+
+`overleaf-web-mcp capabilities` reports which variables are set and, for each tool, the effects
+they refuse, without opening a session.
+
 The policy keeps an assistant inside what it was given; it is not a sandbox against a malicious
 process on the same machine. The [safety model](safety.md#the-access-policy-is-not-a-sandbox)
 says exactly where it stops.
@@ -235,3 +248,7 @@ While a project socket is open, the account may appear online to collaborators i
 editor. By default at most two project sockets are cached, active sockets are never evicted, and
 idle sockets disconnect after 90 seconds. Lower `OVERLEAF_SOCKET_IDLE_TTL_MS` to shorten that
 window at the cost of reconnecting more often.
+
+A command holds its sockets only while it runs and closes them before it exits. Each command is
+a session of its own, though, so a shell loop that runs one command per file connects again and
+again; use one `sync apply`, `call batch_upload`, or `call delete_entities` instead.

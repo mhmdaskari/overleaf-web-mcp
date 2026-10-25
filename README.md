@@ -1,10 +1,11 @@
 <h1 align="center">Overleaf Web MCP</h1>
 
-<p align="center"><strong>Let Claude, Codex, Cursor, or any MCP client read, edit, compile, and review<br>your Overleaf projects, signed in as you.</strong></p>
+<p align="center"><strong>Read, edit, compile, and review your Overleaf projects, signed in as you,<br>from Claude, Codex, Cursor, or any MCP client, or from a shell or a TypeScript program.</strong></p>
 
 <p align="center">
   <a href="https://mhmdaskari.github.io/overleaf-web-mcp/"><strong>Docs</strong></a> &nbsp;·&nbsp;
   <a href="#get-started"><strong>Get started</strong></a> &nbsp;·&nbsp;
+  <a href="#without-an-mcp-client"><strong>Command line</strong></a> &nbsp;·&nbsp;
   <a href="#tools"><strong>Tools</strong></a> &nbsp;·&nbsp;
   <a href="#how-it-keeps-your-project-safe"><strong>Safety</strong></a> &nbsp;·&nbsp;
   <a href="#how-it-compares"><strong>Compare</strong></a> &nbsp;·&nbsp;
@@ -29,7 +30,7 @@
   </picture>
 </p>
 
-Overleaf Web MCP is a [Model Context Protocol](https://modelcontextprotocol.io) server. It signs in to Overleaf once through a browser window you control, then lets an AI assistant work on your projects the way you would in the web editor: browse files, make revision-checked edits, optionally as tracked changes, compile, and handle review comments. It uses the same browser-facing endpoints the Overleaf editor uses, so no Git integration or premium plan is needed for the core workflow.
+Overleaf Web MCP is a [Model Context Protocol](https://modelcontextprotocol.io) server, the `overleaf-web-mcp` command line, and a TypeScript library, `createOverleafClient` from `overleaf-web-mcp/core`, all over one engine with the same safety checks. It signs in to Overleaf once through a browser window you control, then lets an AI assistant, a script, or your own program work on your projects the way you would in the web editor: browse files, make revision-checked edits, optionally as tracked changes, compile, and handle review comments. It uses the same browser-facing endpoints the Overleaf editor uses, so no Git integration or premium plan is needed for the core workflow.
 
 ## What you can say
 
@@ -92,6 +93,31 @@ VS Code uses a `servers` key and `"type": "stdio"` instead; the [installation gu
 
 Client-by-client steps, self-hosted Overleaf, and troubleshooting, including the "failed to connect" you get when `node` is older than 20, are in the [installation guide](https://mhmdaskari.github.io/overleaf-web-mcp/install/).
 
+## Without an MCP client
+
+Every tool is also a command, for scripts, CI jobs, and agents that work in a shell. After `npx overleaf-web-mcp login`:
+
+```bash
+npx overleaf-web-mcp projects list --query thesis
+npx overleaf-web-mcp files read <projectId> main.tex
+npx overleaf-web-mcp call get_sections --request request.json
+```
+
+Each command prints one JSON value on stdout, or one JSON error line on stderr, and its exit code says what is safe to do next: 0 complete, 1 failed, 2 fix the call, 3 not allowed, 4 read or plan again, 5 outcome unknown (never re-run it blindly), 6 partial, 7 retry later. Document text goes through a file or stdin, never the command line. The [command line guide](https://mhmdaskari.github.io/overleaf-web-mcp/cli/) has every command and exit code. Three Agent Skills in [`skills/`](https://github.com/mhmdaskari/overleaf-web-mcp/tree/main/skills) use it to revise a manuscript, handle reviewer comments, and sync figures and sources.
+
+From TypeScript, `overleaf-web-mcp/core` has one typed method per tool ([TypeScript SDK](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/)):
+
+```ts
+import { createOverleafClient } from 'overleaf-web-mcp/core'
+
+const client = await createOverleafClient()
+try {
+  const file = await client.readFile({ projectId, filePath: 'main.tex' })
+} finally {
+  await client.close()
+}
+```
+
 ## What it can do
 
 - **Start and manage projects.** Create a blank or example project, clone one, or import a zip; rename, trash, restore, or archive projects with the name confirmed first; set the root document, TeX engine, and TeX Live image so the web editor's Recompile follows.
@@ -110,7 +136,7 @@ Client-by-client steps, self-hosted Overleaf, and troubleshooting, including the
 <details>
 <summary><strong>All 31 tools</strong>, with their annotations and local effects</summary>
 
-An upload that would replace a file, and a folder sync without a `planToken`, are refused unless that replacement or unplanned sync is asked for by name. The last column shows which tools read or write files on the computer the server runs on. Every parameter and result is in the [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/).
+An upload that would replace a file, and a folder sync without a `planToken`, are refused unless that replacement or unplanned sync is asked for by name. The last column shows which tools read or write files on the computer the server runs on. Every parameter and result is in the [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/); each tool is also `overleaf-web-mcp call <name>` and a method of `createOverleafClient`.
 
 | Group | Tool | What it does | Annotation | Local effect |
 | --- | --- | --- | --- | --- |
@@ -157,25 +183,26 @@ An upload that would replace a file, and a folder sync without a `planToken`, ar
 - A folder sync needs the `planToken` from `plan_sync`, and stops before changing anything if the project or the folder changed since the plan. It deletes only in mirror mode, only with the delete count confirmed, and never after a failed upload.
 - An upload never replaces a file unless asked: a binary needs `overwrite`, and a text document, which an upload replaces with no revision check, needs `uncheckedDocumentReplace`.
 - Optionally, you can limit which projects, which folders on your computer, and which kinds of change the server may touch ([access policy](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/#access-policy)). It keeps an assistant inside what you gave it; it is not a sandbox.
-- Your session cookie stays on your machine in a file only you can read, and is never returned by any tool.
-- While a project is open, up to 90 seconds after the last call, you may appear online to collaborators.
+- Your session cookie stays on your machine in a file only you can read, and is never returned by any tool, command, or SDK method.
+- While a project is open, up to 90 seconds after the last call, you may appear online to collaborators. Each command is its own session, so for many files use one sync or batch command rather than a command per file.
 
 ## How it compares
 
-The three most-starred Overleaf MCP servers and the two closest in design to this one, each checked against its own source code on 2026-09-22. They change often, so follow the links for their current state. ✅ supported, 🟡 partly (see the numbered notes), ❌ not supported.
+The three most-starred Overleaf MCP servers and the two closest in design to this one, each checked against its own source code on 2026-10-25. They change often, so follow the links for their current state. The capability rows describe each project's MCP tools. ✅ supported, 🟡 partly (see the numbered notes), ❌ not supported.
 
 | | **This project** | [OverleafMCP](https://github.com/mjyoo2/OverleafMCP) | [olcli](https://github.com/aloth/olcli) | [overleaf-mcp-server](https://github.com/YounesBensafia/overleaf-mcp-server) | [overleaf-mcp-rt](https://github.com/DanielHou315/overleaf-mcp-rt) | [netique/overleaf-mcp](https://github.com/netique/overleaf-mcp) |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
-| Tools | 31 | 8 | 19 | 4 | 22 | 17 |
+| Tools | 31 | 8 | 21 | 5 | 22 | 17 |
+| Works without an MCP client (command line or library) | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
-| Self-hosted Overleaf | ✅ | ❌ | ✅ | 🟡¹ | ✅ | 🟡² |
-| List and search your projects | ✅ | 🟡³ | 🟡⁴ | ❌ | 🟡⁵ | ✅ |
-| Returns a document's text to the assistant | ✅ | ✅ | 🟡⁶ | ✅ | ✅ | ✅ |
+| Self-hosted Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹ |
+| List and search your projects | ✅ | 🟡² | 🟡³ | ❌ | 🟡⁴ | ✅ |
+| Returns a document's text to the assistant | ✅ | ✅ | 🟡⁵ | ✅ | ✅ | ✅ |
 | Sends edits as collaborative OT operations, not whole files | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Refuses an edit if the document changed since it was read | ✅ | 🟡⁷ | ❌ | ❌ | ✅ | 🟡⁸ |
+| Refuses an edit if the document changed since it was read | ✅ | 🟡⁶ | ❌ | 🟡⁶ | ✅ | 🟡⁷ |
 | Writes as tracked changes when asked | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Accepts or rejects tracked changes | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Accepts or rejects tracked changes | ❌ | ❌ | 🟡⁸ | ❌ | ❌ | ✅ |
 | Reads and replaces one `\section` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Creates, renames, moves, and deletes files and folders | ✅ | 🟡⁹ | 🟡¹⁰ | 🟡⁹ | ✅ | ❌ |
 | Uploads and downloads binary files | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹¹ |
@@ -186,20 +213,20 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | Creates, clones, imports, archives, and deletes projects | ✅ | ❌ | 🟡¹³ | ❌ | ❌ | ❌ |
 | Saves the root document, compiler, and TeX Live image | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Reads project history | ✅ | ❌ | ❌ | ❌ | 🟡¹⁴ | ❌ |
-| Installs from | npm | npm | npm, Homebrew | source | npm | npm |
+| Installs from | npm | npm | npm, Homebrew | PyPI | npm | npm |
 | License | MIT | MIT | MIT | MIT | AGPL-3.0 | AGPL-3.0 |
 
 <details>
 <summary>Notes 1–14</summary>
 
-1. Only where Overleaf's Git bridge exists, which on a self-hosted instance means Server Pro.
-2. Documented, but sign-in appears to require overleaf.com's `overleaf_session2` cookie, which Community Edition does not set by default.
-3. Only the projects named in its own configuration.
-4. Lists projects without search, and leaves out archived and trashed ones.
-5. Lists projects, with no search or filter.
-6. Files are saved to the server's disk; no tool returns a document's text.
-7. Git rejects the push if Overleaf moved on after the tool's own pull, but an edit made between the assistant's read and that pull is overwritten.
-8. Only with `strict_version: true`; by default a concurrent edit is reported after the write.
+1. Documented, but sign-in appears to require overleaf.com's `overleaf_session2` cookie, which Community Edition does not set by default.
+2. Only the projects named in its own configuration.
+3. Lists projects without search, and leaves out archived and trashed ones.
+4. Lists projects, with no search or filter.
+5. Files are saved to the server's disk; no tool returns a document's text.
+6. Git rejects the push if Overleaf moved on after the tool's own pull, but an edit made between the assistant's read and that pull is overwritten.
+7. Only with `strict_version: true`; by default a concurrent edit is reported after the write.
+8. Accepts any tracked change, but rejects only in documents that use Overleaf's older ShareJS text OT, not history-ot.
 9. Creates files by writing them; no rename, move, or delete.
 10. Creates, renames, and deletes files and folders; no move.
 11. Downloads binary files; no upload.
@@ -213,9 +240,11 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 
 | Page | What it covers |
 | --- | --- |
-| [Install](https://mhmdaskari.github.io/overleaf-web-mcp/install/) | Claude Code, Codex, Claude Desktop, Cursor, VS Code, self-hosted Overleaf, troubleshooting |
+| [Install](https://mhmdaskari.github.io/overleaf-web-mcp/install/) | Claude Code, Codex, Claude Desktop, Cursor, VS Code, the command line alone, self-hosted Overleaf, troubleshooting |
 | [Using it](https://mhmdaskari.github.io/overleaf-web-mcp/using/) | Example prompts and what happens underneath |
 | [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 31 tools with parameters and results |
+| [Command line](https://mhmdaskari.github.io/overleaf-web-mcp/cli/) | Every command, request formats, output, exit codes, and the Agent Skills |
+| [TypeScript SDK](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) | `createOverleafClient`, results and errors, and the stable surface |
 | [Safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) | Revisions, tracked changes, confirmations, error codes |
 | [Configuration](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/) | Environment variables, the access policy, proxies, where the session is stored, and keeping it alive |
 | [Internals](https://mhmdaskari.github.io/overleaf-web-mcp/internals/) | Protocol notes, reliability guarantees, related projects |
@@ -223,7 +252,7 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 
 ## For AI agents
 
-The server sends usage instructions to the MCP client when it connects, and every tool description is self-contained, so an assistant does not need this README to use it correctly. Coding agents contributing to the repository should read [AGENTS.md](AGENTS.md).
+The server sends usage instructions to the MCP client when it connects, and every tool description is self-contained, so an assistant does not need this README to use it correctly. An agent working in a shell can use the command line instead, with `overleaf-web-mcp --help` and the three Agent Skills in [`skills/`](https://github.com/mhmdaskari/overleaf-web-mcp/tree/main/skills), which call only public commands. Coding agents contributing to the repository should read [AGENTS.md](AGENTS.md).
 
 ## License
 

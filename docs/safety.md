@@ -102,12 +102,19 @@ it, a file that appeared at `localPath` in the meantime is not replaced. The tem
 removed on every failure, and neither the archive nor the names inside it are logged.
 
 **Your session stays yours.** Cookies are saved in a file only your user can read, are never
-returned by any tool, and are never logged. No tool reads or writes the cookie jar, its lock and
-temporary files, or the browser profile `login` uses as a local file, and no folder sync takes a
-folder that holds them, whatever the access policy says. The server
-logs no document content, diffs, filenames, quoted context, or review-message bodies. `serve`
-reserves stdout for MCP protocol frames; the diagnostics it writes to stderr name a tool and an
-error code, nothing else.
+returned by any tool, command, or SDK method, and are never logged. No tool reads or writes the
+cookie jar, its lock and temporary files, or the browser profile `login` uses as a local file, and
+no folder sync takes a folder that holds them, whatever the access policy says. The server
+logs no document content, diffs, filenames, quoted context, or review-message bodies.
+
+**Every command has one output shape.** `serve` reserves stdout for MCP protocol frames; the
+diagnostics it writes to stderr name a tool and an error code, nothing else. `help` prints plain
+text. Every other command, `login` and `keepalive` included, prints exactly one JSON value on
+stdout when it succeeds. A failed [operation command](cli.md) leaves stdout empty and writes
+exactly one line to stderr, `{ code, message, retryable, details? }`. Otherwise an operation
+command writes nothing to stderr, unless `--progress` asked for JSON progress lines, which hold
+counts, never file names. `login` also writes plain-text status lines to stderr while it waits
+for the sign-in.
 
 **Upstream text stays out of errors.** Error `details` carry status codes, short identifiers,
 counts, and values the caller supplied, never a response body or a message from Overleaf, which
@@ -125,7 +132,10 @@ another origin would carry the CSRF token with it; a redirect to the login page 
 
 **Presence is disclosed.** While the server holds a project connection open, up to 90 seconds
 after the last call by default, the account may appear online to collaborators. `auth_status`
-repeats this notice.
+repeats this notice. Each command line call is its own session, which opens and closes its
+connections while it runs, so a shell loop over many files repeats that, and multiplies the
+requests Overleaf sees; `sync_directory`, `batch_upload`, and `delete_entities` do the same work
+in one call.
 
 ## The exact contracts
 
@@ -214,7 +224,12 @@ repeats this notice.
 ## Error codes
 
 Every failure is returned as JSON with `code`, `message`, `retryable`, and optional `details`.
-`retryable` is advisory; even when it is `true`, the server itself never retries a write.
+The [command line](cli.md) writes it as one line on stderr and maps it to an
+[exit code](cli.md#exit-codes); the [SDK](sdk.md) rejects with an `McpError` carrying the same
+fields. `retryable` is advisory; even when it is `true`, neither the server, the command line,
+nor the SDK retries a write. A `TIMEOUT` is marked retryable even when it came from a write, which
+is why the command line's exit code depends on whether the operation is read-only and on
+`details.outcome`: exit 5 means the write may have applied, and it must never be re-run blindly.
 
 | Code | Meaning | What to do |
 | --- | --- | --- |
@@ -222,7 +237,7 @@ Every failure is returned as JSON with `code`, `message`, `retryable`, and optio
 | `PERMISSION_DENIED` | Overleaf refused the operation for this account (HTTP 403). From `download_project_zip` it can also mean the session expired, since that route checks project access rather than the login. | Check the project's access level; read-only collaborators cannot write. For a project download, check `auth_status` too. |
 | `NOT_FOUND` | The project, path, or Overleaf resource does not exist (HTTP 404), or a local file to upload or a local folder to download into does not exist (`details.errno: "ENOENT"`). | Re-read the tree; the entity may have been renamed or removed. |
 | `REVISION_CONFLICT` | The document changed since the revision you hold, or the verified result differs from the intent. `details.liveRevision` carries the current revision. | Read again, reconcile, and write with the new revision. |
-| `PROTOCOL_UNSUPPORTED` | The deployment speaks a collaboration protocol version this release does not, or the document's OT protocol changed between read and write, or a tracked write has no user id, or a project download was not a zip archive, or a downloaded `.pdf` was not a PDF, or a response that should be JSON was not (`details.path`, and `details.contentType` when it names a media type), or a compile response lacked its expected keys (`details` `{ endpoint, expectedKeys, receivedKeys }`). | Read again. If the protocol version is the issue, see `OVERLEAF_PROTOCOL_VERSIONS`. |
+| `PROTOCOL_UNSUPPORTED` | The deployment speaks a collaboration protocol version this release does not, or the document's OT protocol changed between read and write, or a tracked write has no user id, or a project download was not a zip archive, or a downloaded `.pdf` was not a PDF, or a response that should be JSON was not (`details.path`, and `details.contentType` when it names a media type), or a compile response lacked its expected keys (`details` `{ endpoint, expectedKeys, receivedKeys }`), or a read-only tool's result did not match its output schema (`details.kind: "response_shape"`, `details.paths`). | Read again. If the protocol version is the issue, see `OVERLEAF_PROTOCOL_VERSIONS`. |
 | `DOC_TOO_LARGE` | The resulting document would reach the advertised maximum length. | Split the content across documents. |
 | `UPDATE_TOO_LARGE` | The serialized edit exceeds the configured update limit, or Overleaf answered HTTP 413. | Split the change into smaller writes, each with a fresh revision. |
 | `TIMEOUT` | A request or OT application timed out. For writes, `details.outcome: "not_applied"` means the original revision stayed live throughout the recovery window. In a `batch_upload` result, the path was as before the upload when the tree was read back; the upload could still land late. | Safe to read and try again with a fresh revision. |
@@ -231,7 +246,7 @@ Every failure is returned as JSON with `code`, `message`, `retryable`, and optio
 | `COMPILE_RATE_LIMITED` | Overleaf did not run the compile: `too-recently-compiled`, `rate-limited`, `autocompile-backoff`, `compile-in-progress`, or HTTP 429. `details` as for `COMPILE_FAILED`, plus `retryAfterMs` when known. | Wait `retryAfterMs`, or a little while, then compile once more. |
 | `COMPILE_UNAVAILABLE` | Overleaf's compile service is down for maintenance or unavailable. | Try again later. |
 | `COMPILE_TIMEOUT` | The build reached Overleaf's time limit for the account. `details.buildRef`, when present, reaches its partial log. | Do not just compile again: try `draft` or `stopOnFirstError`, or simplify the document. |
-| `NO_BUILD` | `get_compile_log`, `download_compile_output`, or a compile output resource was called without a `buildRef`, and this server process has not compiled the project. | Call `compile_project` first, or pass the `buildRef` an earlier compile returned. |
+| `NO_BUILD` | `get_compile_log`, `download_compile_output`, or a compile output resource was called without a `buildRef`, and this process has not compiled the project. Each command line call is a new process. | Call `compile_project` first, or pass the `buildRef` an earlier compile returned; on the command line, `--build-ref`. |
 | `BUILD_NOT_FOUND` | Overleaf no longer keeps the build's output (`details.buildId`, `details.file`). | Compile again. |
 | `PARTIAL_CLEANUP` | A multi-step operation applied some steps and could not undo them all. `details` says what remains. | Inspect the project and finish the cleanup by hand. |
 | `INVALID_ARGUMENT` | The call was malformed, a path was invalid, an entity had the wrong type, Overleaf rejected a name, an id held a character that is not path-safe (`details.parameter`), an upload would replace a text document without `uncheckedDocumentReplace: true` (`details.missing`), a name is already used in the target folder or a folder would move into itself, a local file cannot be read or written (`details.errno`, such as `EISDIR` or `EACCES`), or text written to a ShareJS (legacy editor) document adds a character outside the Basic Multilingual Plane, such as an emoji, adds another copy of one the document holds, or changes their order (`details.line`, the 1-based line of the first added one; Overleaf would store each as U+FFFD; nothing was sent). `details.overleafError` may carry Overleaf's short reason code. | Fix the arguments; to replace a document, prefer `write_file` with `localPath`. Replace characters outside the Basic Multilingual Plane, for example with a LaTeX command. |
@@ -246,7 +261,7 @@ Every failure is returned as JSON with `code`, `message`, `retryable`, and optio
 
 0.5.x announced each of these with a `deprecations` entry `{ parameter, message, enforcedIn:
 "0.6.0" }` in the result, and still ran the call. From 0.6.0 the same call is refused with nothing
-sent, and no result lists `deprecations`. New interfaces, such as the command line in 0.7.0,
+sent, and no result lists `deprecations`. The command line and the SDK client added in 0.7.0
 start with this behaviour.
 
 | Behaviour | 0.5.x | 0.6.0 |
@@ -264,7 +279,8 @@ Four environment variables, described in the [configuration guide](configuration
 limit which projects (`OVERLEAF_ALLOWED_PROJECTS`), which local folders
 (`OVERLEAF_LOCAL_READ_ROOTS`, `OVERLEAF_LOCAL_WRITE_ROOTS`), and which kinds of change
 (`OVERLEAF_ALLOWED_EFFECTS`) the server may touch. Every operation is checked against them before
-anything is sent, through the MCP server and through the exported runtime alike. With all four
+anything is sent, through the MCP server, the command line, the SDK client, and the exported
+runtime alike. With all four
 unset, everything is allowed except four refusals: a download onto the saved session's files, a
 local read of them (a folder sync of a folder that holds them included), an `.olignore` that
 links outside its folder, and an id that is not path-safe.
@@ -273,7 +289,9 @@ The policy stops an assistant, perhaps steered by text it read in a project, fro
 what it was given. It does not contain a malicious process: a path is checked with `realpath`
 and then opened, and a symbolic link swapped in between those two steps is not caught. A project
 created by this process joins its allowlist until the process ends; another process does not see
-it.
+it. Each command line call is a new process, so under `OVERLEAF_ALLOWED_PROJECTS` a project that
+`call create_project` made is refused with `POLICY_DENIED` by the next command until its id is
+added to the variable.
 
 ## Limits
 
@@ -312,5 +330,12 @@ client's tool-argument budget. `localPath` exists for that reason.
   content when the sync starts and checks each entity's identity just before deleting it, but
   does not re-read a document's text right before deleting it. Overleaf keeps deleted documents
   in the project history, where they can be restored.
+- **Concurrent commands.** Nothing is serialized across processes: two command line calls, or a
+  command and a running server, do not wait for each other. Revision checks and plan tokens are
+  what protect them, as they protect two collaborators, so a write against a document another
+  process changed fails with `REVISION_CONFLICT` rather than overwriting it.
+- **Requests in the process list.** `call --json` puts its request in the command's arguments,
+  which process listings and shell history show. Pass document and comment text through
+  `--request <file>`, `--request -`, `files write --content-file`, or `files write --stdin`.
 - **A compromised machine.** The cookie jar is a credential. Anyone who can read your user's files
   can act as you on Overleaf until the session expires.

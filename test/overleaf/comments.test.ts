@@ -904,4 +904,113 @@ describe('review comments API', () => {
     expect(connection.submitUpdate).toHaveBeenCalledOnce()
     expect(http.deleteJson).not.toHaveBeenCalled()
   })
+
+  // What the HTTP client throws for a 429: retryable, which after a sent write would invite a resend.
+  function rateLimited(): McpError {
+    return new McpError('RATE_LIMITED', 'Overleaf rate-limited this request.', {
+      retryable: true,
+      details: { status: 429, path: '/project/project/threads' },
+    })
+  }
+
+  test.each<[string, () => Promise<unknown>]>([
+    ['an accepted', async () => undefined],
+    ['a timed-out', async () => {
+      throw new McpError('TIMEOUT', 'request timed out', { retryable: true })
+    }],
+  ])('a reply whose read-back fails after %s post is OUTCOME_UNKNOWN, never retryable', async (_, post) => {
+    const http = {
+      postJson: vi.fn(post),
+      getJson: vi.fn().mockResolvedValueOnce(threads).mockRejectedValueOnce(rateLimited()),
+      deleteJson: vi.fn(),
+    }
+    const { connections } = connectionHarness([])
+    // A current user, so a timed-out post is recovered by reading the thread back.
+    const api = new CommentsApi(http, connections, { currentUserId: 'user' })
+
+    const error = await api.replyToComment('project', 'open', 'My reply').catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(McpError)
+    expect(error).toMatchObject({ code: 'OUTCOME_UNKNOWN', retryable: false, details: { threadId: 'open' } })
+    expect(http.postJson).toHaveBeenCalledOnce()
+    // Read before the post, and once after it.
+    expect(http.getJson).toHaveBeenCalledTimes(2)
+  })
+
+  test('returns a verified comment without its thread when the thread cannot be read back', async () => {
+    const { connection, connections } = connectionHarness([
+      shareDocument('hello', 1),
+      shareDocument('hello', 2, [{ op: { p: 1, c: 'el', t: 'thread' } }]),
+    ])
+    const http = {
+      getJson: vi.fn(async () => {
+        throw rateLimited()
+      }),
+      postJson: vi.fn(async () => ({ id: 'message' })),
+      deleteJson: vi.fn(async () => ({})),
+    }
+    const api = new CommentsApi(http, connections, { currentUserId: 'user', threadIdFactory: () => 'thread' })
+
+    const result = await api.addComment(addCommentInput())
+
+    expect(result).toEqual({
+      threadId: 'thread',
+      revision: expect.any(String),
+      protocol: 'sharejs',
+      trackChangesActive: false,
+      writeMode: 'untracked',
+    })
+    expect(result).not.toHaveProperty('thread')
+    expect(http.getJson).toHaveBeenCalledOnce()
+    expect(http.postJson).toHaveBeenCalledOnce()
+    expect(connection.submitUpdate).toHaveBeenCalledOnce()
+    expect(http.deleteJson).not.toHaveBeenCalled()
+  })
+
+  test('a timed-out thread creation that cannot be read back is OUTCOME_UNKNOWN, with nothing attached', async () => {
+    const { connection, connections } = connectionHarness([shareDocument('hello', 1)])
+    const http = {
+      getJson: vi.fn(async () => {
+        throw rateLimited()
+      }),
+      postJson: vi.fn(async () => {
+        throw new McpError('TIMEOUT', 'request timed out', { retryable: true })
+      }),
+      deleteJson: vi.fn(async () => ({})),
+    }
+    const api = new CommentsApi(http, connections, { currentUserId: 'user', threadIdFactory: () => 'thread' })
+
+    const error = await api.addComment(addCommentInput()).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(McpError)
+    expect(error).toMatchObject({ code: 'OUTCOME_UNKNOWN', retryable: false, details: { threadId: 'thread' } })
+    expect(http.getJson).toHaveBeenCalledOnce()
+    expect(http.postJson).toHaveBeenCalledOnce()
+    expect(connection.submitUpdate).not.toHaveBeenCalled()
+    expect(http.deleteJson).not.toHaveBeenCalled()
+  })
+
+  test('an applied ShareJS status change whose thread cannot be read back is OUTCOME_UNKNOWN', async () => {
+    // No resolved flag on the range, so the status is verified from the REST threads.
+    const anchored = [{ op: { p: 1, c: 'el', t: 'open' } }]
+    const { connection, connections } = connectionHarness([
+      shareDocument('hello', 1, anchored),
+      shareDocument('hello', 1, anchored),
+    ])
+    const http = {
+      getJson: vi.fn(async () => {
+        throw rateLimited()
+      }),
+      postJson: vi.fn(async () => undefined),
+      deleteJson: vi.fn(),
+    }
+    const api = new CommentsApi(http, connections)
+
+    const error = await api.setCommentStatus(statusInput('sharejs')).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(McpError)
+    expect(error).toMatchObject({ code: 'OUTCOME_UNKNOWN', retryable: false, details: { threadId: 'open' } })
+    expect((error as McpError).details).not.toHaveProperty('outcome')
+    expect(http.postJson).toHaveBeenCalledOnce()
+    expect(http.postJson).toHaveBeenCalledWith('/project/project/doc/doc1/thread/open/resolve', {})
+    expect(http.getJson).toHaveBeenCalledOnce()
+    expect(connection.submitUpdate).not.toHaveBeenCalled()
+  })
 })
