@@ -3300,7 +3300,7 @@
   },
   {
     "name": "monitor_project_history",
-    "description": "Poll one recent project-history window and return updates newer than an optional version cursor. In a group that starts before the cursor, only project operations at or after it are listed. Returns projectId, currentVersion and nextSinceVersion (null when the window is empty; pass nextSinceVersion back as sinceVersion), hasEarlierHistory, gapDetected, and updates, newest first. Each update has fromVersion, toVersion, ISO startedAt and endedAt, authors ({ id, displayName } or null), paths, projectOperations (add, rename with newPath, remove, each with atVersion), labels, and origin ({ kind, path?, timestamp?, version? } or null).",
+    "description": "Poll one recent project-history window and return updates newer than an optional version cursor. In a group that starts before the cursor, only project operations at or after it are listed. Returns projectId, currentVersion (null when the window is empty), nextSinceVersion (pass it back as sinceVersion; on an empty window it repeats sinceVersion, or is null without one), hasEarlierHistory, gapDetected, and updates, newest first. Each update has fromVersion, toVersion, ISO startedAt and endedAt, authors ({ id, displayName } or null), paths, projectOperations (add, rename with newPath, remove, each with atVersion), labels, and origin ({ kind, path?, timestamp?, version? } or null).",
     "inputSchema": {
       "type": "object",
       "properties": {

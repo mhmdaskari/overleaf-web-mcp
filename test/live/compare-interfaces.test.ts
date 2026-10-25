@@ -21,8 +21,9 @@ import type { RuntimeDependencies } from '../../src/runtime.js'
  * Runs four agent tasks against one throwaway project through the three interfaces: the MCP
  * server (`node dist/cli.js serve` over stdio), spawned `node dist/cli.js` commands, and
  * `createOverleafClient` in this process. Each task runs cold (a new session) and then warm (the
- * same session again). Outcomes must match across interfaces; round trips, bytes, timings, and
- * upstream requests are only measured, written to a JSON report, and never asserted.
+ * same session again). Every task must succeed through every interface and phase, its checks
+ * included, and outcomes must match across interfaces; round trips, bytes, timings, and upstream
+ * requests are only measured, written to a JSON report, and never asserted.
  *
  * The report holds tool names, codes, counts, sizes, and durations, never document text, comment
  * bodies, file names, or project ids.
@@ -892,7 +893,7 @@ describe.skipIf(!enabled)('one task set through MCP, the command line, and the S
 
   for (const task of TASKS) {
     test(
-      `${task.title} has the same outcome through all three interfaces`,
+      `${task.title} succeeds with the same outcome through all three interfaces`,
       async () => {
         const results: Partial<Record<InterfaceName, Partial<Record<Phase, RunRecord>>>> = {}
         report.tasks[task.name] = results
@@ -910,6 +911,16 @@ describe.skipIf(!enabled)('one task set through MCP, the command line, and the S
           INTERFACES.map(which => [which, { cold: results[which]?.cold?.outcome, warm: results[which]?.warm?.outcome }])
         )
         console.log(`${task.name}: ${JSON.stringify(outcomes)}`)
+        // A check that fails the same way everywhere, such as a stale write that applied, still fails the task.
+        for (const which of INTERFACES) {
+          for (const phase of PHASES) {
+            const run = results[which]?.[phase]
+            expect(run?.outcome, `${task.name} ${which} ${phase} (${run?.failedAt ?? 'ok'})`).toEqual({
+              status: 'success',
+              errorCode: null,
+            })
+          }
+        }
         expect(outcomes.cli).toEqual(outcomes.mcp)
         expect(outcomes.sdk).toEqual(outcomes.mcp)
       },

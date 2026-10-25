@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -46,15 +46,26 @@ async function failure(promise: Promise<unknown>): Promise<McpError> {
 }
 
 const opened: OverleafClient[] = []
+/** Folders holding a test's cookie jar, removed once its clients are closed. */
+const directories: string[] = []
 
 afterEach(async () => {
   vi.restoreAllMocks()
   await Promise.all(opened.splice(0).map(async client => await client.close()))
+  await Promise.all(directories.splice(0).map(async directory => await rm(directory, { recursive: true, force: true })))
 })
+
+/** A folder for a test's own cookie jar, removed after the test. */
+async function temporaryFolder(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), 'overleaf-client-'))
+  directories.push(directory)
+  return directory
+}
 
 /** A client over the fake Overleaf, closed after the test. */
 async function openClient(server: FakeOverleaf, adjust: (config: AppConfig) => AppConfig = config => config) {
-  const { config, dependencies } = await fakeSession(server)
+  const { config, dependencies, directory } = await fakeSession(server)
+  directories.push(directory)
   const client = await createOverleafClient({ config: adjust(config), dependencies })
   opened.push(client)
   return client
@@ -259,7 +270,7 @@ describe('createOverleafClient', () => {
   })
 
   test('a missing cookie jar is AUTH_EXPIRED, and no request is made', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'overleaf-client-'))
+    const directory = await temporaryFolder()
     const config = readConfig({
       OVERLEAF_COOKIE_JAR_FILE: join(directory, 'cookies.txt'),
       OVERLEAF_BASE_URL: 'https://overleaf.test',
@@ -276,7 +287,7 @@ describe('createOverleafClient', () => {
   })
 
   test('a cookie jar that cannot be read still rejects with McpError', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'overleaf-client-'))
+    const directory = await temporaryFolder()
     // An owner-only folder where the jar file should be: it passes the permission check, then cannot be read.
     const jar = join(directory, 'cookies.txt')
     await mkdir(jar, { mode: 0o700 })

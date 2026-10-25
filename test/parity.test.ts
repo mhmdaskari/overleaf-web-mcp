@@ -367,6 +367,49 @@ describe('one failure, one error object, through every interface', () => {
     expect(await rejection(serviceCall(runtimes.service, 'read_file', input))).toStrictEqual(expected)
     expect(cli.exitCode).toBe(exitCode)
   })
+
+  test('a read-only result outside its output schema is PROTOCOL_UNSUPPORTED everywhere', async () => {
+    const runtimes = {
+      mcp: fakeServiceRuntime(),
+      cli: fakeServiceRuntime(),
+      sdk: fakeServiceRuntime(),
+      service: fakeServiceRuntime(),
+    }
+    // An Overleaf answer this release does not understand: the tree without its entities.
+    for (const runtime of Object.values(runtimes)) runtime.entities.getProjectTree.mockResolvedValue({ projectId: 'p' })
+    const input = INPUTS.get_project_tree
+
+    const mcp = await callMcp(runtimes.mcp, 'get_project_tree', input)
+    const cli = await callCli('get_project_tree', input, async () => runtimes.cli, FAKE_ENV)
+    const sdk = await rejection(sdkCall(runtimes.sdk, 'get_project_tree', input))
+    const service = await rejection(serviceCall(runtimes.service, 'get_project_tree', input))
+
+    expect(mcp.isError).toBe(true)
+    expect(mcp.structuredContent).toBeUndefined()
+    expect(mcp.text).toMatchObject({
+      code: 'PROTOCOL_UNSUPPORTED',
+      retryable: false,
+      details: { kind: 'response_shape', paths: expect.arrayContaining(['entities']) },
+    })
+    expect(stderrError(cli)).toStrictEqual(mcp.text)
+    expect(sdk).toStrictEqual(mcp.text)
+    expect(service).toStrictEqual(mcp.text)
+    expect(cli.exitCode).toBe(1)
+  })
+
+  test('a write result outside its output schema is returned, never failed after the write applied', async () => {
+    const offSchema = { projectId: 'p', unexpected: true }
+    const runtimes = { cli: fakeServiceRuntime(), sdk: fakeServiceRuntime(), service: fakeServiceRuntime() }
+    for (const runtime of Object.values(runtimes)) runtime.createFile.mockResolvedValue(offSchema)
+    const input = INPUTS.create_file
+
+    const cli = await callCli('create_file', input, async () => runtimes.cli, FAKE_ENV)
+    expect(cli.exitCode).toBe(0)
+    expect(cli.stderr).toBe('')
+    expect(JSON.parse(cli.stdout)).toEqual(offSchema)
+    expect(await sdkCall(runtimes.sdk, 'create_file', input)).toEqual(offSchema)
+    expect(await serviceCall(runtimes.service, 'create_file', input)).toEqual(offSchema)
+  })
 })
 
 /**

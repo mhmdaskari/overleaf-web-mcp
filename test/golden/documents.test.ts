@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises'
+import { rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { describe, expect, test } from 'vitest'
@@ -23,6 +23,7 @@ async function withService(server: FakeOverleaf, run: (opened: Opened) => Promis
     await run(opened)
   } finally {
     await opened.runtime.close()
+    await rm(opened.directory, { recursive: true, force: true })
   }
 }
 

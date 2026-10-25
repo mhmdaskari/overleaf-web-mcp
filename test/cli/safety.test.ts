@@ -3,7 +3,7 @@ import { chmod, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
 
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
 
 import type * as BrowserLogin from '../../src/auth/browser-login.js'
 
@@ -213,6 +213,11 @@ async function handshakeRuntime(style: Style) {
 }
 
 describe('operation commands never open a browser or print a secret', () => {
+  // Cleared, not reset: the mock keeps its throwing implementation, and each test sees only its own calls.
+  afterEach(() => {
+    vi.mocked(captureBrowserSession).mockClear()
+  })
+
   test('the sweep covers every alias and every operation', () => {
     const lines = commands()
     for (const alias of ALIASES) {
@@ -309,7 +314,7 @@ describe('operation commands never open a browser or print a secret', () => {
   })
 
   test('the browser mock is the one the login command reaches', async () => {
-    // Only login may open a browser; here it reaches the mock, so the sweep above would have seen any call.
+    // Only login may open a browser; here it reaches the mock, so every other test here would have seen any call.
     await expect(
       runLoginCommand(readConfig({ OVERLEAF_COOKIE_JAR_FILE: join(base, 'unused.txt'), OVERLEAF_BASE_URL: 'https://overleaf.test' }))
     ).rejects.toThrow('A browser was opened.')
