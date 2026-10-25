@@ -4,6 +4,54 @@ All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Until 1.0.0, tool schemas and
 result shapes may change in a minor or patch release; each such change is listed below.
 
+## [0.7.0] - 2026-10-25
+
+The operations without an MCP client. A command line reaches every tool, `call <tool>` with a
+JSON request plus shorthand commands for the common ones, and prints one JSON result, with exit
+codes that say what is safe to do next. `overleaf-web-mcp/core` gains `createOverleafClient`, one
+typed method per tool, and three Agent Skills drive the command line. All three go through the
+same service, checks, and safety defaults as the MCP server. Every tool now declares an
+`outputSchema`. No tool was added or removed; the server still registers 31 tools. Planned in
+[ROADMAP.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/ROADMAP.md).
+
+### Added
+
+- **Output schemas for the last 12 tools**: `get_project_tree`, `read_file`, `write_file`,
+  `create_file`, `manage_entity`, `download_file`, `get_sections`, `get_section_content`,
+  `write_section`, `stop_compile`, `set_comment_status`, and `monitor_project_history` declare an
+  `outputSchema` and return the same object as `structuredContent`, mirrored in the JSON text
+  block as before. Every tool now does. The shapes are the ones these tools already returned,
+  recorded first as golden results taken through the real domain classes.
+
+### Changed
+
+- **`errorCode` in the `failed` entries of `batch_upload`, `sync_directory`, and
+  `delete_entities` is an enum of the error codes** in their output schemas, where it was any
+  string.
+- **A read-only tool whose result does not match its output schema fails with
+  `PROTOCOL_UNSUPPORTED`** and `details: { kind: "response_shape", paths }`, the same way through
+  every interface. The MCP SDK used to report such a mismatch as an untyped text error. A tool that
+  changes something is never failed this way after the change applied.
+- **`createMcpServer`, `serveOverStdio`, and `createOverleafService` take a narrower runtime
+  type.** `OverleafServiceRuntime.authStatus` and `createFile` now declare the results the
+  `auth_status` and `create_file` contracts describe, where they returned `Record<string, unknown>`
+  and `unknown`, so a hand-written runtime must return those shapes.
+- **`set_comment_status` reports the status it verified**, not the string it was given; the two
+  differ only for a library caller that passed something other than `open` or `resolved`.
+- The descriptions of `read_file`, `stop_compile`, and `monitor_project_history` now name the
+  fields they return, and those of `add_comment` and `set_comment_status` say that
+  `recoveredAfterTimeout` also marks a change confirmed after its read-back failed.
+
+### Fixed
+
+- **`get_project_tree` reports `hash` only when it is a string.** A binary file whose `hash` in
+  the joined project was `null` or another non-string value was listed with that value, which the
+  new output schema, like the documentation, does not allow; the entity now has no `hash`.
+- **A heading inside another heading's title is part of that title.** For
+  `\section{Outer \section{Inner}}`, `get_sections` listed both, the outer section ending before
+  its own body started, and `write_section` on it wrote part of the heading a second time. Section
+  tools now read a heading inside a title or a short title as part of it.
+
 ## [0.6.2] - 2026-10-20
 
 Fixes from a live test run against overleaf.com. No tool was added or removed; the server still
@@ -1025,6 +1073,8 @@ still registers 19 tools. Planned in [ROADMAP.md](https://github.com/mhmdaskari/
 - First release: browser-assisted session capture, project and file management, revision-checked
   and section-level writing, compilation, and review comments.
 
+[0.7.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.7.0
+[0.6.2]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.6.2
 [0.6.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.6.1
 [0.6.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.6.0
 [0.5.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.5.1

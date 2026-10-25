@@ -4,46 +4,9 @@ import { OPERATION_NAMES, OPERATIONS, type OperationName } from '../../src/contr
 import { McpError } from '../../src/core/errors.js'
 import { createOverleafService } from '../../src/service/operations.js'
 import { INPUTS } from '../helpers/operation-inputs.js'
+import { fakeServiceRuntime } from '../helpers/fake-runtime.js'
 
-function fakeRuntime() {
-  const resolved = () => vi.fn<(...args: any[]) => Promise<any>>(async () => ({}))
-  return {
-    authStatus: resolved(),
-    account: { listProjects: resolved() },
-    projects: {
-      createProject: resolved(),
-      cloneProject: resolved(),
-      importProjectZip: resolved(),
-      downloadProjectZip: resolved(),
-      manageProject: resolved(),
-      updateProjectSettings: resolved(),
-    },
-    entities: {
-      getProjectTree: resolved(),
-      manageEntity: resolved(),
-      uploadFile: resolved(),
-      downloadFile: resolved(),
-    },
-    documents: { readFile: resolved(), writeFile: resolved() },
-    createFile: resolved(),
-    sections: { getSections: resolved(), getSectionContent: resolved(), writeSection: resolved() },
-    compile: {
-      compileProject: resolved(),
-      stopCompile: resolved(),
-      getCompileLog: resolved(),
-      downloadCompileOutput: resolved(),
-      readCompileOutput: resolved(),
-    },
-    comments: {
-      listComments: resolved(),
-      replyToComment: resolved(),
-      addComment: resolved(),
-      setCommentStatus: resolved(),
-    },
-    history: { monitorProjectHistory: resolved() },
-    sync: { planSync: resolved(), syncDirectory: resolved(), deleteEntities: resolved(), batchUpload: resolved() },
-  }
-}
+const fakeRuntime = fakeServiceRuntime
 
 function allMocks(runtime: ReturnType<typeof fakeRuntime>): Array<ReturnType<typeof vi.fn>> {
   return Object.values(runtime).flatMap(value =>

@@ -9,7 +9,7 @@ import { createProxyRoute, type ProxyRoute } from './http/proxy.js'
 import { AccountApi } from './overleaf/account.js'
 import { CommentsApi } from './overleaf/comments.js'
 import { CompileApi } from './overleaf/compile.js'
-import { DocumentsApi, type WriteMode } from './overleaf/documents.js'
+import { DocumentsApi, type WriteFileResult, type WriteMode } from './overleaf/documents.js'
 import { EntitiesApi } from './overleaf/entities.js'
 import { HistoryApi } from './overleaf/history.js'
 import { ProjectsApi } from './overleaf/projects.js'
@@ -31,7 +31,7 @@ async function createDocument(
   content: string,
   writeMode: WriteMode,
   nextStep = ''
-): Promise<unknown> {
+): Promise<WriteFileResult> {
   // The new document is read back after it is created, so that read is allowed first.
   runtime.policy.assertProject(projectId)
   runtime.policy.assertEffect('overleaf-write', 'overleaf-read')
@@ -263,7 +263,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       createFile: async (projectId, filePath, content, writeMode) =>
         await createDocument(created.runtime!, projectId, filePath, content, writeMode),
       uploadFile: async (projectId, localPath, destinationFolderPath, destinationName, options) =>
-        await entities.uploadFile(projectId, localPath, destinationFolderPath, destinationName, options),
+        await entities.uploadFile(projectId, localPath, destinationFolderPath, destinationName, options ?? {}),
       manageEntity: async (projectId, action) => await entities.manageEntity(projectId, action),
       currentUserId: bootstrap.userId,
       policy,
@@ -324,7 +324,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     filePath: string,
     content = '',
     writeMode: WriteMode = 'untracked'
-  ): Promise<unknown> {
+  ): Promise<WriteFileResult> {
     return await createDocument(
       this,
       projectId,

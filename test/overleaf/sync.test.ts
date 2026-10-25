@@ -232,7 +232,12 @@ class FakeProject {
           if (this.failFolders.has(action.path)) throw new McpError('PERMISSION_DENIED', 'Overleaf returned HTTP 403.')
           this.mutations.push(`create_folder ${action.path}`)
           this.folder(action.path)
-          return { action: 'create_folder', created: { _id: this.entities.get(action.path)!.id } }
+          return {
+            action: 'create_folder' as const,
+            created: { _id: this.entities.get(action.path)!.id, name: posix.basename(action.path) },
+            trackChangesActive: false,
+            writeMode: 'untracked' as const,
+          }
         }
         if (action.action === 'delete') {
           if (action.confirmPath !== action.path) throw new McpError('CONFIRMATION_MISMATCH', 'mismatch')
@@ -242,7 +247,7 @@ class FakeProject {
           for (const key of [...this.entities.keys()]) {
             if (key === action.path || key.startsWith(`${action.path}/`)) this.entities.delete(key)
           }
-          return { action: 'delete', id: entity.id }
+          return { action: 'delete' as const, id: entity.id, trackChangesActive: false, writeMode: 'untracked' as const }
         }
         throw new Error(`unexpected ${action.action}`)
       },

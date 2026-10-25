@@ -463,13 +463,82 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "doc",
+                  "file",
+                  "folder"
+                ]
+              },
+              "parentFolderId": {
+                "type": "string"
+              },
+              "hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "path",
+              "type",
+              "parentFolderId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "rootDocPath": {
+          "type": "string"
+        },
+        "compiler": {
+          "type": "string"
+        },
+        "imageName": {
+          "type": "string"
+        },
+        "spellCheckLanguage": {
+          "type": "string"
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "hashNote": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "entities",
+        "trackChangesActive",
+        "hashNote"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": true
     }
   },
   {
     "name": "read_file",
-    "description": "Read a text document as LF-normalized content and return its opaque revision.",
+    "description": "Read a text document as LF-normalized content and return its opaque revision. Returns content, revision (pass it unchanged to write_file or write_section), newline \"LF\", protocol (\"sharejs\" or \"history-ot\"), and trackChangesActive.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -489,6 +558,40 @@
         "filePath"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "newline": {
+          "type": "string",
+          "const": "LF"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "sharejs",
+            "history-ot"
+          ]
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "content",
+        "revision",
+        "newline",
+        "protocol",
+        "trackChangesActive"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": true
@@ -541,6 +644,43 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "sharejs",
+            "history-ot"
+          ]
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "writeMode": {
+          "type": "string",
+          "enum": [
+            "untracked",
+            "tracked"
+          ]
+        },
+        "recoveredAfterTimeout": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "revision",
+        "protocol",
+        "trackChangesActive",
+        "writeMode"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": false
@@ -580,6 +720,43 @@
         "filePath"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "sharejs",
+            "history-ot"
+          ]
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "writeMode": {
+          "type": "string",
+          "enum": [
+            "untracked",
+            "tracked"
+          ]
+        },
+        "recoveredAfterTimeout": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "revision",
+        "protocol",
+        "trackChangesActive",
+        "writeMode"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "destructiveHint": false,
@@ -628,6 +805,53 @@
         "path"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "create_folder",
+            "rename",
+            "move",
+            "delete"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "created": {
+          "type": "object",
+          "properties": {
+            "_id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "_id",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "writeMode": {
+          "type": "string",
+          "const": "untracked"
+        }
+      },
+      "required": [
+        "action",
+        "trackChangesActive",
+        "writeMode"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "destructiveHint": true,
@@ -888,7 +1112,32 @@
                 ]
               },
               "errorCode": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "AUTH_EXPIRED",
+                  "PERMISSION_DENIED",
+                  "NOT_FOUND",
+                  "REVISION_CONFLICT",
+                  "PROTOCOL_UNSUPPORTED",
+                  "UPDATE_TOO_LARGE",
+                  "DOC_TOO_LARGE",
+                  "TIMEOUT",
+                  "OUTCOME_UNKNOWN",
+                  "COMPILE_FAILED",
+                  "COMPILE_RATE_LIMITED",
+                  "COMPILE_UNAVAILABLE",
+                  "COMPILE_TIMEOUT",
+                  "NO_BUILD",
+                  "BUILD_NOT_FOUND",
+                  "PARTIAL_CLEANUP",
+                  "INVALID_ARGUMENT",
+                  "CONFIRMATION_MISMATCH",
+                  "RATE_LIMITED",
+                  "REMOTE_DRIFT",
+                  "PATH_OUTSIDE_ROOT",
+                  "POLICY_DENIED",
+                  "REMOTE_ERROR"
+                ]
               },
               "message": {
                 "type": "string"
@@ -979,6 +1228,25 @@
         "localPath"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "localPath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bytes",
+        "localPath"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -1430,7 +1698,32 @@
                 ]
               },
               "errorCode": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "AUTH_EXPIRED",
+                  "PERMISSION_DENIED",
+                  "NOT_FOUND",
+                  "REVISION_CONFLICT",
+                  "PROTOCOL_UNSUPPORTED",
+                  "UPDATE_TOO_LARGE",
+                  "DOC_TOO_LARGE",
+                  "TIMEOUT",
+                  "OUTCOME_UNKNOWN",
+                  "COMPILE_FAILED",
+                  "COMPILE_RATE_LIMITED",
+                  "COMPILE_UNAVAILABLE",
+                  "COMPILE_TIMEOUT",
+                  "NO_BUILD",
+                  "BUILD_NOT_FOUND",
+                  "PARTIAL_CLEANUP",
+                  "INVALID_ARGUMENT",
+                  "CONFIRMATION_MISMATCH",
+                  "RATE_LIMITED",
+                  "REMOTE_DRIFT",
+                  "PATH_OUTSIDE_ROOT",
+                  "POLICY_DENIED",
+                  "REMOTE_ERROR"
+                ]
               },
               "message": {
                 "type": "string"
@@ -1595,7 +1888,32 @@
                 "type": "string"
               },
               "errorCode": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "AUTH_EXPIRED",
+                  "PERMISSION_DENIED",
+                  "NOT_FOUND",
+                  "REVISION_CONFLICT",
+                  "PROTOCOL_UNSUPPORTED",
+                  "UPDATE_TOO_LARGE",
+                  "DOC_TOO_LARGE",
+                  "TIMEOUT",
+                  "OUTCOME_UNKNOWN",
+                  "COMPILE_FAILED",
+                  "COMPILE_RATE_LIMITED",
+                  "COMPILE_UNAVAILABLE",
+                  "COMPILE_TIMEOUT",
+                  "NO_BUILD",
+                  "BUILD_NOT_FOUND",
+                  "PARTIAL_CLEANUP",
+                  "INVALID_ARGUMENT",
+                  "CONFIRMATION_MISMATCH",
+                  "RATE_LIMITED",
+                  "REMOTE_DRIFT",
+                  "PATH_OUTSIDE_ROOT",
+                  "POLICY_DENIED",
+                  "REMOTE_ERROR"
+                ]
               },
               "message": {
                 "type": "string"
@@ -1662,6 +1980,100 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "command": {
+                "type": "string",
+                "enum": [
+                  "part",
+                  "chapter",
+                  "section",
+                  "subsection",
+                  "subsubsection",
+                  "paragraph",
+                  "subparagraph"
+                ]
+              },
+              "level": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "starred": {
+                "type": "boolean"
+              },
+              "title": {
+                "type": "string"
+              },
+              "shortTitle": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "headingEnd": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "bodyStart": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "index",
+              "command",
+              "level",
+              "starred",
+              "title",
+              "start",
+              "headingEnd",
+              "bodyStart",
+              "end"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "revision": {
+          "type": "string"
+        },
+        "singleFileOnly": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "sections",
+        "revision",
+        "singleFileOnly"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": true
     }
@@ -1693,6 +2105,96 @@
         "sectionId"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "section": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "command": {
+              "type": "string",
+              "enum": [
+                "part",
+                "chapter",
+                "section",
+                "subsection",
+                "subsubsection",
+                "paragraph",
+                "subparagraph"
+              ]
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "starred": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            },
+            "shortTitle": {
+              "type": "string"
+            },
+            "start": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "headingEnd": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "bodyStart": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "index",
+            "command",
+            "level",
+            "starred",
+            "title",
+            "start",
+            "headingEnd",
+            "bodyStart",
+            "end"
+          ],
+          "additionalProperties": false
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "section",
+        "revision"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": true
@@ -1744,6 +2246,43 @@
         "content"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "sharejs",
+            "history-ot"
+          ]
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "writeMode": {
+          "type": "string",
+          "enum": [
+            "untracked",
+            "tracked"
+          ]
+        },
+        "recoveredAfterTimeout": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "revision",
+        "protocol",
+        "trackChangesActive",
+        "writeMode"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "destructiveHint": true,
@@ -1967,7 +2506,7 @@
   },
   {
     "name": "stop_compile",
-    "description": "Stop the active Overleaf compile for a project.",
+    "description": "Stop the active Overleaf compile for a project. Returns { stopped: true }.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1981,6 +2520,20 @@
         "projectId"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "stopped": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "stopped"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "destructiveHint": true,
@@ -2455,7 +3008,7 @@
   },
   {
     "name": "add_comment",
-    "description": "Add and verify an anchored review comment using UTF-16 positions and expectedText. Returns threadId, the created thread (id, status, messages with author { id, displayName }, content, and ISO timestamp) when it could be read back, the resulting document revision and protocol, trackChangesActive, writeMode, and recoveredAfterTimeout when an attachment that timed out or lost its socket was confirmed.",
+    "description": "Add and verify an anchored review comment using UTF-16 positions and expectedText. Returns threadId, the created thread (id, status, messages with author { id, displayName }, content, and ISO timestamp) when it could be read back, the resulting document revision and protocol, trackChangesActive, writeMode, and recoveredAfterTimeout when an attachment that timed out, lost its socket, or could not be read back was confirmed by observation.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2662,7 +3215,7 @@
   },
   {
     "name": "set_comment_status",
-    "description": "Resolve or reopen a review thread and verify its resulting document revision. filePath must be the document the thread is anchored in, as list_comments reports it; a thread not anchored there fails with NOT_FOUND and nothing changes. Returns threadId, status, the resulting revision, trackChangesActive, writeMode, and recoveredAfterTimeout when a change that timed out or lost its socket was confirmed.",
+    "description": "Resolve or reopen a review thread and verify its resulting document revision. filePath must be the document the thread is anchored in, as list_comments reports it; a thread not anchored there fails with NOT_FOUND and nothing changes. Returns threadId, status, the resulting revision, trackChangesActive, writeMode, and recoveredAfterTimeout when a change that timed out, lost its socket, or could not be read back was confirmed by observation.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2702,6 +3255,44 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "resolved"
+          ]
+        },
+        "revision": {
+          "type": "string"
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "writeMode": {
+          "type": "string",
+          "const": "untracked"
+        },
+        "recoveredAfterTimeout": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "threadId",
+        "status",
+        "revision",
+        "trackChangesActive",
+        "writeMode"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "destructiveHint": true,
       "idempotentHint": true
@@ -2709,7 +3300,7 @@
   },
   {
     "name": "monitor_project_history",
-    "description": "Poll one recent project-history window and return updates newer than an optional version cursor. In a group that starts before the cursor, only project operations at or after it are listed.",
+    "description": "Poll one recent project-history window and return updates newer than an optional version cursor. In a group that starts before the cursor, only project operations at or after it are listed. Returns projectId, currentVersion and nextSinceVersion (null when the window is empty; pass nextSinceVersion back as sinceVersion), hasEarlierHistory, gapDetected, and updates, newest first. Each update has fromVersion, toVersion, ISO startedAt and endedAt, authors ({ id, displayName } or null), paths, projectOperations (add, rename with newPath, remove, each with atVersion), labels, and origin ({ kind, path?, timestamp?, version? } or null).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2728,6 +3319,275 @@
         "projectId"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string"
+        },
+        "currentVersion": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nextSinceVersion": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hasEarlierHistory": {
+          "type": "boolean"
+        },
+        "gapDetected": {
+          "type": "boolean"
+        },
+        "updates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fromVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "toVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "startedAt": {
+                "type": "string"
+              },
+              "endedAt": {
+                "type": "string"
+              },
+              "authors": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "displayName"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "projectOperations": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "add"
+                        },
+                        "atVersion": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "path": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "atVersion",
+                        "path"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "rename"
+                        },
+                        "atVersion": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "newPath": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "atVersion",
+                        "path",
+                        "newPath"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "remove"
+                        },
+                        "atVersion": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "path": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "atVersion",
+                        "path"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "comment": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "userId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "userDisplayName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "comment",
+                    "version",
+                    "createdAt",
+                    "userId",
+                    "userDisplayName"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "timestamp": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "fromVersion",
+              "toVersion",
+              "startedAt",
+              "endedAt",
+              "authors",
+              "paths",
+              "projectOperations",
+              "labels",
+              "origin"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "projectId",
+        "currentVersion",
+        "nextSinceVersion",
+        "hasEarlierHistory",
+        "gapDetected",
+        "updates"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": true

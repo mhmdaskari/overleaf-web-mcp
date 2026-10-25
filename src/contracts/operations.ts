@@ -3,9 +3,11 @@ import { z } from 'zod'
 import { DEFAULT_PROJECT_LIMIT, MAX_PROJECT_LIMIT } from '../overleaf/account.js'
 import { DEFAULT_LOG_TAIL, MAX_ERROR_LINES, MAX_LOG_CHARS, MAX_LOG_TAIL } from '../overleaf/compile.js'
 import { MAX_LOG_ENTRIES, MAX_MESSAGE_LENGTH } from '../overleaf/compile-log.js'
+import { SECTION_COMMANDS } from '../core/sections.js'
 import { COMPILERS, DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS } from '../overleaf/projects.js'
 import { BATCH_UPLOAD_LIMIT } from '../overleaf/sync.js'
 import type { Effect } from './effects.js'
+import { ERROR_CODES } from './error-codes.js'
 
 /**
  * Operation ids, in registration order. They are the MCP tool names and, from v0.7.0, the CLI
@@ -60,8 +62,8 @@ export interface OperationContract {
   description: string
   /** Absent for an operation without parameters. */
   inputSchema?: z.ZodObject
-  /** Present when the result is returned as validated structured content. */
-  outputSchema?: z.ZodObject
+  /** The result, returned as structured content; MCP clients may validate it, and read-only results are checked. */
+  outputSchema: z.ZodObject
   annotations: OperationAnnotations
   /** Everything the operation can do; the access policy refuses it before any work otherwise. */
   effects: readonly Effect[]
@@ -70,7 +72,8 @@ export interface OperationContract {
 const projectId = z.string().min(1).describe('Overleaf project ID')
 const filePath = z.string().min(1).describe('Project-relative path using forward slashes')
 const revision = z.string().min(1).describe('Opaque revision returned by a prior read or write')
-const writeMode = z.enum(['untracked', 'tracked']).default('untracked').describe(
+const writeModeSchema = z.enum(['untracked', 'tracked'])
+const writeMode = writeModeSchema.default('untracked').describe(
   'Use tracked to record inserted and deleted text as Overleaf tracked changes; defaults to untracked'
 )
 const position = z.object({
@@ -94,8 +97,9 @@ const ignorePatterns = z
     'Extra gitignore-style patterns, applied after the defaults (hidden files and folders, __MACOSX/, and LaTeX build output: *.aux, *.log, *.bbl, *.blg, *.out, *.toc, *.synctex.gz, *.fdb_latexmk, *.fls) and after any .olignore file in the folder; "!pattern" re-includes, for example "!.latexmkrc". Ignored paths are never uploaded, compared, or deleted, on either side.'
   )
 const entityTypeSchema = z.enum(['doc', 'file', 'folder'])
+const entityActionSchema = z.enum(['create_folder', 'rename', 'move', 'delete'])
 const syncActionSchema = z.enum(['create_folder', 'upload', 'write', 'create', 'delete'])
-const errorCodeSchema = z.string()
+const errorCodeSchema = z.enum(ERROR_CODES)
 const batchUploadActionSchema = z.enum(['create_folder', 'upload'])
 const uncheckedDocumentReplace = z
   .boolean()
@@ -103,6 +107,40 @@ const uncheckedDocumentReplace = z
   .describe(
     'Allow replacing a text document, a blind write with no revision check; prefer write_file with localPath when a collaborator may be editing'
   )
+
+const otProtocolSchema = z.enum(['sharejs', 'history-ot'])
+
+/** What every revision-checked text write returns: write_file, create_file, and write_section. */
+const documentWriteSchema = z.object({
+  revision: z.string(),
+  protocol: otProtocolSchema,
+  trackChangesActive: z.boolean(),
+  writeMode: writeModeSchema,
+  recoveredAfterTimeout: z.literal(true).optional(),
+})
+
+const projectEntitySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  path: z.string(),
+  type: entityTypeSchema,
+  parentFolderId: z.string(),
+  hash: z.string().optional(),
+})
+
+const latexSectionSchema = z.object({
+  id: z.string(),
+  index: z.number().int().nonnegative(),
+  command: z.enum(SECTION_COMMANDS),
+  level: z.number().int().nonnegative(),
+  starred: z.boolean(),
+  title: z.string(),
+  shortTitle: z.string().optional(),
+  start: z.number().int().nonnegative(),
+  headingEnd: z.number().int().nonnegative(),
+  bodyStart: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+})
 
 const logEntrySchema = z.object({
   file: z.string().optional(),
@@ -149,6 +187,42 @@ const commentThreadSchema = z.object({
 })
 
 const projectActionSchema = z.enum(['rename', 'trash', 'restore', 'archive', 'unarchive', 'delete'])
+
+const historyVersion = z.number().int().nonnegative()
+
+const historyProjectOperationSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('add'), atVersion: historyVersion, path: z.string() }),
+  z.object({ type: z.literal('rename'), atVersion: historyVersion, path: z.string(), newPath: z.string() }),
+  z.object({ type: z.literal('remove'), atVersion: historyVersion, path: z.string() }),
+])
+
+const historyUpdateSchema = z.object({
+  fromVersion: historyVersion,
+  toVersion: historyVersion,
+  startedAt: z.string(),
+  endedAt: z.string(),
+  authors: z.array(commentAuthorSchema.nullable()),
+  paths: z.array(z.string()),
+  projectOperations: z.array(historyProjectOperationSchema),
+  labels: z.array(
+    z.object({
+      id: z.string(),
+      comment: z.string(),
+      version: historyVersion,
+      createdAt: z.string(),
+      userId: z.string().nullable(),
+      userDisplayName: z.string().nullable(),
+    })
+  ),
+  origin: z
+    .object({
+      kind: z.string(),
+      path: z.string().optional(),
+      timestamp: z.string().optional(),
+      version: historyVersion.optional(),
+    })
+    .nullable(),
+})
 
 export const OPERATIONS = {
   auth_status: {
@@ -275,12 +349,29 @@ export const OPERATIONS = {
     description:
       'Return the project file/folder tree with entity IDs and paths, plus the root document, compiler, TeX Live image, and spell-check language Overleaf uses. Each binary file entity carries hash, a git blob hash equal to `git hash-object <file>`; text documents have no hash and must be compared by reading their content.',
     inputSchema: z.object({ projectId }),
+    outputSchema: z.object({
+      entities: z.array(projectEntitySchema),
+      rootDocPath: z.string().optional(),
+      compiler: z.string().optional(),
+      imageName: z.string().optional(),
+      spellCheckLanguage: z.string().optional(),
+      trackChangesActive: z.boolean(),
+      hashNote: z.string(),
+    }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
   },
   read_file: {
-    description: 'Read a text document as LF-normalized content and return its opaque revision.',
+    description:
+      'Read a text document as LF-normalized content and return its opaque revision. Returns content, revision (pass it unchanged to write_file or write_section), newline "LF", protocol ("sharejs" or "history-ot"), and trackChangesActive.',
     inputSchema: z.object({ projectId, filePath }),
+    outputSchema: z.object({
+      content: z.string(),
+      revision: z.string(),
+      newline: z.literal('LF'),
+      protocol: otProtocolSchema,
+      trackChangesActive: z.boolean(),
+    }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
   },
@@ -299,6 +390,7 @@ export const OPERATIONS = {
         .describe('Local UTF-8 text file holding the complete replacement, mutually exclusive with content'),
       writeMode,
     }),
+    outputSchema: documentWriteSchema,
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['local-read', 'overleaf-write'],
   },
@@ -306,6 +398,7 @@ export const OPERATIONS = {
     description:
       'Create a text document and optionally record non-empty initial content as tracked changes. The content is written as by write_file once the empty document exists, so on a ShareJS (legacy editor) document, content that adds an emoji or other character outside the Basic Multilingual Plane is refused with INVALID_ARGUMENT, and a timeout or a lost socket is observed, never resent. If reading back or writing the content fails after the document was created, the error keeps its code and adds details.created: true; the document then exists, possibly empty, so do not create it again: read it with read_file and write the content with write_file.',
     inputSchema: z.object({ projectId, filePath, content: z.string().optional(), writeMode }),
+    outputSchema: documentWriteSchema,
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['overleaf-write', 'overleaf-read'],
   },
@@ -314,11 +407,18 @@ export const OPERATIONS = {
       'Create a folder, rename, move, or delete an entity. Deletion requires confirmPath to exactly equal path. A name already used in the target folder (the entity\'s own included), and a folder moved into itself or one of its subfolders, are INVALID_ARGUMENT before anything is sent.',
     inputSchema: z.object({
       projectId,
-      action: z.enum(['create_folder', 'rename', 'move', 'delete']),
+      action: entityActionSchema,
       path: filePath,
       newName: z.string().min(1).optional(),
       destinationFolderPath: z.string().optional(),
       confirmPath: z.string().optional(),
+    }),
+    outputSchema: z.object({
+      action: entityActionSchema,
+      id: z.string().optional(),
+      created: z.object({ _id: z.string(), name: z.string() }).optional(),
+      trackChangesActive: z.boolean(),
+      writeMode: z.literal('untracked'),
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-write', 'overleaf-delete'],
@@ -353,7 +453,7 @@ export const OPERATIONS = {
       replaced: z.boolean(),
       hash: z.string().optional(),
       trackChangesActive: z.boolean(),
-      writeMode: z.enum(['untracked', 'tracked']),
+      writeMode: writeModeSchema,
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['local-read', 'overleaf-write', 'unchecked-replace'],
@@ -419,6 +519,7 @@ export const OPERATIONS = {
       localPath: z.string().min(1),
       overwrite: z.boolean().default(false).describe('Replace localPath if it already exists'),
     }),
+    outputSchema: z.object({ bytes: z.number().int().nonnegative(), localPath: z.string() }),
     // It writes a local file and can replace one, so it is not read-only.
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'local-write'],
@@ -582,6 +683,11 @@ export const OPERATIONS = {
     description:
       'Parse LaTeX section headings in one file only; this never follows input/include directives.',
     inputSchema: z.object({ projectId, filePath }),
+    outputSchema: z.object({
+      sections: z.array(latexSectionSchema),
+      revision: z.string(),
+      singleFileOnly: z.literal(true),
+    }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
   },
@@ -589,6 +695,7 @@ export const OPERATIONS = {
     description:
       'Read one parsed section body from a single file. The body runs from after the heading to the next heading at the same or a higher level, so it includes nested subsections, and the last section runs to the end of the file, including \\end{document}.',
     inputSchema: z.object({ projectId, filePath, sectionId: z.string().min(1) }),
+    outputSchema: z.object({ content: z.string(), section: latexSectionSchema, revision: z.string() }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
   },
@@ -603,6 +710,7 @@ export const OPERATIONS = {
       content: z.string(),
       writeMode,
     }),
+    outputSchema: documentWriteSchema,
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'overleaf-write'],
   },
@@ -644,8 +752,9 @@ export const OPERATIONS = {
     effects: ['compile', 'overleaf-read'],
   },
   stop_compile: {
-    description: 'Stop the active Overleaf compile for a project.',
+    description: 'Stop the active Overleaf compile for a project. Returns { stopped: true }.',
     inputSchema: z.object({ projectId }),
+    outputSchema: z.object({ stopped: z.literal(true) }),
     annotations: { destructiveHint: true, idempotentHint: true },
     effects: ['compile'],
   },
@@ -738,7 +847,7 @@ export const OPERATIONS = {
   },
   add_comment: {
     description:
-      'Add and verify an anchored review comment using UTF-16 positions and expectedText. Returns threadId, the created thread (id, status, messages with author { id, displayName }, content, and ISO timestamp) when it could be read back, the resulting document revision and protocol, trackChangesActive, writeMode, and recoveredAfterTimeout when an attachment that timed out or lost its socket was confirmed.',
+      'Add and verify an anchored review comment using UTF-16 positions and expectedText. Returns threadId, the created thread (id, status, messages with author { id, displayName }, content, and ISO timestamp) when it could be read back, the resulting document revision and protocol, trackChangesActive, writeMode, and recoveredAfterTimeout when an attachment that timed out, lost its socket, or could not be read back was confirmed by observation.',
     inputSchema: z.object({
       projectId,
       filePath,
@@ -752,7 +861,7 @@ export const OPERATIONS = {
       threadId: z.string(),
       thread: commentThreadSchema.optional(),
       revision: z.string(),
-      protocol: z.enum(['sharejs', 'history-ot']),
+      protocol: otProtocolSchema,
       trackChangesActive: z.boolean(),
       writeMode: z.literal('untracked'),
       recoveredAfterTimeout: z.literal(true).optional(),
@@ -762,7 +871,7 @@ export const OPERATIONS = {
   },
   set_comment_status: {
     description:
-      'Resolve or reopen a review thread and verify its resulting document revision. filePath must be the document the thread is anchored in, as list_comments reports it; a thread not anchored there fails with NOT_FOUND and nothing changes. Returns threadId, status, the resulting revision, trackChangesActive, writeMode, and recoveredAfterTimeout when a change that timed out or lost its socket was confirmed.',
+      'Resolve or reopen a review thread and verify its resulting document revision. filePath must be the document the thread is anchored in, as list_comments reports it; a thread not anchored there fails with NOT_FOUND and nothing changes. Returns threadId, status, the resulting revision, trackChangesActive, writeMode, and recoveredAfterTimeout when a change that timed out, lost its socket, or could not be read back was confirmed by observation.',
     inputSchema: z.object({
       projectId,
       filePath,
@@ -770,15 +879,31 @@ export const OPERATIONS = {
       threadId: z.string().min(1),
       status: z.enum(['open', 'resolved']),
     }),
+    outputSchema: z.object({
+      threadId: z.string(),
+      status: z.enum(['open', 'resolved']),
+      revision: z.string(),
+      trackChangesActive: z.boolean(),
+      writeMode: z.literal('untracked'),
+      recoveredAfterTimeout: z.literal(true).optional(),
+    }),
     annotations: { destructiveHint: true, idempotentHint: true },
     effects: ['overleaf-write', 'overleaf-read'],
   },
   monitor_project_history: {
     description:
-      'Poll one recent project-history window and return updates newer than an optional version cursor. In a group that starts before the cursor, only project operations at or after it are listed.',
+      'Poll one recent project-history window and return updates newer than an optional version cursor. In a group that starts before the cursor, only project operations at or after it are listed. Returns projectId, currentVersion and nextSinceVersion (null when the window is empty; pass nextSinceVersion back as sinceVersion), hasEarlierHistory, gapDetected, and updates, newest first. Each update has fromVersion, toVersion, ISO startedAt and endedAt, authors ({ id, displayName } or null), paths, projectOperations (add, rename with newPath, remove, each with atVersion), labels, and origin ({ kind, path?, timestamp?, version? } or null).',
     inputSchema: z.object({
       projectId,
       sinceVersion: z.number().int().nonnegative().optional(),
+    }),
+    outputSchema: z.object({
+      projectId: z.string(),
+      currentVersion: historyVersion.nullable(),
+      nextSinceVersion: historyVersion.nullable(),
+      hasEarlierHistory: z.boolean(),
+      gapDetected: z.boolean(),
+      updates: z.array(historyUpdateSchema),
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
@@ -792,10 +917,8 @@ export type OperationInput<N extends OperationName> = Operations[N] extends { in
   ? z.input<S>
   : Record<string, never>
 
-/** What an operation resolves with: its output schema's type, or `unknown` until it declares one (v0.7.0). */
-export type OperationOutput<N extends OperationName> = Operations[N] extends { outputSchema: infer S extends z.ZodType }
-  ? z.output<S>
-  : unknown
+/** What an operation resolves with: its output schema's type. */
+export type OperationOutput<N extends OperationName> = z.output<Operations[N]['outputSchema']>
 
 /** The contract entry for an operation, typed as the general shape. */
 export function operationContract(name: OperationName): OperationContract {

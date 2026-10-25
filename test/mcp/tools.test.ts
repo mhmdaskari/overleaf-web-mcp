@@ -9,7 +9,13 @@ import { TOOL_NAMES, registerOverleafTools } from '../../src/mcp/tools.js'
 
 function fakeRuntime() {
   return {
-    authStatus: vi.fn(async () => ({ authenticated: true })),
+    authStatus: vi.fn(async () => ({
+      authenticated: true as const,
+      baseUrl: 'https://overleaf.test',
+      projectCount: 0,
+      permissionsUnchecked: false,
+      socketPresenceNotice: 'notice',
+    })),
     account: { listProjects: vi.fn() },
     projects: {
       createProject: vi.fn(),
@@ -86,7 +92,7 @@ describe('MCP tool registration', () => {
   test('returns auth_status as structured content with a declared output schema', async () => {
     const runtime = fakeRuntime()
     const status = {
-      authenticated: true,
+      authenticated: true as const,
       baseUrl: 'https://overleaf.test',
       projectCount: 2,
       sessionExpiresAt: '2026-09-19T00:00:00.000Z',

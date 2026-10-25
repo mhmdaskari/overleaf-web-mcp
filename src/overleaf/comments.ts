@@ -401,7 +401,7 @@ export class CommentsApi {
     message: CommentMessage
     trackChangesActive: boolean
     writeMode: 'untracked'
-    recoveredAfterTimeout?: boolean
+    recoveredAfterTimeout?: true
   }> {
     this.#policy.assertProject(projectId)
     assertPathSafeId(threadId, 'threadId')
@@ -480,7 +480,7 @@ export class CommentsApi {
     protocol: OtProtocol
     trackChangesActive: boolean
     writeMode: 'untracked'
-    recoveredAfterTimeout?: boolean
+    recoveredAfterTimeout?: true
   }> {
     this.#policy.assertProject(input.projectId)
     this.#policy.assertEffect('overleaf-write', 'overleaf-read')
@@ -718,7 +718,7 @@ export class CommentsApi {
     revision: string
     trackChangesActive: boolean
     writeMode: 'untracked'
-    recoveredAfterTimeout?: boolean
+    recoveredAfterTimeout?: true
   }> {
     this.#policy.assertProject(input.projectId)
     assertPathSafeId(input.threadId, 'threadId')
@@ -863,7 +863,8 @@ export class CommentsApi {
 
     return {
       threadId: input.threadId,
-      status: input.status,
+      // The state that was verified, not the caller's string, which a library caller need not have parsed.
+      status: resolved ? 'resolved' : 'open',
       revision: createRevision({
         projectId: input.projectId,
         docId: live.docId,

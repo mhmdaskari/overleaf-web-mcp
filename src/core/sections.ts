@@ -1,14 +1,11 @@
 import { McpError } from './errors.js'
 
-const SECTION_LEVELS = new Map([
-  ['part', 0],
-  ['chapter', 1],
-  ['section', 2],
-  ['subsection', 3],
-  ['subsubsection', 4],
-  ['paragraph', 5],
-  ['subparagraph', 6],
-])
+/** The heading commands the section parser recognizes, outermost first; the index is the level. */
+export const SECTION_COMMANDS = ['part', 'chapter', 'section', 'subsection', 'subsubsection', 'paragraph', 'subparagraph'] as const
+
+export type SectionCommand = (typeof SECTION_COMMANDS)[number]
+
+const SECTION_LEVELS = new Map<SectionCommand, number>(SECTION_COMMANDS.map((command, level) => [command, level]))
 
 const IGNORED_ENVIRONMENTS = new Set([
   'verbatim',
@@ -21,7 +18,7 @@ const IGNORED_ENVIRONMENTS = new Set([
 export interface LatexSection {
   id: string
   index: number
-  command: string
+  command: SectionCommand
   level: number
   starred: boolean
   title: string
@@ -147,10 +144,11 @@ export function findSections(input: string): LatexSection[] {
   const source = input.replace(/\r\n?|\n/g, '\n')
   const masked = maskIgnored(source)
   const candidates: Omit<LatexSection, 'index' | 'id' | 'end'>[] = []
-  const commandPattern = /\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph)(\*)?/gu
+  const commandPattern = new RegExp(String.raw`\\(${SECTION_COMMANDS.join('|')})(\*)?`, 'gu')
 
   for (const match of masked.matchAll(commandPattern)) {
-    const command = match[1]!
+    // The pattern's alternation names exactly the section commands.
+    const command = match[1] as SectionCommand
     const start = match.index
     // After an odd run, this backslash ends a `\\` line break, so the name that follows is text.
     if (backslashesBefore(masked, start) % 2 === 1) continue

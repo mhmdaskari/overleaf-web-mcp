@@ -1,5 +1,5 @@
 import type { OperationContext, OperationDiagnostic } from '../contracts/context.js'
-import type { OperationInput, OperationName } from '../contracts/operations.js'
+import { operationContract, type OperationInput, type OperationName, type OperationOutput } from '../contracts/operations.js'
 import type { OperationHandler, OverleafService, OverleafServiceRuntime } from '../contracts/service.js'
 import { asMcpError, McpError } from '../core/errors.js'
 import { resolveTextContent } from '../core/local-file.js'
@@ -10,7 +10,7 @@ import type { ProjectAction } from '../overleaf/projects.js'
 type Implementation<N extends OperationName> = (
   input: OperationInput<N>,
   context: OperationContext
-) => Promise<unknown>
+) => Promise<OperationOutput<N>>
 
 /**
  * Runs one operation so every interface sees the same failure: a typed `McpError`, reported to
@@ -23,12 +23,13 @@ function guarded<N extends OperationName>(
   name: N,
   run: Implementation<N>
 ): OperationHandler<N> {
-  return (async (input: OperationInput<N>, context: OperationContext = {}) => {
+  return async (input: OperationInput<N>, context: OperationContext = {}) => {
     try {
       const fields = (input ?? {}) as { projectId?: unknown; sourceProjectId?: unknown }
       if (typeof fields.projectId === 'string') policy.assertProject(fields.projectId)
       if (typeof fields.sourceProjectId === 'string') policy.assertProject(fields.sourceProjectId, 'sourceProjectId')
       const result = await run(input ?? ({} as OperationInput<N>), context)
+      checkReadResult(name, result)
       const deprecations = (result as { deprecations?: unknown } | null)?.deprecations
       if (Array.isArray(deprecations) && deprecations.length > 0) notify(context, { tool: name, code: 'DEPRECATED' })
       return result
@@ -37,7 +38,24 @@ function guarded<N extends OperationName>(
       notify(context, { tool: name, code: failure.code })
       throw failure
     }
-  }) as OperationHandler<N>
+  }
+}
+
+/**
+ * Checks a read-only result against its contract before any interface sees it, so an Overleaf
+ * answer this release does not understand fails the same typed way everywhere. A write's result is
+ * only typed, never checked here: an error after a write applied would invite a resubmission.
+ */
+function checkReadResult(name: OperationName, result: unknown): void {
+  const contract = operationContract(name)
+  if (contract.annotations.readOnlyHint !== true || contract.outputSchema === undefined) return
+  const parsed = contract.outputSchema.safeParse(result)
+  if (parsed.success) return
+  throw new McpError(
+    'PROTOCOL_UNSUPPORTED',
+    `Overleaf answered ${name} in a shape this release does not understand; nothing was changed.`,
+    { details: { kind: 'response_shape', paths: parsed.error.issues.slice(0, 5).map(issue => issue.path.join('.')) } }
+  )
 }
 
 function notify(context: OperationContext, diagnostic: OperationDiagnostic): void {

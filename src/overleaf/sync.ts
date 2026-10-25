@@ -12,7 +12,7 @@ import { scanLocalFolder, type IgnoredLocalEntry, type LocalFile } from '../core
 import { decodeRevision } from '../core/revision.js'
 import { normalizeLf } from '../core/text.js'
 import type { ReadFileResult, WriteFileResult, WriteMode } from './documents.js'
-import type { EntityAction, SkippedUpload, UploadedFile, UploadFileOptions } from './entities.js'
+import type { EntityAction, ManagedEntity, SkippedUpload, UploadedFile, UploadFileOptions } from './entities.js'
 import {
   normalizeProjectPath,
   parentPath,
@@ -38,7 +38,7 @@ export interface SyncDependencies {
     content: string,
     writeMode: WriteMode
   ): Promise<WriteFileResult>
-  createFile(projectId: string, filePath: string, content: string, writeMode: WriteMode): Promise<unknown>
+  createFile(projectId: string, filePath: string, content: string, writeMode: WriteMode): Promise<WriteFileResult>
   uploadFile(
     projectId: string,
     localPath: string,
@@ -46,7 +46,7 @@ export interface SyncDependencies {
     destinationName: string,
     options?: UploadFileOptions
   ): Promise<UploadedFile | SkippedUpload>
-  manageEntity(projectId: string, action: EntityAction): Promise<Record<string, unknown>>
+  manageEntity(projectId: string, action: EntityAction): Promise<ManagedEntity>
   /** Tracked writes need the signed-in user's id; without it a tracked sync is refused. */
   currentUserId?: string | undefined
   /** Defaults to allowing everything but ids that are not path-safe. */
@@ -338,9 +338,8 @@ function describeType(type: EntityType): string {
   return type === 'doc' ? 'text document' : type === 'file' ? 'binary file' : 'folder'
 }
 
-function createdEntityId(result: Record<string, unknown>): string | undefined {
-  const created = result.created as { _id?: unknown } | undefined
-  return typeof created?._id === 'string' ? created._id : undefined
+function createdEntityId(result: ManagedEntity): string | undefined {
+  return result.action === 'create_folder' ? result.created?._id : undefined
 }
 
 function uploadedEntityType(value: unknown): 'doc' | 'file' | undefined {
@@ -355,11 +354,6 @@ function errnoOf(error: unknown): unknown {
 function localReadFailure(error: unknown, localPath: string): McpError {
   if (error instanceof McpError) return error
   return new McpError('NOT_FOUND', `Local file could not be read: ${localPath}`, { cause: error })
-}
-
-function revisionOf(result: unknown): string | undefined {
-  const revision = (result as { revision?: unknown } | null)?.revision
-  return typeof revision === 'string' ? revision : undefined
 }
 
 function actionFor(work: UploadWork, writeMode: WriteMode): SyncAction {
@@ -1338,7 +1332,7 @@ export class SyncApi {
         )
       }
       // An empty file has nothing to track; it is created as an empty document.
-      let created: unknown
+      let created: WriteFileResult
       try {
         created = await this.#deps.createFile(projectId, path, text, text === '' ? 'untracked' : 'tracked')
       } catch (error) {
@@ -1351,8 +1345,7 @@ export class SyncApi {
           { retryable: error.retryable, details: error.details, cause: error }
         )
       }
-      const revision = revisionOf(created)
-      if (revision !== undefined) writtenRevisions.set(path, revision)
+      writtenRevisions.set(path, created.revision)
       return undefined
     }
     // A new path must still be empty and a changed binary still hold what the plan compared,
