@@ -132,11 +132,16 @@ function codeItems(body: string): { items: CodeItem[]; prose: string } {
 }
 
 /**
- * Splits one command line as a POSIX shell would, as far as the skills need: single and double
- * quotes, `<placeholder>` words kept whole, and a comment, pipe, list, or redirection ending it.
+ * Splits one command line as a POSIX shell would, as far as the skills need: words and single
+ * quotes. It stops at a comment, pipe, list, or redirection and returns the rest of the line from
+ * there, so the caller decides what may follow a command.
+ *
+ * A project path can hold `$`, quotes, and spaces, so the skills keep it off command lines and
+ * single-quote every other value: a double quote or a bare `<placeholder>` is refused here.
  */
-function shellWords(line: string): string[] {
+function shellWords(line: string): { words: string[]; rest: string } {
   if (/[$`\\]/u.test(line)) throw new Error(`a command uses expansion or escapes: ${line}`)
+  if (line.includes('"')) throw new Error(`a command quotes with double quotes, which let the shell expand: ${line}`)
   const words: string[] = []
   let index = 0
   while (index < line.length) {
@@ -145,17 +150,16 @@ function shellWords(line: string): string[] {
       index += 1
       continue
     }
-    if ('#|;&>'.includes(char)) break
+    if ('#|;&>'.includes(char)) return { words, rest: line.slice(index).trim() }
     let word = ''
     while (index < line.length) {
       const current = line[index] ?? ''
       if (current === ' ' || current === '\t' || '|;&>'.includes(current)) break
-      if (current === "'" || current === '"' || current === '<') {
-        const close = current === '<' ? '>' : current
-        const end = line.indexOf(close, index + 1)
-        if (end < 0) throw new Error(`unclosed ${current} in: ${line}`)
-        const inner = line.slice(index + 1, end)
-        word += current === '<' ? `<${inner}>` : inner
+      if (current === '<') throw new Error(`a placeholder on a command line is not single-quoted: ${line}`)
+      if (current === "'") {
+        const end = line.indexOf("'", index + 1)
+        if (end < 0) throw new Error(`unclosed ' in: ${line}`)
+        word += line.slice(index + 1, end)
         index = end + 1
         continue
       }
@@ -164,8 +168,20 @@ function shellWords(line: string): string[] {
     }
     words.push(word)
   }
-  return words
+  return { words, rest: '' }
 }
+
+/** What may follow a command on its line: only a redirection of its stdout to a file. */
+const REDIRECT_TO_FILE = /^> ?[\w.-]+$/u
+
+/** A `node -e '...'` helper, one line or several, with the arguments on its closing line. */
+const NODE_HELPER = /node -e '([^']*)'([^\n]*)/gu
+
+/** Placeholders for a project path or folder: those never go on a command line. */
+const PATH_PLACEHOLDER = /<[^<>]*(?:path|folder|file)[^<>]*>/iu
+
+/** Inputs that take a project path, a local folder, or an author name: never from a command line. */
+const PROJECT_STRING_KEYS = ['filePath', 'rootFilePath', 'destinationFolderPath', 'localFolderPath', 'author']
 
 /** A sample value for a `<placeholder>`: a whole number where one is expected, else a word. */
 function fillPlaceholders(text: string): string {
@@ -210,7 +226,14 @@ function invocationsIn(item: CodeItem): Invocation[] {
     const source = line.slice(at)
     let argv: string[] = []
     try {
-      argv = shellWords(line.slice(at + PREFIX.length + 1)).map(fillPlaceholders)
+      // One command per line with nothing chained to it, so the parser sees every command there is.
+      if (at > 0 || line.includes(PREFIX, at + PREFIX.length)) {
+        throw new Error('a command line holds exactly one command, at its start')
+      }
+      if (PATH_PLACEHOLDER.test(source)) throw new Error('a project or local path goes in a request file, not on a command line')
+      const { words, rest } = shellWords(line.slice(at + PREFIX.length + 1))
+      if (rest !== '' && !REDIRECT_TO_FILE.test(rest)) throw new Error(`a command is followed by more than a redirection to a file: ${rest}`)
+      argv = words.map(fillPlaceholders)
       const login = argv.length === 1 && argv[0] === 'login'
       found.push({ source, argv, parsed: login ? { kind: 'login' } : parseCommandLine(argv) })
     } catch (error) {
@@ -220,12 +243,15 @@ function invocationsIn(item: CodeItem): Invocation[] {
   return found
 }
 
-/** The `node -e` helpers in a skill's shell blocks, with their arguments. */
-function nodeHelpers(items: CodeItem[]): Array<{ script: string; args: string[] }> {
+/** The `node -e` helpers in a skill's shell blocks, with their arguments and what follows them. */
+function nodeHelpers(items: CodeItem[]): Array<{ script: string; args: string[]; rest: string }> {
   return items
     .filter(item => item.kind === 'block' && item.lang === 'bash')
-    .flatMap(item => [...item.text.matchAll(/node -e '([^']*)'([^\n]*)/gu)])
-    .map(match => ({ script: match[1] ?? '', args: shellWords(match[2] ?? '').map(fillPlaceholders) }))
+    .flatMap(item => [...item.text.matchAll(NODE_HELPER)])
+    .map(match => {
+      const { words, rest } = shellWords(match[2] ?? '')
+      return { script: match[1] ?? '', args: words, rest }
+    })
 }
 
 const folders = readdirSync(SKILLS_DIR, { withFileTypes: true })
@@ -284,9 +310,20 @@ describe.each(folders)('skills/%s/SKILL.md', folder => {
     for (const word of PRODUCT_NAMES) expect(new RegExp(`\\b${word}\\b`, 'iu').test(skill.text)).toBe(false)
   })
 
+  test('fences code only as bash or json, the two kinds the checks below read', () => {
+    for (const item of items) if (item.kind === 'block') expect(['bash', 'json'], item.text).toContain(item.lang)
+  })
+
   test('runs the command line only through the pinned prefix, and only in code', () => {
     expect(invocations.length).toBeGreaterThan(0)
     expect(prose.includes(PREFIX)).toBe(false)
+    for (const item of items.filter(candidate => candidate.kind === 'block' && candidate.lang === 'bash')) {
+      // Every line of a shell block is a prefixed command or part of a node helper, so none goes unchecked.
+      const lines = item.text.replace(NODE_HELPER, '').split('\n')
+      for (const line of lines.filter(candidate => candidate.trim() !== '')) {
+        expect(line.startsWith(`${PREFIX} `), line).toBe(true)
+      }
+    }
     for (const item of items) {
       const rest = item.text.split(`${PREFIX} `).join('')
       expect(rest, item.text).not.toMatch(/overleaf-web-mcp|\bnpx\b/u)
@@ -310,6 +347,10 @@ describe.each(folders)('skills/%s/SKILL.md', folder => {
       if (parsed.kind === 'call') expect(parsed.request.from, source).toBe('file')
       // The parser checks only the shape of the options; the contract checks their values.
       if (parsed.kind === 'alias') expect(() => parseOperationInput(parsed.tool, parsed.input), source).not.toThrow()
+      // Paths and names a collaborator chooses can hold shell characters, so they travel in request files.
+      if (parsed.kind === 'alias') {
+        for (const key of PROJECT_STRING_KEYS) expect(Object.keys(parsed.input), `${source}\n${key}`).not.toContain(key)
+      }
     }
   })
 
@@ -343,8 +384,19 @@ describe.each(folders)('skills/%s/SKILL.md', folder => {
     }
   })
 
-  test('has node helpers that parse', () => {
-    for (const { script } of nodeHelpers(items)) expect(() => new Script(script)).not.toThrow()
+  test('has node helpers that parse, each alone on its line', () => {
+    for (const { script, rest } of nodeHelpers(items)) {
+      expect(() => new Script(script)).not.toThrow()
+      expect(rest, script).toBe('')
+    }
+  })
+
+  test('never copies a read over the draft once a write was sent, so an unknown outcome can be compared', () => {
+    let written = false
+    for (const item of items) {
+      for (const { args } of nodeHelpers([item])) expect(written && args.includes('draft.tex'), args.join(' ')).toBe(false)
+      if (invocationsIn(item).some(({ parsed }) => parsed.kind === 'call' && parsed.tool === 'write_file')) written = true
+    }
   })
 })
 
@@ -359,9 +411,12 @@ describe('node helpers in the skills', () => {
   const SECTION = '\\subsection{Edited}\n\\begin{itemize}\\item \\url{x}\\end{itemize}\n'
   const SELECTION = '\\textbf{bold} claims\\newline'
   const MESSAGE = 'Please cite \\cite{key} and "quote" this.'
-  /** What `files read` and `call get_section_content` print, as the skills save it. */
+  /** A path Overleaf accepts and a shell would expand: it must reach a request unchanged. */
+  const SHELL_PATH = `chapters/related work $(touch PWNED) "it's".tex`
+  /** What `call read_file` and `call get_section_content` print, as the skills save it. */
   const READ_RESULTS: Record<string, { content: string; revision: string }> = {
     'read.json': { content: DOCUMENT, revision: 'revision-read' },
+    'live.json': { content: `${DOCUMENT}% changed by a collaborator\n`, revision: 'revision-live' },
     'section.json': { content: SECTION, revision: 'revision-section' },
   }
 
@@ -390,13 +445,20 @@ describe('node helpers in the skills', () => {
 
   test.each(helpers.map(helper => [helper.args.join(' '), helper] as const))('node -e ... %s', (_label, { script, args }) => {
     if (script.includes('comment.json')) {
-      // Builds add_comment's request from a fresh read, the passage, and the comment.
-      const files = { 'read.json': JSON.stringify(READ_RESULTS['read.json']), 'selection.txt': SELECTION, 'message.txt': MESSAGE }
+      // Builds add_comment's request from the read's request, a fresh read, the passage, and the
+      // comment. The project id and path come from a file, never from the shell.
+      expect(args).toEqual([])
+      const files = {
+        'read-request.json': JSON.stringify({ projectId: 'project-id', filePath: SHELL_PATH }),
+        'read.json': JSON.stringify(READ_RESULTS['read.json']),
+        'selection.txt': SELECTION,
+        'message.txt': MESSAGE,
+      }
       const { written } = runHelper(script, args, files)
       const input = parseOperationInput('add_comment', JSON.parse(written['comment.json'] ?? 'null'))
       expect(input).toMatchObject({
-        projectId: args[0],
-        filePath: args[1],
+        projectId: 'project-id',
+        filePath: SHELL_PATH,
         revision: 'revision-read',
         expectedText: SELECTION,
         content: MESSAGE,
@@ -418,6 +480,15 @@ describe('node helpers in the skills', () => {
       const { stdout, written } = runHelper(script, args, { [first]: JSON.stringify(result) })
       expect(written[second]).toBe(result.content)
       expect(stdout).toBe(`${result.revision}\n`)
+      return
+    }
+    if (third !== undefined && args.length === 3 && third.endsWith('.json')) {
+      // Copies one field of a command's JSON result into a request and keeps everything else, a
+      // tracked writeMode included, and fails on a result without the field.
+      const request = JSON.stringify({ projectId: 'sample', filePath: SHELL_PATH, mode: 'additive', writeMode: 'tracked', [second]: 'stale' })
+      const { written } = runHelper(script, args, { [first]: request, [third]: JSON.stringify({ status: 'partial', [second]: 'fresh' }) })
+      expect(JSON.parse(written[first] ?? 'null')).toEqual({ ...(JSON.parse(request) as object), [second]: 'fresh' })
+      expect(() => runHelper(script, args, { [first]: request, [third]: JSON.stringify({ status: 'partial' }) })).toThrow()
       return
     }
     if (third !== undefined && args.length === 3) {
