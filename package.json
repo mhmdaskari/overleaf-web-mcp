@@ -1,8 +1,8 @@
 {
   "name": "overleaf-web-mcp",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "mcpName": "io.github.mhmdaskari/overleaf-web-mcp",
-  "description": "MCP server for browsing, tracked writing, organizing, syncing local folders, compiling, reviewing, and monitoring version history in Overleaf projects through an authenticated web session.",
+  "description": "MCP server, command line, and TypeScript library for browsing, tracked writing, organizing, syncing local folders, compiling, reviewing, and monitoring version history in Overleaf projects through an authenticated web session.",
   "author": "Mohammad Askari",
   "license": "MIT",
   "repository": {
@@ -31,6 +31,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "docs/assets/overleaf-web-mcp-workflow.webp",
     "docs/assets/overleaf-web-mcp-workflow-dark.webp",
     "README.md",
@@ -89,6 +90,9 @@
     "collaboration",
     "comments",
     "track-changes",
-    "version-history"
+    "version-history",
+    "cli",
+    "sdk",
+    "agent-skills"
   ]
 }

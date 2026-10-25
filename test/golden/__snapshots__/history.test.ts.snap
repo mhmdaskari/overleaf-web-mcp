@@ -1,0 +1,339 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`monitor_project_history golden results > a cursor at the current version returns no updates 1`] = `
+{
+  "currentVersion": 10,
+  "gapDetected": false,
+  "hasEarlierHistory": false,
+  "nextSinceVersion": 10,
+  "projectId": "p",
+  "updates": [],
+}
+`;
+
+exports[`monitor_project_history golden results > a cursor inside a group keeps only the operations at or after it 1`] = `
+{
+  "currentVersion": 142,
+  "gapDetected": false,
+  "hasEarlierHistory": true,
+  "nextSinceVersion": 142,
+  "projectId": "p",
+  "updates": [
+    {
+      "authors": [
+        {
+          "displayName": "Author One",
+          "id": "user-1",
+        },
+        null,
+      ],
+      "endedAt": "2023-11-14T22:14:20.000Z",
+      "fromVersion": 138,
+      "labels": [],
+      "origin": {
+        "kind": "file-restore",
+        "path": "main.tex",
+        "timestamp": "2023-11-14T21:56:40.000Z",
+        "version": 4,
+      },
+      "paths": [
+        "main.tex",
+        "chapter.tex",
+      ],
+      "projectOperations": [
+        {
+          "atVersion": 141,
+          "path": "review.tex",
+          "type": "add",
+        },
+        {
+          "atVersion": 140,
+          "newPath": "paper.tex",
+          "path": "draft.tex",
+          "type": "rename",
+        },
+      ],
+      "startedAt": "2023-11-14T22:13:20.000Z",
+      "toVersion": 142,
+    },
+  ],
+}
+`;
+
+exports[`monitor_project_history golden results > a cursor inside a group: a label below it and a remove at it; a label without a display name; a kind-and-version origin 1`] = `
+{
+  "currentVersion": 25,
+  "gapDetected": false,
+  "hasEarlierHistory": false,
+  "nextSinceVersion": 25,
+  "projectId": "p",
+  "updates": [
+    {
+      "authors": [
+        {
+          "displayName": "Author One",
+          "id": "user-1",
+        },
+      ],
+      "endedAt": "2023-11-14T22:19:20.000Z",
+      "fromVersion": 20,
+      "labels": [
+        {
+          "comment": "Below the cursor",
+          "createdAt": "2023-11-14T22:18:20.000Z",
+          "id": "label-below",
+          "userDisplayName": null,
+          "userId": "user-1",
+          "version": 21,
+        },
+      ],
+      "origin": {
+        "kind": "history-resync",
+        "version": 19,
+      },
+      "paths": [
+        "main.tex",
+      ],
+      "projectOperations": [
+        {
+          "atVersion": 23,
+          "path": "notes.tex",
+          "type": "add",
+        },
+        {
+          "atVersion": 22,
+          "path": "old.tex",
+          "type": "remove",
+        },
+      ],
+      "startedAt": "2023-11-14T22:18:20.000Z",
+      "toVersion": 25,
+    },
+  ],
+}
+`;
+
+exports[`monitor_project_history golden results > a cursor older than the returned window reports a gap 1`] = `
+{
+  "currentVersion": 110,
+  "gapDetected": true,
+  "hasEarlierHistory": true,
+  "nextSinceVersion": 110,
+  "projectId": "p",
+  "updates": [
+    {
+      "authors": [
+        {
+          "displayName": "Author One",
+          "id": "user-1",
+        },
+        null,
+      ],
+      "endedAt": "2023-11-14T22:14:20.000Z",
+      "fromVersion": 100,
+      "labels": [],
+      "origin": {
+        "kind": "file-restore",
+        "path": "main.tex",
+        "timestamp": "2023-11-14T21:56:40.000Z",
+        "version": 4,
+      },
+      "paths": [
+        "main.tex",
+        "chapter.tex",
+      ],
+      "projectOperations": [],
+      "startedAt": "2023-11-14T22:13:20.000Z",
+      "toVersion": 110,
+    },
+  ],
+}
+`;
+
+exports[`monitor_project_history golden results > an empty history without a cursor 1`] = `
+{
+  "currentVersion": null,
+  "gapDetected": false,
+  "hasEarlierHistory": false,
+  "nextSinceVersion": null,
+  "projectId": "p",
+  "updates": [],
+}
+`;
+
+exports[`monitor_project_history golden results > an empty window with a cursor and earlier history keeps the cursor 1`] = `
+{
+  "currentVersion": null,
+  "gapDetected": false,
+  "hasEarlierHistory": true,
+  "nextSinceVersion": 7,
+  "projectId": "p",
+  "updates": [],
+}
+`;
+
+exports[`monitor_project_history golden results > origin from type, kind alone, or nothing; unattributed labels; a nameless author; no earlier history 1`] = `
+{
+  "currentVersion": 3,
+  "gapDetected": false,
+  "hasEarlierHistory": false,
+  "nextSinceVersion": 3,
+  "projectId": "p",
+  "updates": [
+    {
+      "authors": [
+        null,
+      ],
+      "endedAt": "2023-11-14T22:17:20.000Z",
+      "fromVersion": 2,
+      "labels": [],
+      "origin": {
+        "kind": "upload",
+      },
+      "paths": [
+        "figure.png",
+      ],
+      "projectOperations": [],
+      "startedAt": "2023-11-14T22:16:20.000Z",
+      "toVersion": 3,
+    },
+    {
+      "authors": [
+        {
+          "displayName": "",
+          "id": "user-3",
+        },
+      ],
+      "endedAt": "2023-11-14T22:15:20.000Z",
+      "fromVersion": 1,
+      "labels": [],
+      "origin": {
+        "kind": "external",
+      },
+      "paths": [
+        "main.tex",
+      ],
+      "projectOperations": [],
+      "startedAt": "2023-11-14T22:14:20.000Z",
+      "toVersion": 2,
+    },
+    {
+      "authors": [],
+      "endedAt": "2023-11-14T22:13:20.000Z",
+      "fromVersion": 0,
+      "labels": [
+        {
+          "comment": "Unattributed",
+          "createdAt": "2023-11-14T22:13:20.000Z",
+          "id": "label-2",
+          "userDisplayName": null,
+          "userId": null,
+          "version": 1,
+        },
+        {
+          "comment": "Anonymous",
+          "createdAt": "2023-11-14T22:13:20.000Z",
+          "id": "label-3",
+          "userDisplayName": null,
+          "userId": null,
+          "version": 1,
+        },
+      ],
+      "origin": null,
+      "paths": [],
+      "projectOperations": [
+        {
+          "atVersion": 0,
+          "path": "main.tex",
+          "type": "add",
+        },
+      ],
+      "startedAt": "2023-11-14T22:13:20.000Z",
+      "toVersion": 1,
+    },
+  ],
+}
+`;
+
+exports[`monitor_project_history golden results > without a cursor: newest first, full and source-only origins, every operation, an anonymous author 1`] = `
+{
+  "currentVersion": 10,
+  "gapDetected": false,
+  "hasEarlierHistory": true,
+  "nextSinceVersion": 10,
+  "projectId": "p",
+  "updates": [
+    {
+      "authors": [
+        {
+          "displayName": "Author Two",
+          "id": "user-2",
+        },
+      ],
+      "endedAt": "2023-11-14T22:16:20.000Z",
+      "fromVersion": 8,
+      "labels": [],
+      "origin": {
+        "kind": "git-bridge",
+      },
+      "paths": [
+        "main.tex",
+      ],
+      "projectOperations": [],
+      "startedAt": "2023-11-14T22:15:20.000Z",
+      "toVersion": 10,
+    },
+    {
+      "authors": [
+        {
+          "displayName": "Author One",
+          "id": "user-1",
+        },
+        null,
+      ],
+      "endedAt": "2023-11-14T22:14:20.000Z",
+      "fromVersion": 5,
+      "labels": [
+        {
+          "comment": "Ready",
+          "createdAt": "2023-11-14T22:14:00.000Z",
+          "id": "label-1",
+          "userDisplayName": "Author One",
+          "userId": "user-1",
+          "version": 8,
+        },
+      ],
+      "origin": {
+        "kind": "file-restore",
+        "path": "main.tex",
+        "timestamp": "2023-11-14T21:56:40.000Z",
+        "version": 4,
+      },
+      "paths": [
+        "main.tex",
+        "chapter.tex",
+      ],
+      "projectOperations": [
+        {
+          "atVersion": 6,
+          "path": "chapter.tex",
+          "type": "add",
+        },
+        {
+          "atVersion": 7,
+          "newPath": "new.tex",
+          "path": "old.tex",
+          "type": "rename",
+        },
+        {
+          "atVersion": 8,
+          "path": "gone.tex",
+          "type": "remove",
+        },
+      ],
+      "startedAt": "2023-11-14T22:13:20.000Z",
+      "toVersion": 8,
+    },
+  ],
+}
+`;

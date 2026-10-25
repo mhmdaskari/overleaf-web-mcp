@@ -1,5 +1,5 @@
 site_name: Overleaf Web MCP
-site_description: MCP server that lets an AI assistant browse, edit, compile, and review your Overleaf projects through your own web session.
+site_description: MCP server, command line, and TypeScript library that browse, edit, compile, and review your Overleaf projects through your own web session.
 site_url: https://mhmdaskari.github.io/overleaf-web-mcp/
 repo_url: https://github.com/mhmdaskari/overleaf-web-mcp
 repo_name: mhmdaskari/overleaf-web-mcp
@@ -41,6 +41,8 @@ nav:
   - Install: install.md
   - Using it: using.md
   - Tool reference: tools.md
+  - Command line: cli.md
+  - TypeScript SDK: sdk.md
   - Safety model: safety.md
   - Configuration: configuration.md
   - Internals: internals.md

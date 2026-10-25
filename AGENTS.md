@@ -3,19 +3,27 @@
 Guidance for coding agents, and people, contributing to this repository. Guidance for agents
 *using* the server at runtime lives in `src/mcp/instructions.ts` and is sent to MCP clients when they
 connect, in the `initialize` result on 2025-era protocol versions and in the `server/discover`
-result on 2026-07-28; do not duplicate it here.
+result on 2026-07-28. Agents using the command line read `overleaf-web-mcp --help` (`renderHelp`
+in `src/cli-command.ts`), `docs/cli.md`, and the Agent Skills in `skills/*/SKILL.md`. Do not
+duplicate any of it here.
 
 ## What this is
 
-An unofficial MCP server for Overleaf. Strict TypeScript, ESM, Node 20 or newer. It talks to
+An unofficial MCP server, command line, and TypeScript library for Overleaf. Strict TypeScript,
+ESM, Node 20 or newer. It talks to
 Overleaf's private browser-facing REST endpoints and its Socket.IO 0.9 / OT collaboration protocol
 through a saved web session. Source is under `src/`, tests under `test/` (vitest), and the
 documentation site under `docs/` (MkDocs Material, deployed to GitHub Pages from `main`).
 
 Every operation is defined once in `src/contracts/operations.ts`: schemas, description,
 annotations, and effects. `src/service/operations.ts` shapes arguments for the domain engine
-(`src/overleaf/`, `src/protocol/`, `src/http/`), and `src/mcp/` is one adapter over that service.
-`src/sdk.ts` is the `overleaf-web-mcp/core` entry and must never load the MCP SDK.
+(`src/overleaf/`, `src/protocol/`, `src/http/`), and three adapters sit over that service:
+`src/mcp/`; `src/cli/`, which parses arguments and requests with the contract schemas
+(`parseOperationInput` in `src/contracts/parse.ts`), refuses unknown keys, renders the result, and
+maps errors to exit codes; and `createOverleafClient` in `src/client.ts`. The Agent Skills in
+`skills/` call only public CLI commands. `src/sdk.ts` is the `overleaf-web-mcp/core` entry and
+must never load the MCP SDK; `src/cli.ts` imports `src/server.ts` lazily, only for `serve`, so an
+operation command never loads it either.
 
 ## Commands
 
@@ -25,7 +33,7 @@ npm run check      # tsc --noEmit
 npm run lint       # eslint
 npm test           # vitest, no network needed
 npm run build      # emits dist/
-npm pack --dry-run # verifies the published file list
+npm pack --dry-run # verifies the published file list, the three skills/*/SKILL.md included
 ```
 
 CI runs all of these on Node 20 and 24 for every push and pull request. For the docs site,
@@ -34,10 +42,15 @@ CI runs all of these on Node 20 and 24 for every push and pull request. For the 
 ## Rules that must keep holding
 
 - Never log or return cookies, document content, diffs, filenames, quoted context, or review
-  message bodies. Under `serve`, stdout is reserved for MCP protocol frames; `help`, `login`, and
-  `keepalive` print their one result there. Diagnostics go to stderr as JSON, and only
-  `src/cli.ts` writes them.
-- Writes are never retried automatically. A timed-out write is observed and classified as applied,
+  message bodies. Under `serve`, stdout carries MCP protocol frames only. `help` prints plain text.
+  Every other command, `login`, `keepalive`, and every operation command, prints exactly one JSON
+  value on stdout. A failed operation command leaves stdout empty and writes exactly one stderr
+  line, `{ code, message, retryable, details? }`; otherwise its stderr stays empty unless
+  `--progress` asked for JSON progress lines. `login` keeps its plain-text status lines on stderr.
+  Diagnostics go to stderr as JSON, and only `src/cli.ts` writes them: `src/cli/` writes through
+  the `CliIo` streams it is handed.
+- Writes are never retried automatically, by any interface: the CLI and the SDK add no retry, and
+  exit 5 means never re-run. A timed-out write is observed and classified as applied,
   not applied, or conflict. It is never resubmitted.
 - Every OT write is verified against a freshly joined document before a revision is returned.
 - Explicit tracked writes never fall back to untracked writes.
@@ -46,7 +59,8 @@ CI runs all of these on Node 20 and 24 for every push and pull request. For the 
   `revision`, a `planToken`, an `expectedHash`), and are annotated `destructiveHint: true`.
   `stop_compile` is the one destructive tool without a confirm value. A mutation that applies
   with no expected state at all is asked for by name, and `unplanned` and
-  `uncheckedDocumentReplace` are the only such opt-ins.
+  `uncheckedDocumentReplace` are the only such opt-ins. No CLI flag supplies a confirm value on
+  the caller's behalf: there is no `--yes` or `--force`, and no command prompts.
 - A tightened safety default is announced one minor version ahead and enforced in the next: the
   announcing minor keeps the old behaviour, adds a `deprecations` entry
   `{ parameter, message, enforcedIn }` to the result and a `Deprecated` entry to `CHANGELOG.md`
@@ -65,8 +79,14 @@ CI runs all of these on Node 20 and 24 for every push and pull request. For the 
   known `details.reason` or `unrecognized`.
 - Only `src/mcp/`, `src/server.ts`, `src/cli.ts`, and `src/index.ts` import the MCP SDK or the
   adapter; ESLint enforces it, type imports included.
-- Tool names, input schemas, result shapes, and error codes are the public contract. Any change
-  is listed in `CHANGELOG.md` under the next version.
+- Tool names, input schemas, result shapes, and error codes are the public contract, and so are
+  the CLI's command names, flags, request format, output framing, and exit codes, and the
+  `overleaf-web-mcp/core` surface `docs/sdk.md` lists as stable. Any change is listed in
+  `CHANGELOG.md` under the next version.
+- Every result validates against its operation's `outputSchema` on every return path and carries
+  no key the schema does not declare. zod drops an undeclared key without failing, so the
+  service's check of read-only results does not catch one, yet `tools/list` advertises
+  `additionalProperties: false` and an MCP client refuses the result.
 
 ## Tests
 
@@ -78,12 +98,24 @@ CI runs all of these on Node 20 and 24 for every push and pull request. For the 
   cell, and `docs/tools.md` agree with `TOOL_NAMES`. Update them when adding or removing a tool.
 - `test/server.test.ts` compares `tools/list` with `test/__snapshots__/list-tools.json`. Update the
   snapshot (`npx vitest run -u`) only for a change listed in `CHANGELOG.md`.
+- The golden tests in `test/golden/` (with `test/helpers/golden.ts`) snapshot tool results taken
+  through the real domain classes. Update them only for a result change listed in `CHANGELOG.md`.
 - `test/contracts/operations.test.ts` checks annotations against effects and that every
   destructive operation takes a confirm value or an expected state.
 - `test/server.test.ts` asserts the server instructions are present, bounded in length, and
   delivered on both protocol eras (`initialize` and `server/discover`).
 - `test/overleaf/sync.test.ts` drives folder sync against an in-memory project. Keep its
   fault-injection, drift, and mid-sync edit cases passing when changing sync.
+- `test/cli/exit-codes.test.ts` and `test/cli/run.test.ts` hold the exit-code table over every
+  error code, from a read and from a write, and the output framing; an unknown request key exits
+  2 before any session is opened. `test/cli-command.test.ts` stays unchanged.
+- `test/parity.test.ts` runs every tool through MCP, the CLI, and the SDK client and expects the
+  same result and the same error object from each.
+- `test/cli/docs.test.ts` asserts every `operationCommandUsages()` line and every exit code appear
+  in `docs/cli.md`, both new pages are in the `mkdocs.yml` nav, and every name `docs/sdk.md` lists
+  as stable is exported from `src/sdk.ts`.
+- `test/skills.test.ts` parses every command line in `skills/*/SKILL.md` against the CLI parser
+  and refuses any mention of `@modelcontextprotocol`, `src/`, or the cookie jar.
 
 ## Documentation
 
@@ -91,8 +123,11 @@ CI runs all of these on Node 20 and 24 for every push and pull request. For the 
 - Reference material lives in `docs/*.md`. `docs/roadmap.md` and `docs/changelog.md` include the
   root `ROADMAP.md` and `CHANGELOG.md` through snippets; edit the root files, and use absolute
   URLs for cross-links inside them so they work on GitHub, npm, and the site.
-- Tool descriptions in `src/mcp/tools.ts` must be self-sufficient. That text, plus
+- Tool descriptions in `src/contracts/operations.ts` must be self-sufficient. That text, plus
   `src/mcp/instructions.ts`, is what an agent actually reads at runtime.
+- `docs/cli.md` lists every command `renderHelp` prints, and `docs/sdk.md` names the stable
+  `overleaf-web-mcp/core` surface; a test holds both.
+- `skills/*/SKILL.md` use only commands `renderHelp` lists and name no assistant or model.
 
 ## Releasing
 

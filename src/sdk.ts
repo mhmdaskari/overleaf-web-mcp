@@ -1,20 +1,27 @@
 /**
  * `overleaf-web-mcp/core`: the operations behind the MCP server, without MCP. It never loads the
- * MCP SDK. It exposes the same service as the MCP server, with the same safety defaults; v0.7.0
- * documents which parts are stable and adds a client facade.
+ * MCP SDK, and has the same safety defaults. docs/sdk.md lists the stable surface:
+ * `createOverleafClient`, `createOverleafService`, the contract types, `McpError`, `ERROR_CODES`,
+ * `readConfig`, and `OverleafRuntime.create` and `close`.
  *
  * ```ts
- * import { createOverleafService, OverleafRuntime, readConfig } from 'overleaf-web-mcp/core'
+ * import { createOverleafClient } from 'overleaf-web-mcp/core'
  *
- * const runtime = await OverleafRuntime.create(readConfig())
+ * const client = await createOverleafClient()
  * try {
- *   const service = createOverleafService(runtime)
- *   const file = await service.read_file({ projectId, filePath: 'main.tex' })
+ *   const file = await client.readFile({ projectId, filePath: 'main.tex' })
  * } finally {
- *   await runtime.close()
+ *   await client.close()
  * }
  * ```
  */
+export {
+  createOverleafClient,
+  type CamelCase,
+  type OperationMethod,
+  type OverleafClient,
+  type OverleafClientOptions,
+} from './client.js'
 export { readConfig, type AppConfig } from './config.js'
 export * from './contracts/index.js'
 export { McpError, type McpErrorCode } from './core/errors.js'

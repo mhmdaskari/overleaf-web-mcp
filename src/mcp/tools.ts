@@ -126,8 +126,7 @@ export interface ToolRegistrationOptions {
 /**
  * Registers one MCP tool per operation in the contract registry. A handler parses nothing (the
  * SDK validated the input against the same schema), makes one service call, and renders the
- * result: as `structuredContent` plus the JSON text block older clients read when the operation
- * declares an `outputSchema`, as the text block alone otherwise.
+ * result as `structuredContent`, mirrored as the JSON text block older clients read.
  */
 export function registerOverleafTools(
   registrar: ToolRegistrar,
@@ -146,9 +145,7 @@ export function registerOverleafTools(
           onProgress: progressReporter(extra),
           onDiagnostic: options.onDiagnostic,
         })
-        return 'outputSchema' in contract
-          ? { ...success(value), structuredContent: value }
-          : success(value)
+        return { ...success(value), structuredContent: value }
       } catch (error) {
         return failure(error)
       }
@@ -158,7 +155,7 @@ export function registerOverleafTools(
       {
         description: contract.description,
         ...('inputSchema' in contract ? { inputSchema: contract.inputSchema } : {}),
-        ...('outputSchema' in contract ? { outputSchema: contract.outputSchema } : {}),
+        outputSchema: contract.outputSchema,
         annotations: contract.annotations,
       },
       // The SDK calls a tool without an input schema with its request context alone.

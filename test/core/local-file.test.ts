@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'vitest'
 
-import { resolveTextContent } from '../../src/core/local-file.js'
+import { decodeUtf8Text, resolveTextContent } from '../../src/core/local-file.js'
 
 async function scratchFile(name: string, bytes: Uint8Array | string): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'overleaf-local-'))
@@ -33,6 +33,14 @@ describe('local write sources', () => {
     await expect(resolveTextContent({ localPath: path })).resolves.toBe(
       '\\section{Ünïcode}\n'
     )
+  })
+
+  test('strips exactly one byte order mark, keeping a zero-width no-break space after it', async () => {
+    const bom = [0xef, 0xbb, 0xbf]
+    expect(decodeUtf8Text(new Uint8Array([...bom, ...bom, 0x78]))).toBe('\uFEFFx')
+    expect(decodeUtf8Text(new Uint8Array([...bom, 0x78]))).toBe('x')
+    const path = await scratchFile('main.tex', new Uint8Array([...bom, ...bom, 0x78]))
+    expect(await resolveTextContent({ localPath: path })).toBe('\uFEFFx')
   })
 
   test('rejects binary content instead of writing replacement characters', async () => {

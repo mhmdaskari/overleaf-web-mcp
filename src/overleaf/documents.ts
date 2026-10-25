@@ -50,7 +50,7 @@ export interface WriteFileResult {
   protocol: OtProtocol
   trackChangesActive: boolean
   writeMode: WriteMode
-  recoveredAfterTimeout?: boolean
+  recoveredAfterTimeout?: true
 }
 
 export type WriteMode = 'untracked' | 'tracked'

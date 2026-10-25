@@ -2,7 +2,7 @@ import type { AccessPolicy } from '../core/policy.js'
 import type { AccountApi } from '../overleaf/account.js'
 import type { CommentsApi } from '../overleaf/comments.js'
 import type { CompileApi } from '../overleaf/compile.js'
-import type { DocumentsApi, WriteMode } from '../overleaf/documents.js'
+import type { DocumentsApi, WriteFileResult, WriteMode } from '../overleaf/documents.js'
 import type { EntitiesApi } from '../overleaf/entities.js'
 import type { HistoryApi } from '../overleaf/history.js'
 import type { ProjectsApi } from '../overleaf/projects.js'
@@ -16,7 +16,7 @@ import type { OperationInput, OperationName, OperationOutput } from './operation
  * reach Overleaf through. Tests and other backends supply their own.
  */
 export interface OverleafServiceRuntime {
-  authStatus(): Promise<Record<string, unknown>>
+  authStatus(): Promise<OperationOutput<'auth_status'>>
   account: Pick<AccountApi, 'listProjects'>
   projects: Pick<
     ProjectsApi,
@@ -37,7 +37,7 @@ export interface OverleafServiceRuntime {
     filePath: string,
     content?: string,
     writeMode?: WriteMode
-  ): Promise<unknown>
+  ): Promise<WriteFileResult>
   sections: Pick<SectionsApi, 'getSections' | 'getSectionContent' | 'writeSection'>
   compile: Pick<CompileApi, 'compileProject' | 'stopCompile' | 'downloadCompileOutput' | 'getCompileLog' | 'readCompileOutput'>
   comments: Pick<

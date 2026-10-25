@@ -1,0 +1,125 @@
+import type { OperationName, OperationOutput } from '../../src/contracts/operations.js'
+
+const thread = {
+  id: 't',
+  status: 'open' as const,
+  messages: [{ id: 'm', author: { id: 'u', displayName: 'Ada' }, content: 'Why?', timestamp: '2026-01-01T00:00:00.000Z' }],
+}
+
+const section = {
+  id: 'section:0',
+  index: 0,
+  command: 'section' as const,
+  level: 1,
+  starred: false,
+  title: 'Intro',
+  start: 0,
+  headingEnd: 15,
+  bodyStart: 16,
+  end: 20,
+}
+
+/**
+ * A valid result for every operation, typed by its contract, so a fake runtime can answer any
+ * call with something the read-only check and the MCP SDK both accept.
+ */
+export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
+  auth_status: {
+    authenticated: true,
+    baseUrl: 'https://overleaf.test',
+    projectCount: 1,
+    permissionsUnchecked: false,
+    socketPresenceNotice: 'notice',
+  },
+  list_projects: {
+    projects: [{ id: 'p', name: 'Paper', accessLevel: 'owner', archived: false, trashed: false }],
+    totalMatched: 1,
+    totalProjects: 1,
+  },
+  create_project: { projectId: 'p', name: 'Paper', url: 'https://overleaf.test/project/p', rootDocPath: 'main.tex' },
+  clone_project: { projectId: 'c', name: 'Copy', url: 'https://overleaf.test/project/c' },
+  import_project_zip: { projectId: 'z', name: 'Zip', url: 'https://overleaf.test/project/z' },
+  manage_project: { action: 'trash', projectId: 'p', name: 'Paper' },
+  update_project_settings: { projectId: 'p', compiler: 'xelatex' },
+  get_project_tree: {
+    entities: [
+      { id: 'd1', name: 'main.tex', path: 'main.tex', type: 'doc', parentFolderId: 'root' },
+      { id: 'f1', name: 'fig.png', path: 'fig.png', type: 'file', parentFolderId: 'root', hash: 'a'.repeat(40) },
+    ],
+    rootDocPath: 'main.tex',
+    compiler: 'pdflatex',
+    trackChangesActive: false,
+    hashNote: 'note',
+  },
+  read_file: { content: 'Hello', revision: 'r', newline: 'LF', protocol: 'sharejs', trackChangesActive: false },
+  write_file: { revision: 'r2', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },
+  create_file: { revision: 'r1', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },
+  manage_entity: { action: 'delete', id: 'd1', trackChangesActive: false, writeMode: 'untracked' },
+  upload_file: { path: 'a.png', replaced: false, trackChangesActive: false, writeMode: 'untracked' },
+  batch_upload: { status: 'complete', onConflict: 'fail', completed: [], skipped: [], failed: [], remaining: [], verified: true },
+  download_file: { bytes: 10, localPath: '/tmp/a.png' },
+  download_project_zip: { projectId: 'p', localPath: '/tmp/p.zip', bytes: 10, replaced: false },
+  plan_sync: {
+    planToken: 'token',
+    localFolderPath: '/tmp/paper',
+    destinationFolderPath: '',
+    toUpload: [],
+    identical: { count: 0, paths: [] },
+    remoteOnly: [],
+    conflicts: [],
+    ignored: { count: 0, entries: [] },
+  },
+  sync_directory: { status: 'complete', mode: 'additive', completed: [], failed: [], remaining: [], identicalCount: 0, planned: true },
+  delete_entities: { status: 'complete', completed: [], failed: [], remaining: [] },
+  get_sections: { sections: [section], revision: 'r', singleFileOnly: true },
+  get_section_content: { content: 'Body', section, revision: 'r' },
+  write_section: { revision: 'r2', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },
+  compile_project: {
+    status: 'success',
+    outputFiles: [{ path: 'output.pdf', type: 'pdf', build: 'b' }],
+    stats: {},
+    buildId: 'b',
+    rootFilePath: 'main.tex',
+    buildRef: 'ref',
+    summary: {
+      status: 'success',
+      builtCleanly: true,
+      pdfProduced: true,
+      logRead: true,
+      errorCount: 0,
+      warningCount: 0,
+      errors: [],
+      warnings: [],
+      undefinedReferences: [],
+      undefinedCitations: [],
+      missingFiles: [],
+    },
+  },
+  stop_compile: { stopped: true },
+  get_compile_log: { buildId: 'b', file: 'output.log', log: 'This is pdfTeX', truncated: false, errorLines: [] },
+  download_compile_output: { localPath: '/tmp/paper.pdf', file: 'output.pdf', sizeBytes: 10, buildId: 'b', replaced: false },
+  list_comments: { threads: [thread], positionsUnavailable: false },
+  reply_to_comment: { threadId: 't', message: thread.messages[0]!, trackChangesActive: false, writeMode: 'untracked' },
+  add_comment: { threadId: 't', thread, revision: 'r', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },
+  set_comment_status: { threadId: 't', status: 'resolved', revision: 'r2', trackChangesActive: false, writeMode: 'untracked' },
+  monitor_project_history: {
+    projectId: 'p',
+    currentVersion: 2,
+    nextSinceVersion: 3,
+    hasEarlierHistory: false,
+    gapDetected: false,
+    updates: [
+      {
+        fromVersion: 1,
+        toVersion: 2,
+        startedAt: '2026-01-01T00:00:00.000Z',
+        endedAt: '2026-01-01T00:00:00.000Z',
+        authors: [{ id: 'u', displayName: 'Ada' }],
+        paths: ['main.tex'],
+        projectOperations: [{ type: 'add', atVersion: 1, path: 'main.tex' }],
+        labels: [],
+        origin: null,
+      },
+    ],
+  },
+}

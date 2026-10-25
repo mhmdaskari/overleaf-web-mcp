@@ -1,0 +1,25 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`stop_compile > after a JSON body with keys of its own 1`] = `
+{
+  "stopped": true,
+}
+`;
+
+exports[`stop_compile > after an Express sendStatus OK body 1`] = `
+{
+  "stopped": true,
+}
+`;
+
+exports[`stop_compile > after an empty 204 body 1`] = `
+{
+  "stopped": true,
+}
+`;
+
+exports[`stop_compile > after an empty JSON object 1`] = `
+{
+  "stopped": true,
+}
+`;

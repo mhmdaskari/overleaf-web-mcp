@@ -1,14 +1,19 @@
 # Tool reference
 
-The server registers 31 tools. Names are `snake_case`. Every tool except `auth_status`,
+The server registers 31 tools. Names are `snake_case`. Each tool is also
+`overleaf-web-mcp call <name>` on the [command line](cli.md) and a camelCase method of
+`createOverleafClient` in the [TypeScript SDK](sdk.md), with the same parameters, results, and
+errors. Every tool except `auth_status`,
 `list_projects`, `create_project`, and `import_project_zip` takes a `projectId` from
 `list_projects` or from one of the tools that create a project. An id never contains `/`, `\`,
 `.`, `?`, `#`, or `%`; one that does is refused with `INVALID_ARGUMENT` before anything is sent.
-Results are JSON; `auth_status`, `list_projects`, the project lifecycle tools, `upload_file`,
-`batch_upload`, `download_project_zip`, the folder sync tools, the compilation tools other
-than `stop_compile`, and `list_comments`, `reply_to_comment`, and `add_comment` also declare an
-`outputSchema` and return the same object as `structuredContent`. Failures are JSON with `code`,
-`message`, `retryable`, and optional `details`; the codes are listed in the
+Every tool declares an `outputSchema` and returns its result as `structuredContent`, mirrored as
+a JSON text block for clients that read only text; `overleaf-web-mcp schema <name> --output`
+prints the schema. A result never carries a key its schema does not list. The result of a
+read-only tool is checked against its schema before it is returned, and one that does not match,
+because Overleaf answered in a shape this release does not understand, fails with
+`PROTOCOL_UNSUPPORTED` and `details: { kind: "response_shape", paths }`. Failures are JSON with
+`code`, `message`, `retryable`, and optional `details`; the codes are listed in the
 [safety model](safety.md#error-codes). The Overleaf routes behind each tool are catalogued in the
 [private API page](private-api.md).
 
@@ -37,8 +42,8 @@ Returns `authenticated: true`, `baseUrl`, the account's `userId` when known, `pr
 `sessionExpiresAt` (ISO 8601, when the session lapses unless a request refreshes it first;
 absent when no cookie carries a deadline), `permissionsUnchecked` (true on filesystems without
 POSIX modes), an optional `warning`, and `socketPresenceNotice` explaining that an open project
-connection can show the account as online. The result is also returned as `structuredContent`.
-A missing or expired session fails with `AUTH_EXPIRED`.
+connection can show the account as online. A missing or expired session fails with
+`AUTH_EXPIRED`.
 
 ### `list_projects` <small>read-only</small>
 
@@ -56,7 +61,7 @@ Returns `projects`, an array of `{ id, name, accessLevel, lastUpdated, archived,
 plus `totalMatched` (how many passed the filters before `limit`) and `totalProjects` (everything
 the account can access, archived and trashed included). Overleaf returns the whole list in one
 response, so filtering and `limit` happen in the server; there is no server-side pagination to
-expose. The result is also returned as `structuredContent`.
+expose.
 
 ## Project lifecycle
 
@@ -169,7 +174,8 @@ Return the file and folder tree together with the project's compile settings.
 Returns `entities`, an array of `{ id, name, path, type, parentFolderId, hash? }` where `type` is
 `doc` (text), `file` (binary), or `folder`, plus `rootDocPath` (the document Overleaf compiles by
 default), `compiler`, `imageName` (the TeX Live image), `spellCheckLanguage` when spell checking
-is on, `trackChangesActive`, and `hashNote`.
+is on, `trackChangesActive`, and `hashNote`. `rootDocPath`, `compiler`, and `imageName` are absent
+when the project has none, for example a project without a root document.
 
 `hash` is present only on binary `file` entities and is a git blob hash:
 `sha1("blob " + byteLength + "\0" + content)`, exactly what `git hash-object <file>` prints. Plain
@@ -185,7 +191,8 @@ Read a text document.
 | `filePath` | yes | Project-relative path with forward slashes |
 
 Returns `content` with line endings normalized to LF, the opaque `revision` needed for any write,
-`newline: "LF"`, the document's OT `protocol`, and `trackChangesActive`.
+`newline: "LF"`, the document's OT `protocol` (`sharejs` or `history-ot`), and
+`trackChangesActive`.
 
 ### `write_file` <small>destructive</small>
 
@@ -224,8 +231,10 @@ Create a text document, optionally with initial content.
 | `content` | no | Initial text |
 | `writeMode` | no | `untracked` (default) or `tracked`; tracked requires non-empty `content` |
 
-Returns the document's `revision`, `protocol`, `trackChangesActive`, and `writeMode`. Creating the
-entity itself is always an ordinary project-tree operation; only the initial content can be
+Returns the document's `revision`, `protocol`, `trackChangesActive`, and `writeMode`, the same
+fields as `write_file`, with `recoveredAfterTimeout: true` when the initial content's write was
+confirmed after a timeout or a lost socket. Without content, `writeMode` is `untracked`. Creating
+the entity itself is always an ordinary project-tree operation; only the initial content can be
 tracked.
 
 Creating the document and writing its content are separate steps, and the content is written as
@@ -249,9 +258,11 @@ Create a folder, or rename, move, or delete an existing document, file, or folde
 | `destinationFolderPath` | for `move` | Target folder; `""` is the project root |
 | `confirmPath` | for `delete` | Must equal `path` exactly, else `CONFIRMATION_MISMATCH` |
 
-Returns the `action`, the affected entity `id` (or the created folder as `created: { _id, name }`),
-`trackChangesActive`, and `writeMode`, which is always `untracked` because tree operations are
-never tracked changes. Deleting a folder removes everything inside it.
+Returns the `action`, `trackChangesActive`, and `writeMode`, which is always `untracked` because
+tree operations are never tracked changes. A `rename`, `move`, or `delete` also returns the
+affected entity's `id`. A `create_folder` returns the new folder as `created: { _id, name }` when
+Overleaf's answer named both, and otherwise neither `id` nor `created`; read the tree to find the
+folder's id then. Deleting a folder removes everything inside it.
 
 A name already used in the target folder (by `create_folder`, with or without a trailing slash;
 by a `rename`, including to the entity's own name; or by a `move`, including into the folder that
@@ -385,7 +396,8 @@ Returns:
   where `action` is `create_folder` or `upload`, and `replaced` says whether something was at the
   path before an upload.
 - `skipped`: `{ destinationPath, localPath, entityType }`, with `onConflict: "skip"` only.
-- `failed`: `{ destinationPath, action, errorCode, message }`.
+- `failed`: `{ destinationPath, action, errorCode, message }`, where `errorCode` is one of the
+  codes in the [safety model](safety.md#error-codes).
 - `remaining`: `{ destinationPath, action }`, what was not attempted after `stopOnError` or
   `RATE_LIMITED` stopped the call.
 - `verified`: `true` when the tree was read back and every completed upload was confirmed in it,
@@ -393,7 +405,8 @@ Returns:
   as the uploads reported them.
 
 Nothing is retried. A client that sends a progress token receives `notifications/progress` as
-each file is uploaded.
+each file is uploaded; on the command line, `--progress` writes the same steps to stderr as JSON
+lines.
 
 ### `download_file` <small>destructive</small>
 
@@ -407,7 +420,8 @@ destructive, not read-only, because it writes a local file and can replace one.
 | `localPath` | yes | Where to write it |
 | `overwrite` | no | Replace `localPath` if it exists; default `false` |
 
-Returns `bytes` and `localPath`. Fails with `INVALID_ARGUMENT` when the local file exists and
+Returns `bytes` and `localPath`, as it was given rather than resolved. Fails with
+`INVALID_ARGUMENT` when the local file exists and
 `overwrite` is not `true`. The local checks all run before anything is requested from Overleaf:
 that one, a folder or a symbolic link to a folder at `localPath` (`INVALID_ARGUMENT` whatever
 `overwrite` is), and the parent folder, which must exist (else `NOT_FOUND`) and be writable (else
@@ -495,7 +509,7 @@ the same revision-checked, verified edit as `write_file`, binaries through the s
 `upload_file`, and deletes through `manage_entity`. They save tool calls and context,
 not time: every step still runs through the project's one queue, one after another. A client that
 sends a progress token receives `notifications/progress` as documents are read and files are
-applied.
+applied; on the command line, `--progress` writes the same steps to stderr as JSON lines.
 
 The usual sequence is `plan_sync`, a look at the plan with the user, then `sync_directory` with
 the plan's `planToken`. The reference cleanup the roadmap was written from, four changed files
@@ -532,7 +546,8 @@ are listed one by one.
 
 **Local paths.** `localFolderPath` is resolved on the disk of the machine the server runs on, so
 pass an absolute path: a relative one resolves against the server's working directory, which the
-MCP client chooses. `plan_sync` reports the path it resolved.
+MCP client chooses, or, on the command line, the shell's. `plan_sync` reports the path it
+resolved.
 Symbolic links are followed only when they resolve inside it; one that leads outside fails the
 call with `PATH_OUTSIDE_ROOT` before anything is compared, unless an ignore pattern excludes
 it. A linked folder that leads back into one of its own parents is refused as a cycle. The
@@ -625,8 +640,9 @@ What happens, in order:
 
 Nothing is retried automatically. Returns `status` (`complete`, or `partial` when anything failed
 or was not attempted), `mode`, `completed` (`{ destinationPath, action, entityId? }`), `failed`
-(`{ destinationPath, action, errorCode, message, details? }`, where `details` is the failed step's
-own error details, such as `reason`, `status`, `outcome`, `liveRevision`, or `created`),
+(`{ destinationPath, action, errorCode, message, details? }`, where `errorCode` is one of the codes
+in the [safety model](safety.md#error-codes) and `details` is the failed step's own error
+details, such as `reason`, `status`, `outcome`, `liveRevision`, or `created`),
 `remaining` (`{ destinationPath, action }`, what was not attempted), `identicalCount`,
 `planToken`, `planned` (whether the call was checked against a `planToken`; `false` only with
 `unplanned: true`).
@@ -660,7 +676,8 @@ Every path is resolved before anything is deleted, so a missing path fails the w
 `NOT_FOUND` and changes nothing. A path listed twice, or one inside a folder that is also listed,
 is `INVALID_ARGUMENT`: deleting a folder removes everything inside it, so list the folder alone.
 Returns `status`, `completed` (`{ path, type, entityId }`), `failed`
-(`{ path, errorCode, message }`), and `remaining` (`{ path }`).
+(`{ path, errorCode, message }`, where `errorCode` is one of the codes in the
+[safety model](safety.md#error-codes)), and `remaining` (`{ path }`).
 
 ## LaTeX sections
 
@@ -682,9 +699,10 @@ Parse the section headings of one file.
 | `filePath` | yes | Document to parse |
 
 Returns `sections`, `revision`, and `singleFileOnly: true`. Each section has an `id` to pass to
-the other two section tools, its `command` (for example `section` or `subsection`), `level`,
-`starred`, `title`, optional `shortTitle`, and character offsets `start`, `headingEnd`,
-`bodyStart`, and `end` into the LF-normalized content.
+the other two section tools, its `index` (its position among the file's headings, from 0), its
+`command` (`part`, `chapter`, `section`, `subsection`, `subsubsection`, `paragraph`, or
+`subparagraph`), `level`, `starred`, `title`, optional `shortTitle`, and character offsets
+`start`, `headingEnd`, `bodyStart`, and `end` into the LF-normalized content.
 
 ### `get_section_content` <small>read-only</small>
 
@@ -757,7 +775,8 @@ line names are not read, so a root that uses `\include` keeps the log. It return
 - `stats`: Overleaf's counters, numbers only. `buildId` and `clsiServerId` when Overleaf sent them.
 - `rootFilePath`: the document actually compiled.
 - `buildRef`: an opaque token naming this build to `get_compile_log` and
-  `download_compile_output`, in this process or a later one.
+  `download_compile_output`, in this process or a later one. Each command line call is a new
+  process, so pass it on as `--build-ref`.
 - `summary`: `{ status, builtCleanly, pdfProduced, logRead, errorCount, warningCount, errors,
   warnings, undefinedReferences, undefinedCitations, missingFiles, pageCount?, pdfSizeBytes? }`.
   `errors` and `warnings` hold the first 20 as `{ file?, line?, message }`; the counts cover all
@@ -802,7 +821,7 @@ Read a build's LaTeX or BibTeX log without compiling again.
 | Parameter | Required | Meaning |
 | --- | :---: | --- |
 | `projectId` | yes | Project id |
-| `buildRef` | no | From `compile_project`; default, the latest build `compile_project` made in this server process |
+| `buildRef` | no | From `compile_project`; default, the latest build `compile_project` made in this process. A command line call is a new process, so give it the `buildRef` |
 | `kind` | no | `latex` (default), `output.log`; or `bibtex`, the build's `.blg` file, `NOT_FOUND` when BibTeX did not run for this build |
 | `format` | no | `raw` (default), or `errors-only` for only the lines that start an error |
 | `tail` | no | How many lines to return, from the end; default 200, at most 2,000 |
@@ -830,7 +849,7 @@ Save a build's PDF, or another output file, to a local path on the server's disk
 | `projectId` | yes | Project id |
 | `localPath` | yes | Local file to write; its folder must exist |
 | `file` | no | Output path in the build, such as `output.log`, `output.blg`, or `output.synctex.gz`; default `output.pdf` |
-| `buildRef` | no | From `compile_project`; default, the latest build in this server process |
+| `buildRef` | no | From `compile_project`; default, the latest build in this process. A command line call is a new process, so give it the `buildRef` |
 | `overwrite` | no | Replace `localPath` if it already exists; default `false` |
 
 `file` must be a relative path without `..`, `\`, or control characters, else `INVALID_ARGUMENT`
@@ -846,7 +865,7 @@ an earlier build is `NOT_FOUND`, like any file the build did not produce. Return
 ### Compile output resources
 
 The server also offers two read-only MCP resources for the latest build of a project in this
-server process: `overleaf://project/{projectId}/output/output.log` (text, the first 1 MB) and
+process: `overleaf://project/{projectId}/output/output.log` (text, the first 1 MB) and
 `overleaf://project/{projectId}/output/output.pdf` (a PDF of at most 16 MB; use
 `download_compile_output` for a larger one). Reading one before the project was compiled fails
 with `NO_BUILD`.
@@ -932,8 +951,10 @@ Resolve or reopen a thread.
 | `threadId` | yes | Thread to change |
 | `status` | yes | `open` or `resolved` |
 
-A thread not anchored in `filePath` fails with `NOT_FOUND` and nothing changes. Returns the
-verified status and resulting revision. On a history-OT document the status is verified from the
+A thread not anchored in `filePath` fails with `NOT_FOUND` and nothing changes. Returns
+`threadId`, the verified `status`, the resulting `revision`, `trackChangesActive`,
+`writeMode: "untracked"`, and `recoveredAfterTimeout: true` when the change was confirmed by
+observation. On a history-OT document the status is verified from the
 document snapshot, also for a comment whose anchored text was deleted. A change that timed out,
 lost its socket, or whose verification read failed is never resent but observed:
 `recoveredAfterTimeout: true` when the requested status is live, `TIMEOUT`, or `REMOTE_ERROR`
@@ -952,13 +973,24 @@ Poll one recent window of project history.
 | `projectId` | yes | Project id |
 | `sinceVersion` | no | Return only update groups newer than this version, and in them only project operations at or after it |
 
-Returns `currentVersion`, `nextSinceVersion` to pass on the next poll, `hasEarlierHistory`,
-`gapDetected` (true when the cursor predates the single window returned), and `updates`, each with
-`fromVersion`, `toVersion`, `startedAt`, `endedAt`, `authors` (id and display name; emails are
-stripped), `paths`, `projectOperations`, `labels`, and `origin`. Overleaf can merge new changes
-into an update group between polls, so a group may start before `sinceVersion`. Such a group
-keeps its full `fromVersion`, `startedAt`, `paths`, and `labels`, but its `projectOperations` list
-only operations with `atVersion` at or after `sinceVersion`. An operation at `atVersion` produces
-version `atVersion + 1`, so passing `nextSinceVersion` back never skips an operation and never
-repeats one. This is stateless polling, not a background watcher, and it never pages backward or
-computes diffs.
+Returns `projectId`, `currentVersion` (`null` when the window is empty), `nextSinceVersion` to
+pass on the next poll (on an empty window, the `sinceVersion` you passed, or `null` without one),
+`hasEarlierHistory`, `gapDetected` (true when the cursor predates the
+single window returned), and `updates`, newest first. Each update has:
+
+- `fromVersion`, `toVersion`, and ISO `startedAt` and `endedAt`.
+- `authors`: `{ id, displayName }`, or `null` for an author Overleaf does not name. Emails are
+  stripped.
+- `paths`: the documents and files the update touched.
+- `projectOperations`: `{ type, atVersion, path }`, where `type` is `add`, `rename` (with
+  `newPath`), or `remove`.
+- `labels`: `{ id, comment, version, createdAt, userId, userDisplayName }`, where `userId` and
+  `userDisplayName` can be `null`.
+- `origin`: `{ kind, path?, timestamp?, version? }`, or `null`.
+
+Overleaf can merge new changes into an update group between polls, so a group may start before
+`sinceVersion`. Such a group keeps its full `fromVersion`, `startedAt`, `paths`, and `labels`, but
+its `projectOperations` list only operations with `atVersion` at or after `sinceVersion`. An
+operation at `atVersion` produces version `atVersion + 1`, so passing `nextSinceVersion` back
+never skips an operation and never repeats one. This is stateless polling, not a background
+watcher, and it never pages backward or computes diffs.

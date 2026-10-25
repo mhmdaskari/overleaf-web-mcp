@@ -69,6 +69,14 @@ function uploadFailure(error: unknown): McpError {
   )
 }
 
+/**
+ * What manage_entity reports: the entity acted on, or for a new folder the folder Overleaf
+ * described, left out when it described none. Tree operations are never tracked changes.
+ */
+export type ManagedEntity =
+  | { action: 'create_folder'; created?: { _id: string; name: string }; trackChangesActive: boolean; writeMode: 'untracked' }
+  | { action: 'rename' | 'move' | 'delete'; id: string; trackChangesActive: boolean; writeMode: 'untracked' }
+
 /** A created folder as Overleaf reports it, reduced to the two fields a caller needs. */
 function createdFolder(value: unknown): { _id: string; name: string } | undefined {
   const created = value as { _id?: unknown; name?: unknown } | null
@@ -237,13 +245,13 @@ export class EntitiesApi {
     return created
   }
 
-  async manageEntity(projectId: string, input: EntityAction): Promise<Record<string, unknown>> {
+  async manageEntity(projectId: string, input: EntityAction): Promise<ManagedEntity> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect(input.action === 'delete' ? 'overleaf-delete' : 'overleaf-write')
     const normalized = normalizeProjectPath(input.path)
     const project = encodeURIComponent(projectId)
     const result = await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(async () => {
+      await connection.queue.run(async (): Promise<ManagedEntity> => {
         if (input.action === 'create_folder') {
           const name = posix.basename(normalized)
           validateName(name)
@@ -333,6 +341,20 @@ export class EntitiesApi {
    * `writeMode: 'untracked'` in the result does not reflect yet. Use `write_file` when that
    * matters.
    */
+  async uploadFile(
+    projectId: string,
+    localPath: string,
+    destinationFolderPath?: string,
+    destinationName?: string,
+    options?: UploadFileOptions & { ifExists?: 'replace' | undefined }
+  ): Promise<UploadedFile>
+  async uploadFile(
+    projectId: string,
+    localPath: string,
+    destinationFolderPath: string | undefined,
+    destinationName: string | undefined,
+    options: UploadFileOptions
+  ): Promise<UploadedFile | SkippedUpload>
   async uploadFile(
     projectId: string,
     localPath: string,

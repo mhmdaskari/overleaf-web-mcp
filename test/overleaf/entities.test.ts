@@ -74,7 +74,7 @@ describe('entity API', () => {
 
     const result = await api.manageEntity('project', { action: 'create_folder', path: 'figures' })
 
-    expect(result.created).toEqual({ _id: 'f2', name: 'figures' })
+    expect(result).toMatchObject({ action: 'create_folder', created: { _id: 'f2', name: 'figures' } })
   })
 
   test('requires exact confirmPath before deleting', async () => {
