@@ -248,11 +248,16 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | [Safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) | Revisions, tracked changes, confirmations, error codes |
 | [Configuration](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/) | Environment variables, the access policy, proxies, where the session is stored, and keeping it alive |
 | [Internals](https://mhmdaskari.github.io/overleaf-web-mcp/internals/) | Protocol notes, reliability guarantees, related projects |
+| [Contributing](https://mhmdaskari.github.io/overleaf-web-mcp/contributing/) | Reporting bugs and feedback, setting up, and opening a pull request |
 | [Roadmap](https://mhmdaskari.github.io/overleaf-web-mcp/roadmap/) and [Changelog](https://mhmdaskari.github.io/overleaf-web-mcp/changelog/) | Where this is going and what changed |
 
 ## For AI agents
 
 The server sends usage instructions to the MCP client when it connects, and every tool description is self-contained, so an assistant does not need this README to use it correctly. An agent working in a shell can use the command line instead, with `overleaf-web-mcp --help` and the three Agent Skills in [`skills/`](https://github.com/mhmdaskari/overleaf-web-mcp/tree/main/skills), which call only public commands. Coding agents contributing to the repository should read [AGENTS.md](AGENTS.md).
+
+## Contributing
+
+Bug reports, feedback, and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how to report a problem without exposing your session or your manuscripts, and how to propose a change.
 
 ## License
 
