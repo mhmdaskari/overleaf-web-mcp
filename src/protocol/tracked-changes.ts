@@ -480,3 +480,263 @@ export function expectedAfterDecision(input: DecisionExpectationInput): Expected
   })
   return { content: normalizeLf(visible), snapshot: { content, trackedChanges } }
 }
+
+/** A half-open UTF-16 span `[start, end)`. */
+interface Span {
+  start: number
+  end: number
+}
+
+/** Text an operation deleted: where its point lands after the write, and the span it held before. */
+interface DeletedSpan {
+  point: number
+  before: Span
+}
+
+type Segment = { from: 'before'; start: number; length: number } | { from: 'operation'; length: number }
+
+/** Splits the segment list at `position` and returns the index of the first segment from there. */
+function splitSegments(segments: Segment[], position: number): number {
+  let offset = 0
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index]!
+    if (offset === position) return index
+    if (position < offset + segment.length) {
+      const head = position - offset
+      const pieces: Segment[] =
+        segment.from === 'before'
+          ? [
+              { from: 'before', start: segment.start, length: head },
+              { from: 'before', start: segment.start + head, length: segment.length - head },
+            ]
+          : [
+              { from: 'operation', length: head },
+              { from: 'operation', length: segment.length - head },
+            ]
+      segments.splice(index, 1, ...pieces)
+      return index + 1
+    }
+    offset += segment.length
+  }
+  return segments.length
+}
+
+/**
+ * Where a ShareJS operation's text went: the spans it inserted, in the text after the write, and
+ * the text it deleted, as the span it held before the write and the point it lands on after.
+ * Components apply in order, each at a position in the text the previous ones left. A tracked
+ * delete is a point, which an insert at it pushes along and a delete around it absorbs, as
+ * Overleaf moves and merges its tracked deletes.
+ */
+function shareJsEditSpans(
+  beforeLength: number,
+  operation: readonly ShareJsComponent[]
+): { inserted: Span[]; deleted: DeletedSpan[] } {
+  const segments: Segment[] = beforeLength > 0 ? [{ from: 'before', start: 0, length: beforeLength }] : []
+  const deleted: DeletedSpan[] = []
+  for (const component of operation) {
+    if (typeof component.i === 'string' && component.i !== '') {
+      const length = component.i.length
+      segments.splice(splitSegments(segments, component.p), 0, { from: 'operation', length })
+      for (const span of deleted) if (span.point >= component.p) span.point += length
+    } else if (typeof component.d === 'string' && component.d !== '') {
+      const start = component.p
+      const end = start + component.d.length
+      for (const span of deleted) {
+        if (span.point > end) span.point -= end - start
+        else if (span.point > start) span.point = start
+      }
+      const first = splitSegments(segments, start)
+      const last = splitSegments(segments, end)
+      for (const segment of segments.splice(first, last - first)) {
+        // Text the same operation inserted and then deleted leaves nothing to track.
+        if (segment.from === 'before') {
+          deleted.push({ point: start, before: { start: segment.start, end: segment.start + segment.length } })
+        }
+      }
+    }
+  }
+  const inserted: Span[] = []
+  let offset = 0
+  for (const segment of segments) {
+    if (segment.from === 'operation') inserted.push({ start: offset, end: offset + segment.length })
+    offset += segment.length
+  }
+  return { inserted, deleted }
+}
+
+/** Whether the union of `covering` holds every unit of `span`. */
+function spanCovered(span: Span, covering: readonly Span[]): boolean {
+  let cursor = span.start
+  for (const range of [...covering].sort((left, right) => left.start - right.start)) {
+    if (cursor >= span.end) break
+    if (range.start > cursor) break
+    if (range.end > cursor) cursor = range.end
+  }
+  return cursor >= span.end
+}
+
+/** `span` less every part that lies inside one of `exempt`. */
+function subtractSpans(span: Span, exempt: readonly Span[]): Span[] {
+  let pieces: Span[] = [span]
+  for (const range of exempt) {
+    pieces = pieces.flatMap(piece => {
+      if (range.end <= piece.start || range.start >= piece.end) return [piece]
+      const kept: Span[] = []
+      if (range.start > piece.start) kept.push({ start: piece.start, end: range.start })
+      if (range.end < piece.end) kept.push({ start: range.end, end: piece.end })
+      return kept
+    })
+  }
+  return pieces
+}
+
+/** Spans of one text operation's output that came through it from its input, for mapping later operations. */
+function mapSpansThrough(spans: readonly Span[], textOperation: readonly unknown[]): Span[] {
+  const kept: Array<{ input: number; output: number; length: number }> = []
+  let input = 0
+  let output = 0
+  for (const component of textOperation) {
+    if (typeof component === 'number') {
+      if (component > 0) {
+        kept.push({ input, output, length: component })
+        output += component
+      }
+      input += Math.abs(component)
+    } else if (typeof component === 'string') {
+      output += component.length
+    } else if (isRecord(component) && typeof component.i === 'string') {
+      output += component.i.length
+    } else if (isRecord(component) && isOffset(component.r)) {
+      kept.push({ input, output, length: component.r })
+      input += component.r
+      output += component.r
+    }
+  }
+  return spans.flatMap(span =>
+    kept.flatMap(piece => {
+      const start = Math.max(span.start, piece.input)
+      const end = Math.min(span.end, piece.input + piece.length)
+      return start < end ? [{ start: piece.output + start - piece.input, end: piece.output + end - piece.input }] : []
+    })
+  )
+}
+
+/** Where a history-ot update's tracked inserts and deletes lie in the raw snapshot after it. */
+function historyEditSpans(operation: readonly HistoryOperation[]): { inserted: Span[]; deleted: Span[] } {
+  let inserted: Span[] = []
+  let deleted: Span[] = []
+  for (const step of operation) {
+    const textOperation = isRecord(step) && Array.isArray(step.textOperation) ? step.textOperation : undefined
+    if (textOperation === undefined) continue
+    inserted = mapSpansThrough(inserted, textOperation)
+    deleted = mapSpansThrough(deleted, textOperation)
+    let output = 0
+    for (const component of textOperation) {
+      if (typeof component === 'number') {
+        if (component > 0) output += component
+      } else if (typeof component === 'string') {
+        inserted.push({ start: output, end: output + component.length })
+        output += component.length
+      } else if (isRecord(component) && typeof component.i === 'string') {
+        inserted.push({ start: output, end: output + component.i.length })
+        output += component.i.length
+      } else if (isRecord(component) && isOffset(component.r)) {
+        const tracking = isRecord(component.tracking) ? component.tracking : undefined
+        if (tracking?.type === 'delete') deleted.push({ start: output, end: output + component.r })
+        output += component.r
+      }
+    }
+  }
+  const nonEmpty = (span: Span): boolean => span.end > span.start
+  return { inserted: inserted.filter(nonEmpty), deleted: deleted.filter(nonEmpty) }
+}
+
+export type TrackedWriteCoverageInput =
+  | {
+      protocol: 'sharejs'
+      /** The visible content before the write; ShareJS positions count it. */
+      beforeContent: string
+      /** The decoded ranges of the document before and after the write. */
+      beforeRanges: unknown
+      afterRanges: unknown
+      operation: readonly ShareJsComponent[]
+      userId: string
+    }
+  | {
+      protocol: 'history-ot'
+      after: HistorySnapshot
+      operation: readonly HistoryOperation[]
+      userId: string
+    }
+
+export interface TrackedWriteCoverage {
+  /** Spans the write inserted that no tracked insert by the user holds. */
+  uncoveredInserts: number
+  /** Spans the write deleted that no tracked delete by the user holds, and that were not tracked inserts. */
+  uncoveredDeletes: number
+}
+
+/**
+ * Checks that a tracked write was recorded as tracked changes by the user, by coverage rather than
+ * by new ids, since Overleaf merges a user's touching changes and keeps the first id. Holds for an
+ * operation with any number of components.
+ *
+ * ShareJS: every inserted span lies inside tracked inserts by the user after the write, and the
+ * text of every deleted span is held by a tracked delete by the user at the point it was deleted
+ * from, except text that lay inside a tracked insert, of any author, before the write: deleting it
+ * only shortens that insert. A tracked delete, of any author, whose point lay inside the deleted
+ * text is merged into it at that point, so its text is expected there. History-ot: inserted spans lie inside `insert` ranges by the user and
+ * deleted spans inside `delete` ranges by the user, in the raw snapshot after the write.
+ */
+export function trackedWriteCoverage(input: TrackedWriteCoverageInput): TrackedWriteCoverage {
+  if (input.protocol === 'history-ot') {
+    const { inserted, deleted } = historyEditSpans(input.operation)
+    const owned = (type: TrackedChangeType): Span[] =>
+      readRawChanges(input.after)
+        .filter(change => change.tracking.type === type && change.tracking.userId === input.userId)
+        .map(change => ({ start: change.range.pos, end: change.range.pos + change.range.length }))
+    const inserts = owned('insert')
+    const deletes = owned('delete')
+    return {
+      uncoveredInserts: inserted.filter(span => !spanCovered(span, inserts)).length,
+      uncoveredDeletes: deleted.filter(span => !spanCovered(span, deletes)).length,
+    }
+  }
+
+  const { inserted, deleted } = shareJsEditSpans(input.beforeContent.length, input.operation)
+  const after = parseShareJsChanges(input.afterRanges).filter(change => change.authorId === input.userId)
+  const inserts = after
+    .filter(change => change.type === 'insert')
+    .map(change => ({ start: change.position, end: change.position + change.length }))
+  const beforeChanges = parseShareJsChanges(input.beforeRanges)
+  const exempt = beforeChanges
+    .filter(change => change.type === 'insert')
+    .map(change => ({ start: change.position, end: change.position + change.length }))
+  const earlierDeletes = beforeChanges.filter(change => change.type === 'delete')
+  // Overleaf merges a tracked delete the new one spans into its text, spliced in at its point.
+  const expectedText = (piece: Span): string => {
+    let text = input.beforeContent.slice(piece.start, piece.end)
+    const inside = earlierDeletes
+      .filter(change => change.position > piece.start && change.position < piece.end)
+      .sort((left, right) => right.position - left.position)
+    for (const change of inside) {
+      const offset = change.position - piece.start
+      text = text.slice(0, offset) + change.text + text.slice(offset)
+    }
+    return text
+  }
+  let uncoveredDeletes = 0
+  for (const span of deleted) {
+    const held = after
+      .filter(change => change.type === 'delete' && change.position === span.point)
+      .map(change => change.text)
+      .join('')
+    const pieces = subtractSpans(span.before, exempt)
+    if (pieces.some(piece => !held.includes(expectedText(piece)))) uncoveredDeletes += 1
+  }
+  return {
+    uncoveredInserts: inserted.filter(span => !spanCovered(span, inserts)).length,
+    uncoveredDeletes,
+  }
+}

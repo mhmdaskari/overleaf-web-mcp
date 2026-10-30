@@ -764,6 +764,11 @@ describe('manage_tracked_changes on a history-OT document', () => {
 
 describe('an unconfirmed decision is observed, never resent', () => {
   const timeout = (): McpError => new McpError('TIMEOUT', 'Timed out.', { retryable: true })
+  // An otUpdateError other than too-large, as ProjectConnection.submitUpdate reports it.
+  const updateError = (): McpError =>
+    new McpError('OUTCOME_UNKNOWN', 'Overleaf reported an error on the document after the OT update was sent.', {
+      details: { event: 'otUpdateError', reason: 'delete_mismatch' },
+    })
 
   interface Scenario {
     name: string
@@ -886,6 +891,24 @@ describe('an unconfirmed decision is observed, never resent', () => {
           },
         },
       },
+      {
+        ...ot,
+        name: 'OT reject followed by an otUpdateError',
+        fail: {
+          submitUpdate: async () => {
+            throw updateError()
+          },
+        },
+      },
+      {
+        ...historyOt('reject-insert'),
+        name: 'history-OT reject followed by an otUpdateError',
+        fail: {
+          submitUpdate: async () => {
+            throw updateError()
+          },
+        },
+      },
     ]
   }
 
@@ -962,6 +985,41 @@ describe('an unconfirmed decision is observed, never resent', () => {
     const seen = harness({ joins: [document, failedRead, withoutChanges(document, ['change-1'])] })
     const result = await seen.api.manageTrackedChanges(decide(document, 'accept', ['change-1'], 1))
     expect(result).toMatchObject({ recoveredAfterTimeout: true, remainingChangeCount: 4 })
+  })
+
+  test('an otUpdateError is observed on a fresh connection, and a not-applied result keeps its reason', async () => {
+    const { document } = await shareFixture()
+    const h = harness({
+      joins: [document, ...Array.from({ length: 500 }, () => document)],
+      submitUpdate: async () => {
+        throw updateError()
+      },
+    })
+    const error = await rejection(h.api.manageTrackedChanges(decide(document, 'reject', ['change-1'], 1)))
+    expect(error).toMatchObject({
+      code: 'REMOTE_ERROR',
+      retryable: false,
+      details: { outcome: 'not_applied', reason: 'delete_mismatch' },
+    })
+    expect(h.connections.invalidate).toHaveBeenCalledOnce()
+    expect(h.connection.submitUpdate).toHaveBeenCalledOnce()
+  })
+
+  test('a too-large refusal is UPDATE_TOO_LARGE not applied, without observing', async () => {
+    const { document } = await shareFixture()
+    const h = harness({
+      joins: [document],
+      submitUpdate: async () => {
+        throw new McpError('UPDATE_TOO_LARGE', 'Overleaf refused the update as too large and stored nothing.', {
+          details: { outcome: 'not_applied', reason: 'update_too_large' },
+        })
+      },
+    })
+    const error = await rejection(h.api.manageTrackedChanges(decide(document, 'reject', ['change-1'], 1)))
+    expect(error).toMatchObject({ code: 'UPDATE_TOO_LARGE', details: { outcome: 'not_applied' } })
+    expect(h.connection.submitUpdate).toHaveBeenCalledOnce()
+    expect(h.connections.invalidate).not.toHaveBeenCalled()
+    expect(h.connection.joinDocument).toHaveBeenCalledOnce()
   })
 
   test('a definite OT refusal is reported as it is, without observing', async () => {

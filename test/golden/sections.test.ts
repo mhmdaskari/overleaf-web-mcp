@@ -13,13 +13,14 @@ import { ProjectConnection } from '../../src/protocol/project-connection.js'
 import { OverleafRuntime } from '../../src/runtime.js'
 import { createOverleafService } from '../../src/service/operations.js'
 import { expectGolden } from '../helpers/golden.js'
+import { encodedRanges, recordShareJsChanges, type ShareChange } from '../helpers/fake-overleaf.js'
 import { applyShareJs } from '../helpers/overleaf-socket.js'
 import { BOOTSTRAP_PAGE, cookieJar } from '../helpers/runtime.js'
 
 const PROJECT = 'project-id'
 
 type ServerDocument =
-  | { protocol: 'sharejs'; version: number; content: string }
+  | { protocol: 'sharejs'; version: number; content: string; changes?: ShareChange[] }
   | { protocol: 'history-ot'; version: number; snapshot: HistorySnapshot }
 
 type HistoryComponent = number | string | { i: string; tracking: unknown } | { r: number; tracking: unknown }
@@ -111,14 +112,16 @@ class FakePeer extends EventEmitter {
     if (name === 'leaveDoc') return [null]
     if (name === 'joinDoc') {
       return document.protocol === 'sharejs'
-        ? [null, document.content.split('\n'), document.version, null, {}, 'sharejs-text-ot']
+        ? [null, document.content.split('\n'), document.version, null, encodedRanges(document), 'sharejs-text-ot']
         : [null, structuredClone(document.snapshot), document.version, null, {}, 'history-ot']
     }
     if (name === 'applyOtUpdate') {
-      const update = args[1] as { v: number; op: unknown[] }
+      const update = args[1] as { v: number; op: unknown[]; meta?: { tc?: string } }
       if (update.v !== document.version) return [{ message: 'version mismatch' }]
       if (document.protocol === 'sharejs') {
-        document.content = applyShareJs(document.content, update.op as Array<{ p: number; i?: string; d?: string }>)
+        const components = update.op as Array<{ p: number; i?: string; d?: string }>
+        document.content = applyShareJs(document.content, components)
+        recordShareJsChanges(document, components, update.meta?.tc)
       } else {
         const [{ textOperation }] = update.op as [{ textOperation: HistoryComponent[] }]
         document.snapshot = applyHistory(document.snapshot, textOperation)

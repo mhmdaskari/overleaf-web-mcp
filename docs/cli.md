@@ -214,7 +214,9 @@ Four rules reach beyond the codes in the table, and one rule overrides everythin
 - **A write known not to have applied exits 4.** Any error with `details.outcome: "not_applied"`
   from an operation that is not read-only exits 4, whatever its code: for example a
   `REMOTE_ERROR` after a write's socket closed and the original revision stayed live throughout
-  the recovery window.
+  the recovery window, or `UPDATE_TOO_LARGE` when Overleaf refused the update as too large and
+  stored nothing. An `UPDATE_TOO_LARGE` from the local size check, before anything is sent,
+  exits 1.
 - **A read that failed transiently exits 7.** Any error with `retryable: true` from a read-only
   operation exits 7, a network `REMOTE_ERROR` for example: a read changes nothing, so it can run
   again later.

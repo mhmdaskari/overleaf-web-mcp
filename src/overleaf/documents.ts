@@ -10,10 +10,19 @@ import {
   buildShareJsOperation,
   generateIdSeed,
   makeUpdate,
+  type HistoryOperation,
   type HistorySnapshot,
+  type ShareJsComponent,
 } from '../protocol/ot.js'
 import type { JoinedDocument } from '../protocol/project-connection.js'
-import { isUnchangedDocument, isUnconfirmedWriteError, notAppliedError, observeUnconfirmedWrite } from './recovery.js'
+import { trackedWriteCoverage } from '../protocol/tracked-changes.js'
+import {
+  isUnchangedDocument,
+  isUnconfirmedWriteError,
+  notAppliedError,
+  observeUnconfirmedWrite,
+  refusedUpdateReason,
+} from './recovery.js'
 import { resolveProjectPath, type ProjectEntity } from './tree.js'
 
 interface DocumentConnection {
@@ -53,6 +62,8 @@ interface SubmitResult {
   live?: JoinedDocument
   trackChangesActive: boolean
   submitError?: unknown
+  /** The operation sent; absent for a no-op write, which sends nothing. */
+  operation?: unknown[]
 }
 
 export interface DocumentsApiOptions {
@@ -231,9 +242,10 @@ export class DocumentsApi {
             submitError = error
           }
           await safelyLeave(connection, entity.id)
-          // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
+          // OUTCOME_UNKNOWN means the socket failed after the update was sent, or Overleaf reported
+          // an error on the document after it, so it may have applied.
           if (isUnconfirmedWriteError(submitError)) {
-            return { before, trackChangesActive: connection.trackChangesActive, submitError }
+            return { before, trackChangesActive: connection.trackChangesActive, submitError, operation }
           }
           if (submitError) throw asMcpError(submitError)
 
@@ -242,10 +254,10 @@ export class DocumentsApi {
             live = await connection.joinDocument(entity.id)
           } catch (error) {
             // The update applied, so a failed verification read is settled by observation, never a resend.
-            return { before, trackChangesActive: connection.trackChangesActive, submitError: error }
+            return { before, trackChangesActive: connection.trackChangesActive, submitError: error, operation }
           }
           await safelyLeave(connection, entity.id)
-          return { before, live, trackChangesActive: connection.trackChangesActive }
+          return { before, live, trackChangesActive: connection.trackChangesActive, operation }
         })
     )
 
@@ -268,12 +280,14 @@ export class DocumentsApi {
           },
         })
       }
+      this.#assertTracked(projectId, writeMode, submitted, submitted.live)
       return resultFor(projectId, submitted.live, submitted.trackChangesActive, writeMode)
     }
 
     // Never retry an ambiguous write: observe whether the target, original, or a third state is live.
     const timedOut = submitted.submitError instanceof McpError && submitted.submitError.code === 'TIMEOUT'
-    const unconfirmed = timedOut ? 'timed out' : 'lost its socket'
+    const reason = refusedUpdateReason(submitted.submitError)
+    const unconfirmed = timedOut ? 'timed out' : reason !== undefined ? 'met an Overleaf error' : 'lost its socket'
     await this.#connections.invalidate?.(projectId)
     const observation = await observeUnconfirmedWrite({
       observe: async () =>
@@ -315,9 +329,66 @@ export class DocumentsApi {
         new McpError('OUTCOME_UNKNOWN', `Could not observe live content after the write ${unconfirmed}.`, { cause }),
     })
     if (observation.state === 'target') {
+      this.#assertTracked(projectId, writeMode, submitted, observation.observed.live)
       return resultFor(projectId, observation.observed.live, observation.observed.trackChangesActive, writeMode, true)
     }
     // Seeing the original revision through the full recovery window proves no application was observed.
-    throw notAppliedError(submitted.submitError, `The write ${unconfirmed} and the original revision is still live.`)
+    throw notAppliedError(
+      submitted.submitError,
+      `The write ${unconfirmed} and the original revision is still live.`,
+      reason === undefined ? {} : { reason }
+    )
+  }
+
+  /**
+   * Refuses a tracked write that Overleaf applied without recording it as tracked changes by this
+   * account. It is live, so it is reported and never reverted: a revert would be another write.
+   */
+  #assertTracked(projectId: string, writeMode: WriteMode, submitted: SubmitResult, live: JoinedDocument): void {
+    const operation = submitted.operation
+    if (writeMode !== 'tracked' || operation === undefined || operation.length === 0) return
+    const liveRevision = createRevision({
+      projectId,
+      docId: live.docId,
+      protocol: live.protocol,
+      otVersion: live.version,
+      content: live.content,
+    })
+    // The operation's positions describe the document only right after it. Another update since,
+    // even one that kept the text, such as a decision on a tracked change, may have moved or
+    // removed the ranges, so whether this write was tracked can no longer be told.
+    if (live.version !== submitted.before.version + 1) {
+      throw new McpError(
+        'REVISION_CONFLICT',
+        'The write applied, but another update followed it before it could be checked that Overleaf recorded it as tracked changes by this account. Read the file and list its tracked changes before writing again.',
+        { retryable: false, details: { outcome: 'unknown', liveRevision } }
+      )
+    }
+    const userId = this.#currentUserId!
+    const coverage =
+      live.protocol === 'history-ot'
+        ? trackedWriteCoverage({
+            protocol: 'history-ot',
+            after: live.rawSnapshot as HistorySnapshot,
+            operation: operation as HistoryOperation[],
+            userId,
+          })
+        : trackedWriteCoverage({
+            protocol: 'sharejs',
+            beforeContent: submitted.before.content,
+            beforeRanges: submitted.before.ranges,
+            afterRanges: live.ranges,
+            operation: operation as ShareJsComponent[],
+            userId,
+          })
+    if (coverage.uncoveredInserts === 0 && coverage.uncoveredDeletes === 0) return
+    throw new McpError(
+      'PROTOCOL_UNSUPPORTED',
+      'The write applied, but Overleaf did not record all of it as tracked changes by this account. It is live and was not reverted: read the file and review the text before writing again.',
+      {
+        retryable: false,
+        details: { kind: 'applied_untracked', liveRevision },
+      }
+    )
   }
 }

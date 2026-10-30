@@ -78,7 +78,11 @@ describe('upstream text never reaches an error', () => {
       connection.submitUpdate('d', { doc: 'd', v: 1, op: [{ p: 0, i: SENTINEL }] })
     )
     expect(text).not.toContain(SENTINEL)
-    expect(JSON.parse(text)).toMatchObject({ code: 'REMOTE_ERROR', details: { reason: 'unrecognized' } })
+    // Not too-large, so the update may have applied: the outcome is unknown, never the quoted text.
+    expect(JSON.parse(text)).toMatchObject({
+      code: 'OUTCOME_UNKNOWN',
+      details: { event: 'otUpdateError', reason: 'unrecognized' },
+    })
     socket.close()
   })
 

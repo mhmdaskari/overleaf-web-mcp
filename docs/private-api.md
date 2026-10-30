@@ -205,6 +205,15 @@ counts `true`, or `true` for the user, as on.
   `otUpdateError("Invalid hash", { project_id, doc_id, error, _id, message })` arrived, then the
   disconnect, and nothing was stored.
 
+This server treats the first as `UPDATE_TOO_LARGE` with `details.outcome: "not_applied"`. Any
+other `otUpdateError` for the document leaves the write unconfirmed: it may come from another
+client's update or follow ours being applied, so the write is observed on a fresh connection and
+never resent. Either way the socket is not reused. Before sending, an update is checked against
+the account's access level as real-time checks it: an update of only comment ops needs view
+access, one with `meta.tc` (ShareJS) or of only positive retains, tracked inserts, and retains
+whose tracking is not `none` (history-OT) needs review access, and anything else needs edit
+access (`owner` or `readAndWrite`).
+
 ## History
 
 | Method and route | Sent | Read | Used by |

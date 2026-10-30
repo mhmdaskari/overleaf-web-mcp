@@ -38,6 +38,48 @@ each such change is listed below.
 - **Command line:** `tracked-changes list`, `tracked-changes accept`, and
   `tracked-changes reject`, shorthand for the two tools.
 
+### Changed
+
+- **An OT write that the account's access level cannot make is refused before it is sent.**
+  Overleaf judges an update by its shape: one that only adds comments needs view access, one that
+  only makes tracked changes needs review access, and anything else needs owner or edit access.
+  An untracked `write_file`, `write_section`, `create_file`, or `sync_directory` write from a
+  review-only collaborator, any write from a read-only one, and a history-OT comment status
+  change from either is now `PERMISSION_DENIED` (exit 3) with `details.accessLevel` and
+  `details.required`, and nothing is sent. Before, Overleaf answered `not authorized` and
+  dropped the socket, which surfaced as `REMOTE_ERROR`. An access level this release does not
+  know may add comments only.
+- **`otUpdateError` is classified, not passed on.** `update is too large`, matched exactly, which
+  Overleaf sends to the sender alone after storing nothing, is now `UPDATE_TOO_LARGE` with
+  `details.outcome: "not_applied"`, so the command line exits 4 for it rather than 1. Any other
+  `otUpdateError` reaches every client joined to the document and can follow the update being
+  applied, so it now leaves the write unconfirmed (`OUTCOME_UNKNOWN` with
+  `details.event: "otUpdateError"` from the socket) and the write is observed on a fresh
+  connection, never resent, as after a timeout: `write_file`, `write_section`, `create_file`,
+  `sync_directory`, `add_comment`, `set_comment_status`, and `manage_tracked_changes` then return
+  the verified result with `recoveredAfterTimeout: true`, or `REMOTE_ERROR` with
+  `details.outcome: "not_applied"` and the error's `details.reason`, or `REVISION_CONFLICT`, or
+  `OUTCOME_UNKNOWN`. Before, every `otUpdateError` was `REMOTE_ERROR` (exit 1) with no
+  observation. Overleaf drops the socket after the event, so it is no longer reused.
+- **More of Overleaf's fixed socket error messages have a `details.reason`**, matched exactly:
+  `realtime_error`, `null_bytes_in_op`, `doc_over_max_size`, `doc_too_large`, `ranges_too_large`,
+  `string_too_long`, `ops_not_loaded`, `too_many_ranges`, `unrecognized_op`,
+  `conflicting_deletes`, `op_too_old`, `op_at_future_version`, `version_missing`,
+  `delete_mismatch`, and `invalid_hash`. Anything else is still `unrecognized`, and no upstream
+  text is quoted.
+- **A tracked write is checked for being recorded as tracked changes.** After a tracked
+  `write_file`, `write_section`, `create_file`, or `sync_directory` write verifies, every span it
+  inserted must lie inside tracked inserts by this account, and every span it deleted must be held
+  by a tracked delete by this account, unless that text was itself a tracked insert. Otherwise
+  the result is `PROTOCOL_UNSUPPORTED` with `details.kind: "applied_untracked"` and
+  `details.liveRevision` (exit 4), and no `details.outcome`, because the write applied: it is
+  live and never reverted. A tracked delete, of any author, that the deleted text spanned is
+  expected inside the merged delete, as Overleaf records it. If another update followed the write
+  before the check, such as a decision on its tracked changes, the ranges no longer describe it:
+  the result is then `REVISION_CONFLICT` with `details.outcome: "unknown"` and
+  `details.liveRevision`, and the text is live. A no-op write is not checked. A `sync_directory`
+  failed entry for such a step carries `kind: "applied_untracked"` beside its `details`.
+
 ### Fixed
 
 - **An unconfirmed document write is reported as not applied only when the original revision was

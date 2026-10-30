@@ -36,11 +36,19 @@ export interface UnconfirmedWriteObservation<T> {
 }
 
 /**
- * True for a submit error after which the update may or may not have applied: a timeout, or a
- * socket lost after sending. Such a write is observed, never resent.
+ * True for a submit error after which the update may or may not have applied: a timeout, a socket
+ * lost after sending, or an `otUpdateError` other than too-large, which Overleaf can send after
+ * applying the update, or for another client's update. Such a write is observed, never resent.
  */
 export function isUnconfirmedWriteError(error: unknown): error is McpError {
   return error instanceof McpError && (error.code === 'TIMEOUT' || error.code === 'OUTCOME_UNKNOWN')
+}
+
+/** The known reason of an `otUpdateError` that left a write unconfirmed, for the error reporting it. */
+export function refusedUpdateReason(error: unknown): string | undefined {
+  if (!(error instanceof McpError) || error.details?.event !== 'otUpdateError') return undefined
+  const reason = error.details.reason
+  return typeof reason === 'string' ? reason : undefined
 }
 
 /** Whether a fresh join still shows the document exactly as it was before the write. */

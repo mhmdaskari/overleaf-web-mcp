@@ -26,6 +26,16 @@ function shareDocument(content: string, version: number): JoinedDocument {
   }
 }
 
+/** A ShareJS document after a tracked write, holding that write's changes by the current user. */
+function trackedShareDocument(
+  content: string,
+  version: number,
+  ops: Array<{ p: number; i?: string; d?: string }>
+): JoinedDocument {
+  const changes = ops.map((op, index) => ({ id: `change-${index}`, op, metadata: { user_id: 'user' } }))
+  return { ...shareDocument(content, version), ranges: { comments: [], changes } }
+}
+
 function historyDocument(content: string, version: number): JoinedDocument {
   return {
     docId: 'doc',
@@ -110,7 +120,10 @@ describe('document API', () => {
 
   test('submits a tracked ShareJS update for the authenticated user even when tracking is inactive', async () => {
     const before = shareDocument('old', 3)
-    const after = shareDocument('new', 4)
+    const after = trackedShareDocument('new', 4, [
+      { p: 0, i: 'new' },
+      { p: 3, d: 'old' },
+    ])
     const { api, connection } = createHarness([before, after], undefined, {
       currentUserId: 'user',
     })
@@ -285,7 +298,12 @@ describe('document API', () => {
   test('edits around a character outside the BMP that a ShareJS write spans without sending it again', async () => {
     const before = 'Intro \u{1F600} text old.'
     const target = 'Intro2 \u{1F600} text new.'
-    const { api, connection } = createHarness([shareDocument(before, 3), shareDocument(target, 4)], undefined, {
+    const after = trackedShareDocument(target, 4, [
+      { p: 5, i: '2' },
+      { p: 15, i: 'new' },
+      { p: 18, d: 'old' },
+    ])
+    const { api, connection } = createHarness([shareDocument(before, 3), after], undefined, {
       currentUserId: 'user',
     })
     const revision = createRevision({

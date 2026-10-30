@@ -31,6 +31,7 @@ import {
   isUnconfirmedWriteError,
   notAppliedError,
   observeUnconfirmedWrite,
+  refusedUpdateReason,
   type RecoveryState,
 } from './recovery.js'
 import { resolveProjectPath, type ProjectEntity } from './tree.js'
@@ -551,7 +552,12 @@ export class TrackedChangesApi {
             { retryable: false }
           )
         }
-        throw notAppliedError(submission.submitError, 'The decision was not confirmed and the changes are still live.')
+        const reason = refusedUpdateReason(submission.submitError)
+        throw notAppliedError(
+          submission.submitError,
+          'The decision was not confirmed and the changes are still live.',
+          reason === undefined ? {} : { reason }
+        )
       }
       live = observation.observed
       recoveredAfterTimeout = true

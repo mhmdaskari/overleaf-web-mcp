@@ -14,7 +14,13 @@ import {
   type HistorySnapshot,
 } from '../protocol/ot.js'
 import type { JoinedDocument } from '../protocol/project-connection.js'
-import { isUnchangedDocument, isUnconfirmedWriteError, notAppliedError, observeUnconfirmedWrite } from './recovery.js'
+import {
+  isUnchangedDocument,
+  isUnconfirmedWriteError,
+  notAppliedError,
+  observeUnconfirmedWrite,
+  refusedUpdateReason,
+} from './recovery.js'
 import { resolveProjectPath, type ProjectEntity } from './tree.js'
 
 interface CommentHttp {
@@ -665,7 +671,11 @@ export class CommentsApi {
           details: { threadId },
         })
       }
-      throw notAppliedError(submit.submitError, 'The comment range attachment was not applied.', { threadId })
+      const reason = refusedUpdateReason(submit.submitError)
+      throw notAppliedError(submit.submitError, 'The comment range attachment was not applied.', {
+        threadId,
+        ...(reason === undefined ? {} : { reason }),
+      })
     }
 
     // The comment is attached and verified; a thread that cannot be read back is left out of the result.
@@ -822,10 +832,11 @@ export class CommentsApi {
             { retryable: false, details: { threadId: input.threadId } }
           )
         }
+        const reason = refusedUpdateReason(submission.submitError)
         throw notAppliedError(
           submission.submitError,
           'The comment status change was not confirmed and the requested state is not live.',
-          { threadId: input.threadId }
+          { threadId: input.threadId, ...(reason === undefined ? {} : { reason }) }
         )
       }
       recoveredAfterTimeout = true

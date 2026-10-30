@@ -212,6 +212,20 @@ Exactly one of `content` and `localPath` must be given. Returns the new `revisio
 during the recovery window after a timeout or a lost socket. A no-op write succeeds and records
 nothing. Fails with `REVISION_CONFLICT` if the document changed since the revision was read.
 
+The account's access level is checked before the update is sent: a review-only collaborator can
+write only with `writeMode: "tracked"`, and a read-only one cannot write; either is
+`PERMISSION_DENIED` (`details.accessLevel`, `details.required`) with nothing sent. If Overleaf
+reports an error on the document after the update was sent, the write is observed on a fresh
+connection like a timed-out one, except `update is too large`, which is `UPDATE_TOO_LARGE` with
+`details.outcome: "not_applied"`. A tracked write is checked after it verifies: every span it
+inserted or deleted must be held by tracked changes by this account (text that was itself a
+tracked insert can simply be deleted). Otherwise it fails with `PROTOCOL_UNSUPPORTED`,
+`details.kind: "applied_untracked"`, and `details.liveRevision`. That write is live and is not
+reverted: read the file and review it before writing again. If another update followed the write
+before the check, such as a decision on its tracked changes, whether it was tracked can no longer
+be told: the write is live, and the result is `REVISION_CONFLICT` with
+`details.outcome: "unknown"` and `details.liveRevision`.
+
 On a ShareJS document (`protocol: "sharejs"`, Overleaf's legacy editor), characters outside the
 Basic Multilingual Plane, such as emoji, cannot be sent: the legacy editor would store each as
 U+FFFD. Text that adds such a character, adds another copy of one the document already holds, or
@@ -640,9 +654,11 @@ What happens, in order:
 
 Nothing is retried automatically. Returns `status` (`complete`, or `partial` when anything failed
 or was not attempted), `mode`, `completed` (`{ destinationPath, action, entityId? }`), `failed`
-(`{ destinationPath, action, errorCode, message, details? }`, where `errorCode` is one of the codes
+(`{ destinationPath, action, errorCode, message, details?, kind? }`, where `errorCode` is one of the codes
 in the [safety model](safety.md#error-codes) and `details` is the failed step's own error
-details, such as `reason`, `status`, `outcome`, `liveRevision`, or `created`),
+details, such as `reason`, `status`, `outcome`, `liveRevision`, or `created`, and `kind:
+"applied_untracked"` beside them when a tracked step applied without being recorded as tracked
+changes),
 `remaining` (`{ destinationPath, action }`, what was not attempted), `identicalCount`,
 `planToken`, `planned` (whether the call was checked against a `planToken`; `false` only with
 `unplanned: true`).

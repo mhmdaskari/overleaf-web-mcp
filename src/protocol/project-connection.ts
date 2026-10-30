@@ -5,6 +5,7 @@ import { normalizeLf } from '../core/text.js'
 import { flattenProjectTree, type ProjectEntity, type RawEntity, type RawFolder } from '../overleaf/tree.js'
 import { historyVisibleContent, type HistorySnapshot } from './ot.js'
 import { notConnectedError } from './socketio09-client.js'
+import { assertUpdatePermitted } from './update-access.js'
 import { upstreamReason } from './upstream-reason.js'
 
 export interface SocketPeerLike {
@@ -382,6 +383,8 @@ export class ProjectConnection {
     if (!Number.isInteger(version)) {
       throw new McpError('INVALID_ARGUMENT', 'OT update requires an integer version.')
     }
+    // Overleaf answers an update beyond this account's access with `not authorized` and drops the socket.
+    assertUpdatePermitted(this.permissionsLevel, update)
     if (this.closed) throw notConnectedError()
 
     let appliedTimer: NodeJS.Timeout | undefined
@@ -408,10 +411,25 @@ export class ProjectConnection {
         const metadata = message as { doc_id?: unknown } | undefined
         if (metadata?.doc_id !== undefined && metadata.doc_id !== docId) return
         cleanup()
-        // The event can quote the rejected update, document text included, so only a reason is kept.
+        // Overleaf disconnects a socket after every otUpdateError, so this one is never reused.
+        this.#disconnected = true
+        // Only the error string can carry document text or ids, so it is reduced to a known reason.
+        if (error === 'update is too large') {
+          // real-time sends this to the sender alone, before the update reaches the document.
+          reject(
+            new McpError(
+              'UPDATE_TOO_LARGE',
+              'Overleaf refused the update as too large and stored nothing. Split the change into smaller write_file or write_section calls, using a fresh revision for each call.',
+              { retryable: false, details: { outcome: 'not_applied', reason: 'update_too_large' } }
+            )
+          )
+          return
+        }
+        // Any other error reaches every client joined to the document and may follow the update
+        // being applied, or come from another client's update, so the outcome is unknown.
         reject(
-          new McpError('REMOTE_ERROR', 'Overleaf rejected the OT update.', {
-            details: { reason: upstreamReason(error) },
+          new McpError('OUTCOME_UNKNOWN', 'Overleaf reported an error on the document after the OT update was sent.', {
+            details: { event: 'otUpdateError', reason: upstreamReason(error) },
           })
         )
       }
