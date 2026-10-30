@@ -93,11 +93,9 @@ export class AccountApi {
     try {
       parsed = projectListSchema.parse(response)
     } catch (error) {
-      throw new McpError(
-        'PROTOCOL_UNSUPPORTED',
-        'Overleaf returned an unsupported project list response.',
-        { cause: error }
-      )
+      throw new McpError('PROTOCOL_UNSUPPORTED', 'Overleaf returned an unsupported project list response.', {
+        cause: error,
+      })
     }
     const projects = parsed.projects.map(project => ({
       // The refine above guarantees one of the two is present.
@@ -118,10 +116,7 @@ export class AccountApi {
   async listProjects(options: ListProjectsOptions = {}): Promise<ProjectListing> {
     const limit = options.limit ?? DEFAULT_PROJECT_LIMIT
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PROJECT_LIMIT) {
-      throw new McpError(
-        'INVALID_ARGUMENT',
-        `limit must be an integer between 1 and ${MAX_PROJECT_LIMIT}.`
-      )
+      throw new McpError('INVALID_ARGUMENT', `limit must be an integer between 1 and ${MAX_PROJECT_LIMIT}.`)
     }
     const query = options.query?.toLowerCase()
     const { projects, totalSize } = await this.fetchProjects()
@@ -131,11 +126,7 @@ export class AccountApi {
         (options.includeTrashed === true || !project.trashed) &&
         (query === undefined || query === '' || project.name.toLowerCase().includes(query))
     )
-    matched.sort(
-      options.sort === 'name'
-        ? (left, right) => left.name.localeCompare(right.name)
-        : compareByLastUpdated
-    )
+    matched.sort(options.sort === 'name' ? (left, right) => left.name.localeCompare(right.name) : compareByLastUpdated)
     return {
       projects: matched.slice(0, limit),
       totalMatched: matched.length,

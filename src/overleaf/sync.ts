@@ -207,9 +207,43 @@ export const PLAN_LISTING_LIMIT = 25
  * and Overleaf never tracks an upload.
  */
 const TEXT_EXTENSIONS = new Set([
-  'tex', 'latex', 'sty', 'cls', 'bst', 'bib', 'bibtex', 'txt', 'tikz', 'mtx', 'rtex', 'md',
-  'asy', 'lbx', 'bbx', 'cbx', 'm', 'lco', 'dtx', 'ins', 'ist', 'def', 'clo', 'ldf', 'rmd',
-  'lua', 'gv', 'mf', 'yml', 'yaml', 'lhs', 'mk', 'xmpdata', 'cfg', 'rnw', 'ltx', 'inc',
+  'tex',
+  'latex',
+  'sty',
+  'cls',
+  'bst',
+  'bib',
+  'bibtex',
+  'txt',
+  'tikz',
+  'mtx',
+  'rtex',
+  'md',
+  'asy',
+  'lbx',
+  'bbx',
+  'cbx',
+  'm',
+  'lco',
+  'dtx',
+  'ins',
+  'ist',
+  'def',
+  'clo',
+  'ldf',
+  'rmd',
+  'lua',
+  'gv',
+  'mf',
+  'yml',
+  'yaml',
+  'lhs',
+  'mk',
+  'xmpdata',
+  'cfg',
+  'rnw',
+  'ltx',
+  'inc',
 ])
 const TEXT_FILE_NAMES = new Set(['latexmkrc', '.latexmkrc', 'makefile', 'gnumakefile'])
 
@@ -358,11 +392,7 @@ function localReadFailure(error: unknown, localPath: string): McpError {
 
 function actionFor(work: UploadWork, writeMode: WriteMode): SyncAction {
   if (work.reason === 'changed' && work.remoteType === 'doc') return 'write'
-  if (
-    work.reason === 'new' &&
-    writeMode === 'tracked' &&
-    isTextFileName(posix.basename(work.destinationPath))
-  ) {
+  if (work.reason === 'new' && writeMode === 'tracked' && isTextFileName(posix.basename(work.destinationPath))) {
     return 'create'
   }
   return 'upload'
@@ -406,11 +436,7 @@ export class SyncApi {
     this.#policy = dependencies.policy ?? AccessPolicy.permissive
   }
 
-  async planSync(
-    projectId: string,
-    localFolderPath: string,
-    options: PlanSyncOptions = {}
-  ): Promise<PlanSyncResult> {
+  async planSync(projectId: string, localFolderPath: string, options: PlanSyncOptions = {}): Promise<PlanSyncResult> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect('local-read', 'overleaf-read')
     const plan = await this.#plan(projectId, localFolderPath, options)
@@ -479,7 +505,7 @@ export class SyncApi {
     if (options.mode === 'mirror' && options.confirmDeleteCount === undefined) {
       throw new McpError(
         'CONFIRMATION_MISMATCH',
-        'mirror mode deletes what exists only in the project and requires confirmDeleteCount: the number of remoteOnly entries in plan_sync\'s result, after the user has confirmed them.'
+        "mirror mode deletes what exists only in the project and requires confirmDeleteCount: the number of remoteOnly entries in plan_sync's result, after the user has confirmed them."
       )
     }
 
@@ -698,10 +724,19 @@ export class SyncApi {
           attempts += 1
         },
         onCreated: (folder, entityId) => {
-          result.completed.push({ destinationPath: folder, action: 'create_folder', ...(entityId === undefined ? {} : { entityId }) })
+          result.completed.push({
+            destinationPath: folder,
+            action: 'create_folder',
+            ...(entityId === undefined ? {} : { entityId }),
+          })
         },
         onFailed: (folder, failure) => {
-          record({ destinationPath: folder, action: 'create_folder', errorCode: failure.code, message: failure.message })
+          record({
+            destinationPath: folder,
+            action: 'create_folder',
+            errorCode: failure.code,
+            message: failure.message,
+          })
           // Every further request would be refused too, so none is sent.
           if (failure.code === 'RATE_LIMITED') halted = true
         },
@@ -801,9 +836,11 @@ export class SyncApi {
     let localHash: string | undefined
     try {
       // Hashed before the upload, so the read-back can tell whether these bytes landed.
-      localHash = (await gitBlobHashFile(localPath).catch((error: unknown) => {
-        throw localReadFailure(error, localPath)
-      })).hash
+      localHash = (
+        await gitBlobHashFile(localPath).catch((error: unknown) => {
+          throw localReadFailure(error, localPath)
+        })
+      ).hash
       hooks.onHashed(localHash)
       hooks.onAttempt()
       // onConflict decides whether a binary may be replaced; documents also need their own opt-in.
@@ -872,10 +909,16 @@ export class SyncApi {
         entity.hash !== undefined &&
         entity.hash !== localHashes.get(outcome.destinationPath)
       ) {
-        problem = 'The uploaded file in the project does not match the local file; it may have changed during the upload.'
+        problem =
+          'The uploaded file in the project does not match the local file; it may have changed during the upload.'
       }
       if (problem !== undefined) {
-        result.failed.push({ destinationPath: outcome.destinationPath, action: outcome.action, errorCode: 'REMOTE_ERROR', message: problem })
+        result.failed.push({
+          destinationPath: outcome.destinationPath,
+          action: outcome.action,
+          errorCode: 'REMOTE_ERROR',
+          message: problem,
+        })
         continue
       }
       if (outcome.entityId === undefined) outcome.entityId = entity!.id
@@ -1193,7 +1236,11 @@ export class SyncApi {
         attempts += 1
       },
       onCreated: (folder, entityId) => {
-        completed.push({ destinationPath: folder, action: 'create_folder', ...(entityId === undefined ? {} : { entityId }) })
+        completed.push({
+          destinationPath: folder,
+          action: 'create_folder',
+          ...(entityId === undefined ? {} : { entityId }),
+        })
       },
       onFailed: (folder, failure) => {
         record(syncFailure(folder, 'create_folder', failure))
@@ -1241,7 +1288,11 @@ export class SyncApi {
           uploadedHashes,
           leftovers
         )
-        completed.push({ destinationPath: work.destinationPath, action, ...(entityId === undefined ? {} : { entityId }) })
+        completed.push({
+          destinationPath: work.destinationPath,
+          action,
+          ...(entityId === undefined ? {} : { entityId }),
+        })
       } catch (error) {
         record(syncFailure(work.destinationPath, action, asMcpError(error)))
       }
@@ -1401,7 +1452,8 @@ export class SyncApi {
         entity.hash !== undefined &&
         entity.hash !== uploadedHashes.get(outcome.destinationPath)
       ) {
-        problem = 'The uploaded file in the project does not match the local file; it may have changed during the upload.'
+        problem =
+          'The uploaded file in the project does not match the local file; it may have changed during the upload.'
       }
       if (problem === undefined) {
         if (outcome.entityId === undefined && entity !== undefined) outcome.entityId = entity.id
@@ -1477,8 +1529,7 @@ export class SyncApi {
       if (entity === undefined) continue
       let fingerprint: string
       if (entity.type === 'doc') {
-        const revision =
-          writtenRevisions.get(path) ?? (await this.#deps.readFile(plan.projectId, path)).revision
+        const revision = writtenRevisions.get(path) ?? (await this.#deps.readFile(plan.projectId, path)).revision
         fingerprint = revisionFingerprint(revision)
       } else {
         fingerprint = entity.type === 'file' ? (entity.hash ?? '') : ''

@@ -3,12 +3,7 @@ import { createOutsideBmpPreservingEdits } from '../core/diff.js'
 import { assertDocumentSize, assertUpdateSize } from '../core/limits.js'
 import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
-import {
-  assertRevisionMatches,
-  contentHash,
-  createRevision,
-  type OtProtocol,
-} from '../core/revision.js'
+import { assertRevisionMatches, contentHash, createRevision, type OtProtocol } from '../core/revision.js'
 import { normalizeLf } from '../core/text.js'
 import {
   buildHistoryTextOperation,
@@ -30,10 +25,7 @@ interface DocumentConnection {
 }
 
 interface ConnectionProvider {
-  withConnection<T>(
-    projectId: string,
-    operation: (connection: DocumentConnection) => Promise<T>
-  ): Promise<T>
+  withConnection<T>(projectId: string, operation: (connection: DocumentConnection) => Promise<T>): Promise<T>
   invalidate?(projectId: string): Promise<void>
 }
 
@@ -126,10 +118,7 @@ export class DocumentsApi {
   readonly #currentUserId: string | undefined
   readonly #policy: AccessPolicy
 
-  constructor(
-    connections: ConnectionProvider,
-    options: DocumentsApiOptions = {}
-  ) {
+  constructor(connections: ConnectionProvider, options: DocumentsApiOptions = {}) {
     this.#connections = connections
     this.#maxDocLength = options.maxDocLength ?? 2 * 1024 * 1024
     this.#maxUpdateChars = options.maxUpdateChars ?? 7 * 1024 * 1024
@@ -142,26 +131,28 @@ export class DocumentsApi {
   async readFile(projectId: string, filePath: string): Promise<ReadFileResult> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect('overleaf-read')
-    return await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(async () => {
-        const entity = resolveProjectPath(connection.getTree(), filePath, 'doc')
-        const document = await connection.joinDocument(entity.id)
-        await safelyLeave(connection, entity.id)
-        const content = normalizeLf(document.content)
-        return {
-          content,
-          revision: createRevision({
-            projectId,
-            docId: entity.id,
-            protocol: document.protocol,
-            otVersion: document.version,
+    return await this.#connections.withConnection(
+      projectId,
+      async connection =>
+        await connection.queue.run(async () => {
+          const entity = resolveProjectPath(connection.getTree(), filePath, 'doc')
+          const document = await connection.joinDocument(entity.id)
+          await safelyLeave(connection, entity.id)
+          const content = normalizeLf(document.content)
+          return {
             content,
-          }),
-          newline: 'LF',
-          protocol: document.protocol,
-          trackChangesActive: connection.trackChangesActive,
-        }
-      })
+            revision: createRevision({
+              projectId,
+              docId: entity.id,
+              protocol: document.protocol,
+              otVersion: document.version,
+              content,
+            }),
+            newline: 'LF',
+            protocol: document.protocol,
+            trackChangesActive: connection.trackChangesActive,
+          }
+        })
     )
   }
 
@@ -183,79 +174,78 @@ export class DocumentsApi {
     const target = normalizeLf(content)
     assertDocumentSize(target, this.#maxDocLength)
 
-    const submitted = await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(async (): Promise<SubmitResult> => {
-        const entity = resolveProjectPath(connection.getTree(), filePath, 'doc')
-        const before = await connection.joinDocument(entity.id)
-        assertRevisionMatches(revision, {
-          projectId,
-          docId: entity.id,
-          protocol: before.protocol,
-          otVersion: before.version,
-          content: before.content,
-        })
-        if (before.protocol === 'sharejs') {
-          // The legacy editor replaces each such character with U+FFFD, so the write could never verify.
-          const line = insertedOutsideBmpLine(before.content, target)
-          if (line !== undefined) {
+    const submitted = await this.#connections.withConnection(
+      projectId,
+      async connection =>
+        await connection.queue.run(async (): Promise<SubmitResult> => {
+          const entity = resolveProjectPath(connection.getTree(), filePath, 'doc')
+          const before = await connection.joinDocument(entity.id)
+          assertRevisionMatches(revision, {
+            projectId,
+            docId: entity.id,
+            protocol: before.protocol,
+            otVersion: before.version,
+            content: before.content,
+          })
+          if (before.protocol === 'sharejs') {
+            // The legacy editor replaces each such character with U+FFFD, so the write could never verify.
+            const line = insertedOutsideBmpLine(before.content, target)
+            if (line !== undefined) {
+              await safelyLeave(connection, entity.id)
+              throw new McpError(
+                'INVALID_ARGUMENT',
+                "Overleaf's legacy editor cannot store characters outside the Basic Multilingual Plane, such as emoji, and would replace each with U+FFFD. Replace them, for example with a LaTeX command, and write again. Nothing was sent.",
+                { details: { line } }
+              )
+            }
+          }
+
+          const tracking =
+            writeMode === 'tracked' ? { userId: this.#currentUserId!, timestamp: new Date().toISOString() } : undefined
+          const operation =
+            before.protocol === 'sharejs'
+              ? buildShareJsOperation(before.content, target)
+              : buildHistoryTextOperation(before.rawSnapshot as HistorySnapshot, target, tracking)
+          if (operation.length === 0) {
             await safelyLeave(connection, entity.id)
-            throw new McpError(
-              'INVALID_ARGUMENT',
-              "Overleaf's legacy editor cannot store characters outside the Basic Multilingual Plane, such as emoji, and would replace each with U+FFFD. Replace them, for example with a LaTeX command, and write again. Nothing was sent.",
-              { details: { line } }
-            )
+            return {
+              before,
+              live: before,
+              trackChangesActive: connection.trackChangesActive,
+            }
           }
-        }
+          const update = makeUpdate(
+            entity.id,
+            before.version,
+            operation,
+            before.protocol,
+            writeMode === 'tracked' && before.protocol === 'sharejs' ? { tc: generateIdSeed() } : undefined
+          )
+          assertUpdateSize(update, this.#maxUpdateChars)
 
-        const tracking =
-          writeMode === 'tracked'
-            ? { userId: this.#currentUserId!, timestamp: new Date().toISOString() }
-            : undefined
-        const operation = before.protocol === 'sharejs'
-          ? buildShareJsOperation(before.content, target)
-          : buildHistoryTextOperation(before.rawSnapshot as HistorySnapshot, target, tracking)
-        if (operation.length === 0) {
+          let submitError: unknown
+          try {
+            await connection.submitUpdate(entity.id, update)
+          } catch (error) {
+            submitError = error
+          }
           await safelyLeave(connection, entity.id)
-          return {
-            before,
-            live: before,
-            trackChangesActive: connection.trackChangesActive,
+          // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
+          if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
+            return { before, trackChangesActive: connection.trackChangesActive, submitError }
           }
-        }
-        const update = makeUpdate(
-          entity.id,
-          before.version,
-          operation,
-          before.protocol,
-          writeMode === 'tracked' && before.protocol === 'sharejs'
-            ? { tc: generateIdSeed() }
-            : undefined
-        )
-        assertUpdateSize(update, this.#maxUpdateChars)
+          if (submitError) throw asMcpError(submitError)
 
-        let submitError: unknown
-        try {
-          await connection.submitUpdate(entity.id, update)
-        } catch (error) {
-          submitError = error
-        }
-        await safelyLeave(connection, entity.id)
-        // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
-        if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
-          return { before, trackChangesActive: connection.trackChangesActive, submitError }
-        }
-        if (submitError) throw asMcpError(submitError)
-
-        let live: JoinedDocument
-        try {
-          live = await connection.joinDocument(entity.id)
-        } catch (error) {
-          // The update applied, so a failed verification read is settled by observation, never a resend.
-          return { before, trackChangesActive: connection.trackChangesActive, submitError: error }
-        }
-        await safelyLeave(connection, entity.id)
-        return { before, live, trackChangesActive: connection.trackChangesActive }
-      })
+          let live: JoinedDocument
+          try {
+            live = await connection.joinDocument(entity.id)
+          } catch (error) {
+            // The update applied, so a failed verification read is settled by observation, never a resend.
+            return { before, trackChangesActive: connection.trackChangesActive, submitError: error }
+          }
+          await safelyLeave(connection, entity.id)
+          return { before, live, trackChangesActive: connection.trackChangesActive }
+        })
     )
 
     if (submitted.live) {
@@ -289,13 +279,15 @@ export class DocumentsApi {
     let observationError: unknown
     do {
       try {
-        const recovery = await this.#connections.withConnection(projectId, async connection =>
-          await connection.queue.run(async () => {
-            const entity = resolveProjectPath(connection.getTree(), filePath, 'doc')
-            const live = await connection.joinDocument(entity.id)
-            await safelyLeave(connection, entity.id)
-            return { live, trackChangesActive: connection.trackChangesActive }
-          })
+        const recovery = await this.#connections.withConnection(
+          projectId,
+          async connection =>
+            await connection.queue.run(async () => {
+              const entity = resolveProjectPath(connection.getTree(), filePath, 'doc')
+              const live = await connection.joinDocument(entity.id)
+              await safelyLeave(connection, entity.id)
+              return { live, trackChangesActive: connection.trackChangesActive }
+            })
         )
         observationError = undefined
         // The intended hash proves the timed-out submission was applied.

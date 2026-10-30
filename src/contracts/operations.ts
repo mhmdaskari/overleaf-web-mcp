@@ -73,18 +73,15 @@ const projectId = z.string().min(1).describe('Overleaf project ID')
 const filePath = z.string().min(1).describe('Project-relative path using forward slashes')
 const revision = z.string().min(1).describe('Opaque revision returned by a prior read or write')
 const writeModeSchema = z.enum(['untracked', 'tracked'])
-const writeMode = writeModeSchema.default('untracked').describe(
-  'Use tracked to record inserted and deleted text as Overleaf tracked changes; defaults to untracked'
-)
+const writeMode = writeModeSchema
+  .default('untracked')
+  .describe('Use tracked to record inserted and deleted text as Overleaf tracked changes; defaults to untracked')
 const position = z.object({
   line: z.number().int().positive(),
   column: z.number().int().positive(),
 })
 
-const localFolderPath = z
-  .string()
-  .min(1)
-  .describe("Local folder on the server's own disk, synced as a whole")
+const localFolderPath = z.string().min(1).describe("Local folder on the server's own disk, synced as a whole")
 const destinationFolderPath = z
   .string()
   .default('')
@@ -157,11 +154,7 @@ const projectSummarySchema = z.object({
   trashed: z.boolean(),
 })
 
-const projectName = z
-  .string()
-  .min(1)
-  .max(150)
-  .describe('Project name, 1 to 150 characters without slashes')
+const projectName = z.string().min(1).max(150).describe('Project name, 1 to 150 characters without slashes')
 
 const createdProjectSchema = z.object({
   projectId: z.string(),
@@ -245,11 +238,7 @@ export const OPERATIONS = {
     description:
       'List the projects the account can access, newest first by default. Archived and trashed projects are hidden unless includeArchived or includeTrashed is set. Returns projects with id, name, accessLevel, lastUpdated, archived, and trashed, plus totalMatched (before limit) and totalProjects (everything the account can access).',
     inputSchema: z.object({
-      query: z
-        .string()
-        .min(1)
-        .optional()
-        .describe('Case-insensitive substring of the project name'),
+      query: z.string().min(1).optional().describe('Case-insensitive substring of the project name'),
       includeArchived: z.boolean().default(false),
       includeTrashed: z.boolean().default(false),
       limit: z
@@ -285,7 +274,7 @@ export const OPERATIONS = {
   },
   clone_project: {
     description:
-      'Copy an existing project, its files, root document, and compiler included, into a new project with the given name. Overleaf gives the copy the account\'s default TeX Live image and spell-check language; set them with update_project_settings when they matter. Use it to start from a lab or journal template project.',
+      "Copy an existing project, its files, root document, and compiler included, into a new project with the given name. Overleaf gives the copy the account's default TeX Live image and spell-check language; set them with update_project_settings when they matter. Use it to start from a lab or journal template project.",
     inputSchema: z.object({ sourceProjectId: projectId.describe('Project to copy'), name: projectName }),
     outputSchema: createdProjectSchema,
     annotations: { destructiveHint: false, idempotentHint: false },
@@ -327,9 +316,11 @@ export const OPERATIONS = {
       "Persist the project's root document, TeX engine, TeX Live image, or spell-check language in Overleaf's own project settings, so the web UI's Recompile follows the change. rootFilePath must name an existing .tex, .ltx, .Rtex, or .Rnw document; any other extension is INVALID_ARGUMENT before any request. Settings are applied one request at a time; if one fails, the error keeps its code, lists the settings already stored in details.applied and the failed one in details.failed, and no later setting is sent. Returns the settings as re-read from the project. Provide at least one field.",
     inputSchema: z.object({
       projectId,
-      rootFilePath: filePath.optional().describe('Document Overleaf should compile by default: .tex, .ltx, .Rtex, or .Rnw'),
+      rootFilePath: filePath
+        .optional()
+        .describe('Document Overleaf should compile by default: .tex, .ltx, .Rtex, or .Rnw'),
       compiler: z.enum(COMPILERS).optional(),
-      imageName: z.string().min(1).optional().describe('TeX Live image, as shown in Overleaf\'s menu'),
+      imageName: z.string().min(1).optional().describe("TeX Live image, as shown in Overleaf's menu"),
       spellCheckLanguage: z
         .string()
         .optional()
@@ -404,7 +395,7 @@ export const OPERATIONS = {
   },
   manage_entity: {
     description:
-      'Create a folder, rename, move, or delete an entity. Deletion requires confirmPath to exactly equal path. A name already used in the target folder (the entity\'s own included), and a folder moved into itself or one of its subfolders, are INVALID_ARGUMENT before anything is sent.',
+      "Create a folder, rename, move, or delete an entity. Deletion requires confirmPath to exactly equal path. A name already used in the target folder (the entity's own included), and a folder moved into itself or one of its subfolders, are INVALID_ARGUMENT before anything is sent.",
     inputSchema: z.object({
       projectId,
       action: entityActionSchema,
@@ -438,12 +429,16 @@ export const OPERATIONS = {
       overwrite: z
         .boolean()
         .optional()
-        .describe('true allows replacing a binary file at the path; false refuses to replace anything; omitted, replacing a binary needs expectedHash'),
+        .describe(
+          'true allows replacing a binary file at the path; false refuses to replace anything; omitted, replacing a binary needs expectedHash'
+        ),
       expectedHash: z
         .string()
         .regex(/^[0-9a-f]{40}$/u)
         .optional()
-        .describe('The hash get_project_tree reported for the binary file being replaced; a different one is REMOTE_DRIFT'),
+        .describe(
+          'The hash get_project_tree reported for the binary file being replaced; a different one is REMOTE_DRIFT'
+        ),
       uncheckedDocumentReplace,
     }),
     outputSchema: z.object({
@@ -476,7 +471,9 @@ export const OPERATIONS = {
       onConflict: z
         .enum(['fail', 'skip', 'overwrite'])
         .default('fail')
-        .describe('What to do when a document or file is already at a destination path; fail (the default) uploads nothing'),
+        .describe(
+          'What to do when a document or file is already at a destination path; fail (the default) uploads nothing'
+        ),
       uncheckedDocumentReplace,
       stopOnError: z.boolean().default(false).describe('Stop at the first failure instead of continuing'),
     }),
@@ -619,7 +616,9 @@ export const OPERATIONS = {
         .string()
         .min(1)
         .optional()
-        .describe('From plan_sync, or from a partial sync_directory to resume it; required unless an additive sync passes unplanned'),
+        .describe(
+          'From plan_sync, or from a partial sync_directory to resume it; required unless an additive sync passes unplanned'
+        ),
       unplanned: z
         .boolean()
         .optional()
@@ -629,7 +628,9 @@ export const OPERATIONS = {
         .int()
         .nonnegative()
         .optional()
-        .describe("Required in mirror mode: the number of entries in plan_sync's remoteOnly, each folder counting once"),
+        .describe(
+          "Required in mirror mode: the number of entries in plan_sync's remoteOnly, each folder counting once"
+        ),
       ignore: ignorePatterns,
       writeMode,
       stopOnError: z.boolean().default(false).describe('Stop at the first failure instead of continuing'),
@@ -680,8 +681,7 @@ export const OPERATIONS = {
     effects: ['overleaf-read', 'overleaf-delete'],
   },
   get_sections: {
-    description:
-      'Parse LaTeX section headings in one file only; this never follows input/include directives.',
+    description: 'Parse LaTeX section headings in one file only; this never follows input/include directives.',
     inputSchema: z.object({ projectId, filePath }),
     outputSchema: z.object({
       sections: z.array(latexSectionSchema),
@@ -715,12 +715,16 @@ export const OPERATIONS = {
     effects: ['overleaf-read', 'overleaf-write'],
   },
   compile_project: {
-    description:
-      `Compile a project and report on the build from its logs. Omit rootFilePath to build the root document configured in Overleaf, which is what the web UI's Recompile button uses; pass it to build a different document for this call only. Check summary.builtCleanly, not status: Overleaf reports status "success" whenever a PDF came out, even when LaTeX hit errors along the way. builtCleanly is true only when a PDF was produced, output.log was read, and it reports no error. summary lists the first ${MAX_LOG_ENTRIES} errors and warnings as { file?, line?, message } (errorCount and warningCount count all of them), undefined references and citations, missing files, pageCount, and pdfSizeBytes; messages never quote the document. A LaTeX error that stopped the build returns status "failure" with the same summary rather than an error. outputFiles is Overleaf's listing, less an output.blg and output.bbl left over from an earlier build when BibTeX did not run for this one. buildRef names this build to get_compile_log and download_compile_output, also in a later process. stopOnFirstError gives a short log holding the one error that matters; draft skips images for faster text-only builds. Compiles spend the account's compile allowance, so read the summary instead of recompiling. Errors: COMPILE_RATE_LIMITED (Overleaf ran nothing; wait details.retryAfterMs when given, then compile once more), COMPILE_UNAVAILABLE (try later), COMPILE_TIMEOUT (the build hit the time limit; details.buildRef, when present, reaches its partial log), COMPILE_FAILED (no build to report on), and TIMEOUT (the request timed out while Overleaf may still be compiling; it is not retried).`,
+    description: `Compile a project and report on the build from its logs. Omit rootFilePath to build the root document configured in Overleaf, which is what the web UI's Recompile button uses; pass it to build a different document for this call only. Check summary.builtCleanly, not status: Overleaf reports status "success" whenever a PDF came out, even when LaTeX hit errors along the way. builtCleanly is true only when a PDF was produced, output.log was read, and it reports no error. summary lists the first ${MAX_LOG_ENTRIES} errors and warnings as { file?, line?, message } (errorCount and warningCount count all of them), undefined references and citations, missing files, pageCount, and pdfSizeBytes; messages never quote the document. A LaTeX error that stopped the build returns status "failure" with the same summary rather than an error. outputFiles is Overleaf's listing, less an output.blg and output.bbl left over from an earlier build when BibTeX did not run for this one. buildRef names this build to get_compile_log and download_compile_output, also in a later process. stopOnFirstError gives a short log holding the one error that matters; draft skips images for faster text-only builds. Compiles spend the account's compile allowance, so read the summary instead of recompiling. Errors: COMPILE_RATE_LIMITED (Overleaf ran nothing; wait details.retryAfterMs when given, then compile once more), COMPILE_UNAVAILABLE (try later), COMPILE_TIMEOUT (the build hit the time limit; details.buildRef, when present, reaches its partial log), COMPILE_FAILED (no build to report on), and TIMEOUT (the request timed out while Overleaf may still be compiling; it is not retried).`,
     inputSchema: z.object({
       projectId,
       rootFilePath: filePath.optional(),
-      timeoutMs: z.number().int().min(1_000).max(15 * 60_000).optional(),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(1_000)
+        .max(15 * 60_000)
+        .optional(),
       stopOnFirstError: z.boolean().optional().describe('Stop at the first LaTeX error, for a short log'),
       draft: z.boolean().optional().describe('Draft mode: images become boxes, for faster text-only builds'),
     }),
@@ -759,11 +763,14 @@ export const OPERATIONS = {
     effects: ['compile'],
   },
   get_compile_log: {
-    description:
-      `Read a build's LaTeX log (output.log) or BibTeX log (kind "bibtex", the .blg file), without compiling again. kind "bibtex" is NOT_FOUND when BibTeX did not run for the build, even if Overleaf still lists an output.blg left over from an earlier build. Without buildRef it reads the latest build compile_project made in this server process, else NO_BUILD; Overleaf keeps build output only for a while, and an expired build is BUILD_NOT_FOUND. At most 1 MB of the log is read, from its start, and the last tail lines are returned (default ${DEFAULT_LOG_TAIL}, at most ${MAX_LOG_TAIL}, and at most ${MAX_LOG_CHARS} characters). format "errors-only" returns only the lines that start an error. errorLines lists the first ${MAX_ERROR_LINES} error lines with their 1-based line numbers, each cut to ${MAX_MESSAGE_LENGTH} characters. truncated says whether anything of the log was left out. The log quotes source lines near each error; prefer compile_project's summary when that is enough.`,
+    description: `Read a build's LaTeX log (output.log) or BibTeX log (kind "bibtex", the .blg file), without compiling again. kind "bibtex" is NOT_FOUND when BibTeX did not run for the build, even if Overleaf still lists an output.blg left over from an earlier build. Without buildRef it reads the latest build compile_project made in this server process, else NO_BUILD; Overleaf keeps build output only for a while, and an expired build is BUILD_NOT_FOUND. At most 1 MB of the log is read, from its start, and the last tail lines are returned (default ${DEFAULT_LOG_TAIL}, at most ${MAX_LOG_TAIL}, and at most ${MAX_LOG_CHARS} characters). format "errors-only" returns only the lines that start an error. errorLines lists the first ${MAX_ERROR_LINES} error lines with their 1-based line numbers, each cut to ${MAX_MESSAGE_LENGTH} characters. truncated says whether anything of the log was left out. The log quotes source lines near each error; prefer compile_project's summary when that is enough.`,
     inputSchema: z.object({
       projectId,
-      buildRef: z.string().min(1).optional().describe('From compile_project; defaults to the latest build in this process'),
+      buildRef: z
+        .string()
+        .min(1)
+        .optional()
+        .describe('From compile_project; defaults to the latest build in this process'),
       kind: z.enum(['latex', 'bibtex']).default('latex'),
       format: z.enum(['raw', 'errors-only']).default('raw'),
       tail: z
@@ -786,12 +793,16 @@ export const OPERATIONS = {
   },
   download_compile_output: {
     description:
-      "Save a build's compiled PDF, or another output file such as output.log, output.blg, or output.synctex.gz, to a local path on the server's own disk, in one call. file defaults to output.pdf and must be a relative output path without \"..\". Without buildRef it uses the latest build compile_project made in this server process, else NO_BUILD; a file the build did not produce, an output.blg or output.bbl left over from an earlier build included, is NOT_FOUND, and an expired build is BUILD_NOT_FOUND. The folder must exist. An existing file is replaced only when overwrite is true, else CONFIRMATION_MISMATCH and nothing is downloaded; a replacement is atomic. A .pdf that does not start with %PDF- is PROTOCOL_UNSUPPORTED and nothing is written. Returns the absolute localPath, file, sizeBytes, buildId, and replaced.",
+      'Save a build\'s compiled PDF, or another output file such as output.log, output.blg, or output.synctex.gz, to a local path on the server\'s own disk, in one call. file defaults to output.pdf and must be a relative output path without "..". Without buildRef it uses the latest build compile_project made in this server process, else NO_BUILD; a file the build did not produce, an output.blg or output.bbl left over from an earlier build included, is NOT_FOUND, and an expired build is BUILD_NOT_FOUND. The folder must exist. An existing file is replaced only when overwrite is true, else CONFIRMATION_MISMATCH and nothing is downloaded; a replacement is atomic. A .pdf that does not start with %PDF- is PROTOCOL_UNSUPPORTED and nothing is written. Returns the absolute localPath, file, sizeBytes, buildId, and replaced.',
     inputSchema: z.object({
       projectId,
       localPath: z.string().min(1).describe('Local file to write, for example paper.pdf'),
       file: z.string().min(1).max(255).optional().describe('Output file of the build; defaults to output.pdf'),
-      buildRef: z.string().min(1).optional().describe('From compile_project; defaults to the latest build in this process'),
+      buildRef: z
+        .string()
+        .min(1)
+        .optional()
+        .describe('From compile_project; defaults to the latest build in this process'),
       overwrite: z.boolean().default(false).describe('Replace localPath if it already exists'),
     }),
     outputSchema: z.object({
@@ -815,13 +826,15 @@ export const OPERATIONS = {
       author: z.string().min(1).optional().describe('Author display name substring, or exact author id'),
     }),
     outputSchema: z.object({
-      threads: z.array(commentThreadSchema.extend({
-        filePath: z.string().optional(),
-        start: position.optional(),
-        end: position.optional(),
-        quotedText: z.string().optional(),
-        unlocated: z.literal(true).optional(),
-      })),
+      threads: z.array(
+        commentThreadSchema.extend({
+          filePath: z.string().optional(),
+          start: position.optional(),
+          end: position.optional(),
+          quotedText: z.string().optional(),
+          unlocated: z.literal(true).optional(),
+        })
+      ),
       positionsUnavailable: z.boolean(),
     }),
     annotations: { readOnlyHint: true },

@@ -72,7 +72,8 @@ export const ALIASES: readonly AliasCommand[] = [
   {
     words: ['projects', 'list'],
     tool: 'list_projects',
-    usage: 'projects list [--query <q>] [--limit <n>] [--sort lastUpdated|name] [--include-archived] [--include-trashed]',
+    usage:
+      'projects list [--query <q>] [--limit <n>] [--sort lastUpdated|name] [--include-archived] [--include-trashed]',
     summary: 'List and search projects, newest first',
     positionals: [],
     options: {

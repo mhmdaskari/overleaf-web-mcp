@@ -4,9 +4,7 @@ import { assertDocumentSize, assertUpdateSize } from '../../src/core/limits.js'
 
 describe('preflight size limits', () => {
   test('rejects content at the configured document limit', () => {
-    expect(() => assertDocumentSize('1234', 4)).toThrowError(
-      expect.objectContaining({ code: 'DOC_TOO_LARGE' })
-    )
+    expect(() => assertDocumentSize('1234', 4)).toThrowError(expect.objectContaining({ code: 'DOC_TOO_LARGE' }))
     expect(() => assertDocumentSize('123', 4)).not.toThrow()
   })
 

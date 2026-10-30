@@ -5,10 +5,7 @@ import { readConfig } from '../../src/config.js'
 
 describe('configuration', () => {
   test('uses a platform config directory when no cookie path is configured', () => {
-    const config = readConfig(
-      { XDG_CONFIG_HOME: '/tmp/xdg' },
-      { platform: 'linux', homeDir: '/home/alice' }
-    )
+    const config = readConfig({ XDG_CONFIG_HOME: '/tmp/xdg' }, { platform: 'linux', homeDir: '/home/alice' })
 
     expect(config).toMatchObject({
       cookieJarFile: '/tmp/xdg/overleaf-web-mcp/cookies.txt',
@@ -41,13 +38,9 @@ describe('configuration', () => {
   })
 
   test('resolves platform-specific authentication paths', () => {
-    expect(
-      resolveAuthPaths({ platform: 'darwin', homeDir: '/Users/alice', env: {} })
-    ).toEqual({
-      cookieJarFile:
-        '/Users/alice/Library/Application Support/overleaf-web-mcp/cookies.txt',
-      browserProfileDir:
-        '/Users/alice/Library/Application Support/overleaf-web-mcp/chrome-profile',
+    expect(resolveAuthPaths({ platform: 'darwin', homeDir: '/Users/alice', env: {} })).toEqual({
+      cookieJarFile: '/Users/alice/Library/Application Support/overleaf-web-mcp/cookies.txt',
+      browserProfileDir: '/Users/alice/Library/Application Support/overleaf-web-mcp/chrome-profile',
     })
     expect(
       resolveAuthPaths({
@@ -56,10 +49,8 @@ describe('configuration', () => {
         env: { APPDATA: 'C:\\Users\\alice\\AppData\\Roaming' },
       })
     ).toEqual({
-      cookieJarFile:
-        'C:\\Users\\alice\\AppData\\Roaming\\overleaf-web-mcp\\cookies.txt',
-      browserProfileDir:
-        'C:\\Users\\alice\\AppData\\Roaming\\overleaf-web-mcp\\chrome-profile',
+      cookieJarFile: 'C:\\Users\\alice\\AppData\\Roaming\\overleaf-web-mcp\\cookies.txt',
+      browserProfileDir: 'C:\\Users\\alice\\AppData\\Roaming\\overleaf-web-mcp\\chrome-profile',
     })
   })
 })

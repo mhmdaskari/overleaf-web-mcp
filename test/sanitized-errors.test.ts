@@ -64,14 +64,19 @@ describe('upstream text never reaches an error', () => {
           'message',
           `5:::${JSON.stringify({
             name: 'otUpdateError',
-            args: [`Delete component '${SENTINEL} secret paragraph' does not match`, { doc_id: 'd', op: [{ i: SENTINEL }] }],
+            args: [
+              `Delete component '${SENTINEL} secret paragraph' does not match`,
+              { doc_id: 'd', op: [{ i: SENTINEL }] },
+            ],
           })}`
         )
       }, 0)
     })
     const connection = joinedConnection(peer)
 
-    const text = await serializedFailure(() => connection.submitUpdate('d', { doc: 'd', v: 1, op: [{ p: 0, i: SENTINEL }] }))
+    const text = await serializedFailure(() =>
+      connection.submitUpdate('d', { doc: 'd', v: 1, op: [{ p: 0, i: SENTINEL }] })
+    )
     expect(text).not.toContain(SENTINEL)
     expect(JSON.parse(text)).toMatchObject({ code: 'REMOTE_ERROR', details: { reason: 'unrecognized' } })
     socket.close()
@@ -80,7 +85,8 @@ describe('upstream text never reaches an error', () => {
   test('a joinDoc error and a Socket.IO error packet', async () => {
     const { socket, peer } = socketPair((socket, packet) => {
       const ack = /^5:(\d+)\+/u.exec(packet)?.[1]
-      if (ack !== undefined) setTimeout(() => socket.emit('message', `6:::${ack}+[{"message":"${SENTINEL} doc text"}]`), 0)
+      if (ack !== undefined)
+        setTimeout(() => socket.emit('message', `6:::${ack}+[{"message":"${SENTINEL} doc text"}]`), 0)
     })
     const connection = joinedConnection(peer)
     expect(await serializedFailure(() => connection.joinDocument('d'))).not.toContain(SENTINEL)
@@ -105,7 +111,10 @@ describe('upstream text never reaches an error', () => {
         webSocketFactory: () => {
           setTimeout(() => {
             socket.readyState = 1
-            socket.emit('message', `5:::${JSON.stringify({ name: 'connectionRejected', args: [{ message: SENTINEL }] })}`)
+            socket.emit(
+              'message',
+              `5:::${JSON.stringify({ name: 'connectionRejected', args: [{ message: SENTINEL }] })}`
+            )
           }, 0)
           return socket
         },
@@ -140,7 +149,9 @@ describe('upstream text never reaches an error', () => {
       baseUrl: 'https://overleaf.test',
       jar: new CookieJar(),
       fetcher: async () =>
-        new Response(`<!DOCTYPE html><title>${SENTINEL}</title>`, { headers: { 'content-type': 'text/html; charset=utf-8' } }),
+        new Response(`<!DOCTYPE html><title>${SENTINEL}</title>`, {
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        }),
     })
     for (const call of [() => client.getJson('/project/p/threads'), () => client.postJson('/api/project')]) {
       const text = await serializedFailure(call)
@@ -161,7 +172,13 @@ describe('upstream text never reaches an error', () => {
       }),
       getStream: async () => ({ body: new Response(SENTINEL).body! }),
     }
-    const api = new CompileApi(http, async () => ({ id: 'd', name: 'main.tex', path: 'main.tex', type: 'doc', parentFolderId: 'root' }))
+    const api = new CompileApi(http, async () => ({
+      id: 'd',
+      name: 'main.tex',
+      path: 'main.tex',
+      type: 'doc',
+      parentFolderId: 'root',
+    }))
     const text = await serializedFailure(() => api.compileProject('p', 'main.tex'))
     expect(text).not.toContain(SENTINEL)
     expect(JSON.parse(text)).toMatchObject({ code: 'COMPILE_FAILED' })
@@ -169,7 +186,13 @@ describe('upstream text never reaches an error', () => {
     expect(JSON.parse(text).details).toEqual({ status: 'unrecognized', rootFilePath: 'main.tex' })
 
     const failed = new CompileApi(
-      { ...http, postJson: async () => ({ status: 'failure', outputFiles: [{ path: 'output.log', type: 'log', url: SENTINEL }] }) },
+      {
+        ...http,
+        postJson: async () => ({
+          status: 'failure',
+          outputFiles: [{ path: 'output.log', type: 'log', url: SENTINEL }],
+        }),
+      },
       async () => ({ id: 'd', name: 'main.tex', path: 'main.tex', type: 'doc', parentFolderId: 'root' })
     )
     // A failed build is a result with a summary, and it carries no URL from the response.

@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import {
-  lineColumnToOffset,
-  normalizeLf,
-  offsetToLineColumn,
-} from '../../src/core/text.js'
+import { lineColumnToOffset, normalizeLf, offsetToLineColumn } from '../../src/core/text.js'
 
 describe('text normalization and positions', () => {
   test('normalizes CRLF and lone CR to LF', () => {
@@ -19,8 +15,6 @@ describe('text normalization and positions', () => {
   })
 
   test('rejects columns that split a surrogate pair', () => {
-    expect(() =>
-      lineColumnToOffset('a😀b', { line: 1, column: 3 })
-    ).toThrow(/surrogate pair/i)
+    expect(() => lineColumnToOffset('a😀b', { line: 1, column: 3 })).toThrow(/surrogate pair/i)
   })
 })

@@ -1,19 +1,21 @@
 import { McpError } from './errors.js'
 
 /** The heading commands the section parser recognizes, outermost first; the index is the level. */
-export const SECTION_COMMANDS = ['part', 'chapter', 'section', 'subsection', 'subsubsection', 'paragraph', 'subparagraph'] as const
+export const SECTION_COMMANDS = [
+  'part',
+  'chapter',
+  'section',
+  'subsection',
+  'subsubsection',
+  'paragraph',
+  'subparagraph',
+] as const
 
 export type SectionCommand = (typeof SECTION_COMMANDS)[number]
 
 const SECTION_LEVELS = new Map<SectionCommand, number>(SECTION_COMMANDS.map((command, level) => [command, level]))
 
-const IGNORED_ENVIRONMENTS = new Set([
-  'verbatim',
-  'verbatim*',
-  'lstlisting',
-  'minted',
-  'comment',
-])
+const IGNORED_ENVIRONMENTS = new Set(['verbatim', 'verbatim*', 'lstlisting', 'minted', 'comment'])
 
 export interface LatexSection {
   id: string
@@ -193,16 +195,10 @@ export function findSections(input: string): LatexSection[] {
   })
 }
 
-export function replaceSection(
-  source: string,
-  selector: string | number,
-  replacement: string
-): string {
+export function replaceSection(source: string, selector: string | number, replacement: string): string {
   const sections = findSections(source)
   const section =
-    typeof selector === 'number'
-      ? sections[selector]
-      : sections.find(candidate => candidate.id === selector)
+    typeof selector === 'number' ? sections[selector] : sections.find(candidate => candidate.id === selector)
   if (!section) throw new McpError('NOT_FOUND', `Section ${String(selector)} was not found.`)
 
   const start = typeof selector === 'number' ? section.start : section.bodyStart

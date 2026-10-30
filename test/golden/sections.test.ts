@@ -36,7 +36,10 @@ interface FakeProject {
 }
 
 function createProject(
-  files: Record<string, { protocol: 'sharejs'; content: string } | { protocol: 'history-ot'; snapshot: HistorySnapshot }>,
+  files: Record<
+    string,
+    { protocol: 'sharejs'; content: string } | { protocol: 'history-ot'; snapshot: HistorySnapshot }
+  >,
   options: { trackChanges?: boolean } = {}
 ): FakeProject {
   const documents = new Map<string, ServerDocument>()
@@ -75,10 +78,16 @@ function applyHistory(snapshot: HistorySnapshot, operation: HistoryComponent[]):
     } else if (typeof component === 'string') {
       content += component
     } else if ('i' in component) {
-      trackedChanges.push({ range: { pos: content.length, length: component.i.length }, tracking: component.tracking as never })
+      trackedChanges.push({
+        range: { pos: content.length, length: component.i.length },
+        tracking: component.tracking as never,
+      })
       content += component.i
     } else {
-      trackedChanges.push({ range: { pos: content.length, length: component.r }, tracking: component.tracking as never })
+      trackedChanges.push({
+        range: { pos: content.length, length: component.r },
+        tracking: component.tracking as never,
+      })
       content += snapshot.content.slice(cursor, cursor + component.r)
       cursor += component.r
     }
@@ -155,7 +164,11 @@ async function withService<T>(project: FakeProject, operation: (service: Overlea
           peer: new FakePeer(project),
           join: {
             publicId: 'public-id',
-            project: { _id: projectId, rootFolder: [structuredClone(project.root)], trackChangesState: project.trackChanges },
+            project: {
+              _id: projectId,
+              rootFolder: [structuredClone(project.root)],
+              trackChangesState: project.trackChanges,
+            },
             permissionsLevel: 'owner',
             protocolVersion: 2,
           },
@@ -241,16 +254,18 @@ const sectionId = async (service: OverleafService, filePath: string, title: stri
 describe('get_sections', () => {
   test('a ShareJS document with every heading level, starred, short-titled, and empty sections', async () => {
     const project = createProject({ 'main.tex': { protocol: 'sharejs', content: ARTICLE } })
-    const result = await withService(project, async service =>
-      await service.get_sections({ projectId: PROJECT, filePath: 'main.tex' })
+    const result = await withService(
+      project,
+      async service => await service.get_sections({ projectId: PROJECT, filePath: 'main.tex' })
     )
     expectGolden('get_sections', result)
   })
 
   test('an empty document', async () => {
     const project = createProject({ 'empty.tex': { protocol: 'sharejs', content: '' } })
-    const result = await withService(project, async service =>
-      await service.get_sections({ projectId: PROJECT, filePath: 'empty.tex' })
+    const result = await withService(
+      project,
+      async service => await service.get_sections({ projectId: PROJECT, filePath: 'empty.tex' })
     )
     expect(result).toMatchObject({ sections: [] })
     expectGolden('get_sections', result)
@@ -258,12 +273,19 @@ describe('get_sections', () => {
 
   test('adversarial headings', async () => {
     const project = createProject({ 'main.tex': { protocol: 'sharejs', content: ADVERSARIAL } })
-    const result = (await withService(project, async service =>
-      await service.get_sections({ projectId: PROJECT, filePath: 'main.tex' })
+    const result = (await withService(
+      project,
+      async service => await service.get_sections({ projectId: PROJECT, filePath: 'main.tex' })
     )) as { sections: Array<{ title: string; shortTitle?: string; start: number; bodyStart: number; end: number }> }
     const { sections } = result
     // \sectionmark is not a heading, and the inner heading belongs to the outer title.
-    expect(sections.map(section => section.title)).toEqual(['Empty Short', 'A', 'B', String.raw`Outer \section{Inner}`, 'Final'])
+    expect(sections.map(section => section.title)).toEqual([
+      'Empty Short',
+      'A',
+      'B',
+      String.raw`Outer \section{Inner}`,
+      'Final',
+    ])
     expect(sections[0]).toHaveProperty('shortTitle', '')
     for (const section of sections) expect(section.end).toBeGreaterThanOrEqual(section.bodyStart)
     // A heading followed on its line by the next one has an empty body.
@@ -276,8 +298,9 @@ describe('get_sections', () => {
 
   test('a history-OT document whose tracked deletion hides a heading', async () => {
     const project = createProject({ 'paper.tex': { protocol: 'history-ot', snapshot: TRACKED_DELETION } })
-    const result = await withService(project, async service =>
-      await service.get_sections({ projectId: PROJECT, filePath: 'paper.tex' })
+    const result = await withService(
+      project,
+      async service => await service.get_sections({ projectId: PROJECT, filePath: 'paper.tex' })
     )
     expect((result as { sections: Array<{ title: string }> }).sections.map(section => section.title)).toEqual([
       'Kept',
@@ -327,12 +350,7 @@ describe('get_section_content', () => {
 })
 
 describe('write_section', () => {
-  const write = async (
-    project: FakeProject,
-    filePath: string,
-    content: string,
-    writeMode?: 'untracked' | 'tracked'
-  ) =>
+  const write = async (project: FakeProject, filePath: string, content: string, writeMode?: 'untracked' | 'tracked') =>
     await withService(project, async service => {
       const { id, revision } = await sectionId(service, filePath, 'One')
       const result = await service.write_section({
@@ -381,8 +399,9 @@ describe('write_section', () => {
     })
     const { result } = await write(project, 'paper.tex', 'New body.\n', 'tracked')
     const document = project.documents.get('doc-1')!
-    expect(document.protocol === 'history-ot' && document.snapshot.trackedChanges?.map(change => change.tracking.type))
-      .toEqual(['insert', 'delete'])
+    expect(
+      document.protocol === 'history-ot' && document.snapshot.trackedChanges?.map(change => change.tracking.type)
+    ).toEqual(['insert', 'delete'])
     expect(result).toMatchObject({ protocol: 'history-ot', writeMode: 'tracked', trackChangesActive: false })
     expectGolden('write_section', result)
   })

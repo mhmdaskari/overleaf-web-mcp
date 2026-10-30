@@ -87,18 +87,24 @@ const labelSchema = z.object({
 })
 
 const projectOperationSchema = z.union([
-  z.object({
-    atV: z.number().int().nonnegative(),
-    add: z.object({ pathname: z.string() }),
-  }).strict(),
-  z.object({
-    atV: z.number().int().nonnegative(),
-    rename: z.object({ pathname: z.string(), newPathname: z.string() }),
-  }).strict(),
-  z.object({
-    atV: z.number().int().nonnegative(),
-    remove: z.object({ pathname: z.string() }),
-  }).strict(),
+  z
+    .object({
+      atV: z.number().int().nonnegative(),
+      add: z.object({ pathname: z.string() }),
+    })
+    .strict(),
+  z
+    .object({
+      atV: z.number().int().nonnegative(),
+      rename: z.object({ pathname: z.string(), newPathname: z.string() }),
+    })
+    .strict(),
+  z
+    .object({
+      atV: z.number().int().nonnegative(),
+      remove: z.object({ pathname: z.string() }),
+    })
+    .strict(),
 ])
 
 const updateSchema = z.object({
@@ -121,9 +127,7 @@ function isoTimestamp(value: number | string): string {
   return date.toISOString()
 }
 
-function normalizeProjectOperation(
-  operation: z.infer<typeof projectOperationSchema>
-): HistoryProjectOperation {
+function normalizeProjectOperation(operation: z.infer<typeof projectOperationSchema>): HistoryProjectOperation {
   if ('add' in operation) {
     return { type: 'add', atVersion: operation.atV, path: operation.add.pathname }
   }
@@ -143,9 +147,7 @@ function normalizeOrigin(meta: z.infer<typeof metaSchema>): HistoryOrigin | null
     return {
       kind: meta.origin.kind,
       ...(meta.origin.path === undefined ? {} : { path: meta.origin.path }),
-      ...(meta.origin.timestamp === undefined
-        ? {}
-        : { timestamp: isoTimestamp(meta.origin.timestamp) }),
+      ...(meta.origin.timestamp === undefined ? {} : { timestamp: isoTimestamp(meta.origin.timestamp) }),
       ...(meta.origin.version === undefined ? {} : { version: meta.origin.version }),
     }
   }
@@ -192,16 +194,10 @@ export class HistoryApi {
     this.#policy = policy
   }
 
-  async monitorProjectHistory(
-    projectId: string,
-    sinceVersion?: number
-  ): Promise<ProjectHistoryMonitorResult> {
+  async monitorProjectHistory(projectId: string, sinceVersion?: number): Promise<ProjectHistoryMonitorResult> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect('overleaf-read')
-    if (
-      sinceVersion !== undefined &&
-      (!Number.isInteger(sinceVersion) || sinceVersion < 0)
-    ) {
+    if (sinceVersion !== undefined && (!Number.isInteger(sinceVersion) || sinceVersion < 0)) {
       throw new McpError('INVALID_ARGUMENT', 'sinceVersion must be a non-negative integer.')
     }
 
@@ -211,36 +207,25 @@ export class HistoryApi {
     try {
       parsed = responseSchema.parse(response)
     } catch (error) {
-      throw new McpError(
-        'PROTOCOL_UNSUPPORTED',
-        'Overleaf returned an unsupported project history response.',
-        { cause: error }
-      )
+      throw new McpError('PROTOCOL_UNSUPPORTED', 'Overleaf returned an unsupported project history response.', {
+        cause: error,
+      })
     }
 
     try {
       const normalized = parsed.updates
         .map(normalizeUpdate)
-        .sort((left, right) =>
-          right.toVersion - left.toVersion || right.fromVersion - left.fromVersion
-        )
-      const currentVersion = normalized.length === 0
-        ? null
-        : Math.max(...normalized.map(update => update.toVersion))
-      if (
-        sinceVersion !== undefined &&
-        currentVersion !== null &&
-        sinceVersion > currentVersion
-      ) {
+        .sort((left, right) => right.toVersion - left.toVersion || right.fromVersion - left.fromVersion)
+      const currentVersion = normalized.length === 0 ? null : Math.max(...normalized.map(update => update.toVersion))
+      if (sinceVersion !== undefined && currentVersion !== null && sinceVersion > currentVersion) {
         throw new McpError(
           'INVALID_ARGUMENT',
           `sinceVersion ${sinceVersion} is newer than project version ${currentVersion}.`
         )
       }
       const hasEarlierHistory = parsed.nextBeforeTimestamp !== undefined
-      const oldestReturnedVersion = normalized.length === 0
-        ? null
-        : Math.min(...normalized.map(update => update.fromVersion))
+      const oldestReturnedVersion =
+        normalized.length === 0 ? null : Math.min(...normalized.map(update => update.fromVersion))
 
       return {
         projectId,
@@ -252,27 +237,22 @@ export class HistoryApi {
           hasEarlierHistory &&
           oldestReturnedVersion !== null &&
           sinceVersion < oldestReturnedVersion,
-        updates: sinceVersion === undefined
-          ? normalized
-          : normalized
-            .filter(update => update.toVersion > sinceVersion)
-            // Overleaf re-merges a group between polls, so one that straddles the cursor
-            // still holds operations already reported. An operation at atVersion produced
-            // atVersion + 1, so one at the cursor itself is new.
-            .map(update => ({
-              ...update,
-              projectOperations: update.projectOperations.filter(
-                operation => operation.atVersion >= sinceVersion
-              ),
-            })),
+        updates:
+          sinceVersion === undefined
+            ? normalized
+            : normalized
+                .filter(update => update.toVersion > sinceVersion)
+                // Overleaf re-merges a group between polls, so one that straddles the cursor
+                // still holds operations already reported. An operation at atVersion produced
+                // atVersion + 1, so one at the cursor itself is new.
+                .map(update => ({
+                  ...update,
+                  projectOperations: update.projectOperations.filter(operation => operation.atVersion >= sinceVersion),
+                })),
       }
     } catch (error) {
       if (error instanceof McpError) throw error
-      throw new McpError(
-        'PROTOCOL_UNSUPPORTED',
-        'Overleaf returned invalid project history values.',
-        { cause: error }
-      )
+      throw new McpError('PROTOCOL_UNSUPPORTED', 'Overleaf returned invalid project history values.', { cause: error })
     }
   }
 }

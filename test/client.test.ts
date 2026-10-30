@@ -21,7 +21,15 @@ import {
   type OperationOutput,
   type OverleafClient,
 } from '../src/sdk.js'
-import { fakeOverleaf, fakeSession, history, PROJECT, sharejs, visible, type FakeOverleaf } from './helpers/fake-overleaf.js'
+import {
+  fakeOverleaf,
+  fakeSession,
+  history,
+  PROJECT,
+  sharejs,
+  visible,
+  type FakeOverleaf,
+} from './helpers/fake-overleaf.js'
 import { INPUTS } from './helpers/operation-inputs.js'
 
 type AnyMethod = (input?: unknown, context?: OperationContext) => Promise<unknown>
@@ -100,7 +108,9 @@ describe('createOverleafClient', () => {
     for (const name of OPERATION_NAMES) {
       const diagnostics: OperationDiagnostic[] = []
       const error = await failure(
-        method(client, name)(structuredClone(INPUTS[name]), { onDiagnostic: diagnostic => diagnostics.push(diagnostic) })
+        method(client, name)(structuredClone(INPUTS[name]), {
+          onDiagnostic: diagnostic => diagnostics.push(diagnostic),
+        })
       )
       expect(error, name).toBeInstanceOf(McpError)
       expect(error.code, name).toBe('POLICY_DENIED')

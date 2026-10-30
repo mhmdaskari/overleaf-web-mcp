@@ -78,17 +78,13 @@ export function assertRevisionMatches(token: string, live: RevisionSource): Revi
   }
   const liveHash = contentHash(live.content)
   if (revision.otVersion !== live.otVersion || revision.sha256 !== liveHash) {
-    throw new McpError(
-      'REVISION_CONFLICT',
-      'The document changed. Read it again and retry with the new revision.',
-      {
-        details: {
-          expectedVersion: revision.otVersion,
-          actualVersion: live.otVersion,
-          liveRevision: createRevision(live),
-        },
-      }
-    )
+    throw new McpError('REVISION_CONFLICT', 'The document changed. Read it again and retry with the new revision.', {
+      details: {
+        expectedVersion: revision.otVersion,
+        actualVersion: live.otVersion,
+        liveRevision: createRevision(live),
+      },
+    })
   }
   return revision
 }

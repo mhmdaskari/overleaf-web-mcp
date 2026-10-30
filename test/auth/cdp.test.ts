@@ -9,9 +9,7 @@ describe('Chrome DevTools Protocol client', () => {
   const servers: WebSocketServer[] = []
 
   afterEach(async () => {
-    await Promise.all(
-      servers.map(server => new Promise<void>(resolve => server.close(() => resolve())))
-    )
+    await Promise.all(servers.map(server => new Promise<void>(resolve => server.close(() => resolve()))))
   })
 
   test('correlates command responses and carries a target session ID', async () => {
@@ -48,9 +46,7 @@ describe('Chrome DevTools Protocol client', () => {
     server.on('connection', socket => {
       socket.on('message', data => {
         const request = JSON.parse(String(data)) as { id: number }
-        socket.send(
-          JSON.stringify({ id: request.id, error: { code: -32_000, message: 'rejected' } })
-        )
+        socket.send(JSON.stringify({ id: request.id, error: { code: -32_000, message: 'rejected' } }))
       })
     })
 

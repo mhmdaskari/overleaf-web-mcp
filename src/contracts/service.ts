@@ -27,23 +27,15 @@ export interface OverleafServiceRuntime {
     | 'manageProject'
     | 'updateProjectSettings'
   >
-  entities: Pick<
-    EntitiesApi,
-    'getProjectTree' | 'manageEntity' | 'uploadFile' | 'downloadFile'
-  >
+  entities: Pick<EntitiesApi, 'getProjectTree' | 'manageEntity' | 'uploadFile' | 'downloadFile'>
   documents: Pick<DocumentsApi, 'readFile' | 'writeFile'>
-  createFile(
-    projectId: string,
-    filePath: string,
-    content?: string,
-    writeMode?: WriteMode
-  ): Promise<WriteFileResult>
+  createFile(projectId: string, filePath: string, content?: string, writeMode?: WriteMode): Promise<WriteFileResult>
   sections: Pick<SectionsApi, 'getSections' | 'getSectionContent' | 'writeSection'>
-  compile: Pick<CompileApi, 'compileProject' | 'stopCompile' | 'downloadCompileOutput' | 'getCompileLog' | 'readCompileOutput'>
-  comments: Pick<
-    CommentsApi,
-    'listComments' | 'replyToComment' | 'addComment' | 'setCommentStatus'
+  compile: Pick<
+    CompileApi,
+    'compileProject' | 'stopCompile' | 'downloadCompileOutput' | 'getCompileLog' | 'readCompileOutput'
   >
+  comments: Pick<CommentsApi, 'listComments' | 'replyToComment' | 'addComment' | 'setCommentStatus'>
   history: Pick<HistoryApi, 'monitorProjectHistory'>
   sync: Pick<SyncApi, 'planSync' | 'syncDirectory' | 'deleteEntities' | 'batchUpload'>
   /** Checks local paths the service reads itself; without one, only ids are checked. */

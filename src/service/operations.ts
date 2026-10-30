@@ -1,5 +1,10 @@
 import type { OperationContext, OperationDiagnostic, ProgressReporter } from '../contracts/context.js'
-import { operationContract, type OperationInput, type OperationName, type OperationOutput } from '../contracts/operations.js'
+import {
+  operationContract,
+  type OperationInput,
+  type OperationName,
+  type OperationOutput,
+} from '../contracts/operations.js'
 import type { OperationHandler, OverleafService, OverleafServiceRuntime } from '../contracts/service.js'
 import { asMcpError, McpError } from '../core/errors.js'
 import { resolveTextContent } from '../core/local-file.js'
@@ -18,11 +23,7 @@ type Implementation<N extends OperationName> = (
  * against the policy first, before any local or remote work; the domain engine then checks each
  * effect it performs.
  */
-function guarded<N extends OperationName>(
-  policy: AccessPolicy,
-  name: N,
-  run: Implementation<N>
-): OperationHandler<N> {
+function guarded<N extends OperationName>(policy: AccessPolicy, name: N, run: Implementation<N>): OperationHandler<N> {
   return async (input: OperationInput<N>, context: OperationContext = {}) => {
     try {
       const fields = (input ?? {}) as { projectId?: unknown; sourceProjectId?: unknown }
@@ -123,152 +124,193 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
   return {
     auth_status: operation('auth_status', async () => await runtime.authStatus()),
     list_projects: operation('list_projects', async input => await runtime.account.listProjects(input)),
-    create_project: operation('create_project', async input =>
-      await runtime.projects.createProject(input.name, input.template)
+    create_project: operation(
+      'create_project',
+      async input => await runtime.projects.createProject(input.name, input.template)
     ),
-    clone_project: operation('clone_project', async input =>
-      await runtime.projects.cloneProject(input.sourceProjectId, input.name)
+    clone_project: operation(
+      'clone_project',
+      async input => await runtime.projects.cloneProject(input.sourceProjectId, input.name)
     ),
-    import_project_zip: operation('import_project_zip', async input =>
-      await runtime.projects.importProjectZip(input.localZipPath, input.name)
+    import_project_zip: operation(
+      'import_project_zip',
+      async input => await runtime.projects.importProjectZip(input.localZipPath, input.name)
     ),
-    manage_project: operation('manage_project', async input =>
-      await runtime.projects.manageProject(input.projectId, manageProjectAction(input))
+    manage_project: operation(
+      'manage_project',
+      async input => await runtime.projects.manageProject(input.projectId, manageProjectAction(input))
     ),
-    update_project_settings: operation('update_project_settings', async input =>
-      await runtime.projects.updateProjectSettings(input.projectId, {
-        rootFilePath: input.rootFilePath,
-        compiler: input.compiler,
-        imageName: input.imageName,
-        spellCheckLanguage: input.spellCheckLanguage,
-      })
+    update_project_settings: operation(
+      'update_project_settings',
+      async input =>
+        await runtime.projects.updateProjectSettings(input.projectId, {
+          rootFilePath: input.rootFilePath,
+          compiler: input.compiler,
+          imageName: input.imageName,
+          spellCheckLanguage: input.spellCheckLanguage,
+        })
     ),
-    get_project_tree: operation('get_project_tree', async input =>
-      await runtime.entities.getProjectTree(input.projectId)
+    get_project_tree: operation(
+      'get_project_tree',
+      async input => await runtime.entities.getProjectTree(input.projectId)
     ),
-    read_file: operation('read_file', async input =>
-      await runtime.documents.readFile(input.projectId, input.filePath)
+    read_file: operation('read_file', async input => await runtime.documents.readFile(input.projectId, input.filePath)),
+    write_file: operation(
+      'write_file',
+      async input =>
+        await runtime.documents.writeFile(
+          input.projectId,
+          input.filePath,
+          input.revision,
+          await resolveTextContent(input, runtime.policy),
+          input.writeMode
+        )
     ),
-    write_file: operation('write_file', async input =>
-      await runtime.documents.writeFile(
-        input.projectId,
-        input.filePath,
-        input.revision,
-        await resolveTextContent(input, runtime.policy),
-        input.writeMode
-      )
+    create_file: operation(
+      'create_file',
+      async input => await runtime.createFile(input.projectId, input.filePath, input.content, input.writeMode)
     ),
-    create_file: operation('create_file', async input =>
-      await runtime.createFile(input.projectId, input.filePath, input.content, input.writeMode)
+    manage_entity: operation(
+      'manage_entity',
+      async input => await runtime.entities.manageEntity(input.projectId, manageEntityAction(input))
     ),
-    manage_entity: operation('manage_entity', async input =>
-      await runtime.entities.manageEntity(input.projectId, manageEntityAction(input))
+    upload_file: operation(
+      'upload_file',
+      async input =>
+        await runtime.entities.uploadFile(
+          input.projectId,
+          input.localPath,
+          input.destinationFolderPath,
+          input.destinationName,
+          {
+            overwrite: input.overwrite,
+            expectedHash: input.expectedHash,
+            uncheckedDocumentReplace: input.uncheckedDocumentReplace,
+          }
+        )
     ),
-    upload_file: operation('upload_file', async input =>
-      await runtime.entities.uploadFile(input.projectId, input.localPath, input.destinationFolderPath, input.destinationName, {
-        overwrite: input.overwrite,
-        expectedHash: input.expectedHash,
-        uncheckedDocumentReplace: input.uncheckedDocumentReplace,
-      })
+    batch_upload: operation(
+      'batch_upload',
+      async (input, context) =>
+        await runtime.sync.batchUpload(input.projectId, input.files, {
+          onConflict: input.onConflict,
+          uncheckedDocumentReplace: input.uncheckedDocumentReplace,
+          stopOnError: input.stopOnError,
+          onProgress: guardProgress(context.onProgress),
+        })
     ),
-    batch_upload: operation('batch_upload', async (input, context) =>
-      await runtime.sync.batchUpload(input.projectId, input.files, {
-        onConflict: input.onConflict,
-        uncheckedDocumentReplace: input.uncheckedDocumentReplace,
-        stopOnError: input.stopOnError,
-        onProgress: guardProgress(context.onProgress),
-      })
+    download_file: operation(
+      'download_file',
+      async input =>
+        await runtime.entities.downloadFile(input.projectId, input.filePath, input.localPath, input.overwrite)
     ),
-    download_file: operation('download_file', async input =>
-      await runtime.entities.downloadFile(input.projectId, input.filePath, input.localPath, input.overwrite)
+    download_project_zip: operation(
+      'download_project_zip',
+      async input =>
+        await runtime.projects.downloadProjectZip(input.projectId, input.localPath, {
+          overwrite: input.overwrite,
+          timeoutMs: input.timeoutMs,
+        })
     ),
-    download_project_zip: operation('download_project_zip', async input =>
-      await runtime.projects.downloadProjectZip(input.projectId, input.localPath, {
-        overwrite: input.overwrite,
-        timeoutMs: input.timeoutMs,
-      })
+    plan_sync: operation(
+      'plan_sync',
+      async (input, context) =>
+        await runtime.sync.planSync(input.projectId, input.localFolderPath, {
+          destinationFolderPath: input.destinationFolderPath,
+          ignore: input.ignore,
+          verbose: input.verbose,
+          onProgress: guardProgress(context.onProgress),
+        })
     ),
-    plan_sync: operation('plan_sync', async (input, context) =>
-      await runtime.sync.planSync(input.projectId, input.localFolderPath, {
-        destinationFolderPath: input.destinationFolderPath,
-        ignore: input.ignore,
-        verbose: input.verbose,
-        onProgress: guardProgress(context.onProgress),
-      })
+    sync_directory: operation(
+      'sync_directory',
+      async (input, context) =>
+        await runtime.sync.syncDirectory(input.projectId, input.localFolderPath, {
+          mode: input.mode,
+          destinationFolderPath: input.destinationFolderPath,
+          planToken: input.planToken,
+          unplanned: input.unplanned,
+          confirmDeleteCount: input.confirmDeleteCount,
+          ignore: input.ignore,
+          writeMode: input.writeMode,
+          stopOnError: input.stopOnError,
+          onProgress: guardProgress(context.onProgress),
+        })
     ),
-    sync_directory: operation('sync_directory', async (input, context) =>
-      await runtime.sync.syncDirectory(input.projectId, input.localFolderPath, {
-        mode: input.mode,
-        destinationFolderPath: input.destinationFolderPath,
-        planToken: input.planToken,
-        unplanned: input.unplanned,
-        confirmDeleteCount: input.confirmDeleteCount,
-        ignore: input.ignore,
-        writeMode: input.writeMode,
-        stopOnError: input.stopOnError,
-        onProgress: guardProgress(context.onProgress),
-      })
+    delete_entities: operation(
+      'delete_entities',
+      async (input, context) =>
+        await runtime.sync.deleteEntities(input.projectId, input.paths, input.confirmCount, {
+          stopOnError: input.stopOnError,
+          onProgress: guardProgress(context.onProgress),
+        })
     ),
-    delete_entities: operation('delete_entities', async (input, context) =>
-      await runtime.sync.deleteEntities(input.projectId, input.paths, input.confirmCount, {
-        stopOnError: input.stopOnError,
-        onProgress: guardProgress(context.onProgress),
-      })
+    get_sections: operation(
+      'get_sections',
+      async input => await runtime.sections.getSections(input.projectId, input.filePath)
     ),
-    get_sections: operation('get_sections', async input =>
-      await runtime.sections.getSections(input.projectId, input.filePath)
+    get_section_content: operation(
+      'get_section_content',
+      async input => await runtime.sections.getSectionContent(input.projectId, input.filePath, input.sectionId)
     ),
-    get_section_content: operation('get_section_content', async input =>
-      await runtime.sections.getSectionContent(input.projectId, input.filePath, input.sectionId)
+    write_section: operation(
+      'write_section',
+      async input =>
+        await runtime.sections.writeSection(
+          input.projectId,
+          input.filePath,
+          input.revision,
+          input.sectionId,
+          input.content,
+          input.writeMode
+        )
     ),
-    write_section: operation('write_section', async input =>
-      await runtime.sections.writeSection(
-        input.projectId,
-        input.filePath,
-        input.revision,
-        input.sectionId,
-        input.content,
-        input.writeMode
-      )
-    ),
-    compile_project: operation('compile_project', async input =>
-      await runtime.compile.compileProject(input.projectId, input.rootFilePath, input.timeoutMs, {
-        stopOnFirstError: input.stopOnFirstError,
-        draft: input.draft,
-      })
+    compile_project: operation(
+      'compile_project',
+      async input =>
+        await runtime.compile.compileProject(input.projectId, input.rootFilePath, input.timeoutMs, {
+          stopOnFirstError: input.stopOnFirstError,
+          draft: input.draft,
+        })
     ),
     stop_compile: operation('stop_compile', async input => await runtime.compile.stopCompile(input.projectId)),
-    get_compile_log: operation('get_compile_log', async input =>
-      await runtime.compile.getCompileLog(input.projectId, {
-        buildRef: input.buildRef,
-        kind: input.kind,
-        format: input.format,
-        tail: input.tail,
-      })
+    get_compile_log: operation(
+      'get_compile_log',
+      async input =>
+        await runtime.compile.getCompileLog(input.projectId, {
+          buildRef: input.buildRef,
+          kind: input.kind,
+          format: input.format,
+          tail: input.tail,
+        })
     ),
-    download_compile_output: operation('download_compile_output', async input =>
-      await runtime.compile.downloadCompileOutput(input.projectId, input.localPath, {
-        file: input.file,
-        buildRef: input.buildRef,
-        overwrite: input.overwrite,
-      })
+    download_compile_output: operation(
+      'download_compile_output',
+      async input =>
+        await runtime.compile.downloadCompileOutput(input.projectId, input.localPath, {
+          file: input.file,
+          buildRef: input.buildRef,
+          overwrite: input.overwrite,
+        })
     ),
-    list_comments: operation('list_comments', async input =>
-      await runtime.comments.listComments(input.projectId, {
-        ...(input.status === undefined ? {} : { status: input.status }),
-        ...(input.filePath === undefined ? {} : { filePath: input.filePath }),
-        ...(input.author === undefined ? {} : { author: input.author }),
-      })
+    list_comments: operation(
+      'list_comments',
+      async input =>
+        await runtime.comments.listComments(input.projectId, {
+          ...(input.status === undefined ? {} : { status: input.status }),
+          ...(input.filePath === undefined ? {} : { filePath: input.filePath }),
+          ...(input.author === undefined ? {} : { author: input.author }),
+        })
     ),
-    reply_to_comment: operation('reply_to_comment', async input =>
-      await runtime.comments.replyToComment(input.projectId, input.threadId, input.content)
+    reply_to_comment: operation(
+      'reply_to_comment',
+      async input => await runtime.comments.replyToComment(input.projectId, input.threadId, input.content)
     ),
     add_comment: operation('add_comment', async input => await runtime.comments.addComment(input)),
-    set_comment_status: operation('set_comment_status', async input =>
-      await runtime.comments.setCommentStatus(input)
-    ),
-    monitor_project_history: operation('monitor_project_history', async input =>
-      await runtime.history.monitorProjectHistory(input.projectId, input.sinceVersion)
+    set_comment_status: operation('set_comment_status', async input => await runtime.comments.setCommentStatus(input)),
+    monitor_project_history: operation(
+      'monitor_project_history',
+      async input => await runtime.history.monitorProjectHistory(input.projectId, input.sinceVersion)
     ),
   }
 }

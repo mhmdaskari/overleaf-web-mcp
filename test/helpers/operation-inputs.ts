@@ -44,4 +44,3 @@ export const INPUTS: Record<OperationName, Record<string, unknown>> = {
   set_comment_status: { projectId: 'p', filePath: 'main.tex', revision: 'r', threadId: 't', status: 'resolved' },
   monitor_project_history: { projectId: 'p' },
 }
-

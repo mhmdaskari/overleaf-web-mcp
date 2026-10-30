@@ -4,11 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'vitest'
 
-import {
-  chromeLaunchArguments,
-  findChromeExecutable,
-  readDevToolsEndpoint,
-} from '../../src/auth/chrome.js'
+import { chromeLaunchArguments, findChromeExecutable, readDevToolsEndpoint } from '../../src/auth/chrome.js'
 
 describe('Chrome discovery and launch configuration', () => {
   test('uses an explicit executable when it is runnable', async () => {
@@ -42,13 +38,8 @@ describe('Chrome discovery and launch configuration', () => {
 
   test('reads the browser websocket endpoint from DevToolsActivePort', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'overleaf-devtools-'))
-    await writeFile(
-      join(directory, 'DevToolsActivePort'),
-      '43123\n/devtools/browser/browser-id\n'
-    )
+    await writeFile(join(directory, 'DevToolsActivePort'), '43123\n/devtools/browser/browser-id\n')
 
-    await expect(readDevToolsEndpoint(directory, 250)).resolves.toBe(
-      'ws://127.0.0.1:43123/devtools/browser/browser-id'
-    )
+    await expect(readDevToolsEndpoint(directory, 250)).resolves.toBe('ws://127.0.0.1:43123/devtools/browser/browser-id')
   })
 })

@@ -42,7 +42,10 @@ describe('local roots through the real runtime', () => {
         const calls: Array<[OperationName, Record<string, unknown>]> = [
           ['write_file', { projectId: 'p', filePath: 'main.tex', revision: 'r', localPath: join(folder, 'main.tex') }],
           ['upload_file', { projectId: 'p', localPath: join(folder, 'figure.png') }],
-          ['batch_upload', { projectId: 'p', files: [{ localPath: join(folder, 'figure.png'), destinationPath: 'f.png' }] }],
+          [
+            'batch_upload',
+            { projectId: 'p', files: [{ localPath: join(folder, 'figure.png'), destinationPath: 'f.png' }] },
+          ],
           ['import_project_zip', { localZipPath: join(folder, 'paper.zip') }],
           ['plan_sync', { projectId: 'p', localFolderPath: folder }],
           ['sync_directory', { projectId: 'p', localFolderPath: folder, mode: 'additive', unplanned: true }],
@@ -91,7 +94,11 @@ describe('local roots through the real runtime', () => {
         service.download_file({ projectId: 'p', filePath: 'main.tex', localPath: cookiePath, overwrite: true })
       ).rejects.toMatchObject({ code: 'PATH_OUTSIDE_ROOT', details: { kind: 'session_files' } })
       await expect(
-        service.download_project_zip({ projectId: 'p', localPath: join(directory, 'profile', 'x.zip'), overwrite: true })
+        service.download_project_zip({
+          projectId: 'p',
+          localPath: join(directory, 'profile', 'x.zip'),
+          overwrite: true,
+        })
       ).rejects.toMatchObject({ code: 'PATH_OUTSIDE_ROOT', details: { kind: 'session_files' } })
       expect(fetches).toEqual([])
       expect(connectionFactory).not.toHaveBeenCalled()
@@ -104,9 +111,10 @@ describe('local roots through the real runtime', () => {
     const { allowed, outside } = await localFolders()
     const { runtime, fetches } = await createTestRuntime({ env: { OVERLEAF_LOCAL_WRITE_ROOTS: allowed } })
     try {
-      await expect(
-        runtime.entities.downloadFile('p', 'main.tex', join(outside, 'copy.tex'))
-      ).rejects.toMatchObject({ code: 'PATH_OUTSIDE_ROOT', details: { kind: 'outside_write_roots' } })
+      await expect(runtime.entities.downloadFile('p', 'main.tex', join(outside, 'copy.tex'))).rejects.toMatchObject({
+        code: 'PATH_OUTSIDE_ROOT',
+        details: { kind: 'outside_write_roots' },
+      })
       await expect(
         runtime.projects.downloadProjectZip('p', join(allowed, 'escape', 'backup.zip'))
       ).rejects.toMatchObject({ code: 'PATH_OUTSIDE_ROOT', details: { kind: 'outside_write_roots' } })
@@ -191,8 +199,9 @@ describe('allowed effects through the real runtime', () => {
         code: 'POLICY_DENIED',
         details: { effect: 'overleaf-write' },
       })
-      await expect(runtime.entities.manageEntity('p', { action: 'delete', path: 'main.tex', confirmPath: 'main.tex' }))
-        .rejects.toMatchObject({ code: 'POLICY_DENIED', details: { effect: 'overleaf-delete' } })
+      await expect(
+        runtime.entities.manageEntity('p', { action: 'delete', path: 'main.tex', confirmPath: 'main.tex' })
+      ).rejects.toMatchObject({ code: 'POLICY_DENIED', details: { effect: 'overleaf-delete' } })
       await expect(runtime.compile.compileProject('p')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
       expect(socketCalls).toEqual([])
     } finally {
@@ -221,7 +230,13 @@ describe('effects a write needs for its own reads', () => {
         code: 'POLICY_DENIED',
       })
       await expect(
-        service.set_comment_status({ projectId: 'p', filePath: 'main.tex', revision: 'r', threadId: 't', status: 'resolved' })
+        service.set_comment_status({
+          projectId: 'p',
+          filePath: 'main.tex',
+          revision: 'r',
+          threadId: 't',
+          status: 'resolved',
+        })
       ).rejects.toMatchObject({ code: 'POLICY_DENIED' })
       expect(fetches).toEqual([])
       expect(socketCalls).toEqual([])
@@ -237,11 +252,15 @@ describe('path-safe ids and request origins', () => {
     const service = createOverleafService(runtime)
     try {
       await expect(service.stop_compile({ projectId: '../x?' })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
-      await expect(service.reply_to_comment({ projectId: 'p', threadId: '../x?', content: 'Hi' })).rejects.toMatchObject({
+      await expect(
+        service.reply_to_comment({ projectId: 'p', threadId: '../x?', content: 'Hi' })
+      ).rejects.toMatchObject({
         code: 'INVALID_ARGUMENT',
         details: { parameter: 'threadId' },
       })
-      await expect(runtime.comments.replyToComment('p', '../x?', 'Hi')).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+      await expect(runtime.comments.replyToComment('p', '../x?', 'Hi')).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
       await expect(runtime.compile.stopCompile('../x?')).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
       expect(fetches).toEqual([])
     } finally {

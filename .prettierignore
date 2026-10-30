@@ -1,0 +1,7 @@
+dist/
+coverage/
+site/
+node_modules/
+test/fixtures/
+test/__snapshots__/
+test/golden/__snapshots__/

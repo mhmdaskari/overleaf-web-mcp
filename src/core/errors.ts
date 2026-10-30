@@ -3,8 +3,7 @@ import type { ErrorCode } from '../contracts/error-codes.js'
 /** One of `ERROR_CODES`. */
 export type McpErrorCode = ErrorCode
 
-export const AUTH_LOGIN_INSTRUCTION =
-  'Run `npx overleaf-web-mcp login` and sign in again.'
+export const AUTH_LOGIN_INSTRUCTION = 'Run `npx overleaf-web-mcp login` and sign in again.'
 
 export class McpError extends Error {
   readonly code: McpErrorCode
@@ -39,9 +38,7 @@ export class McpError extends Error {
 
 export function asMcpError(error: unknown): McpError {
   if (error instanceof McpError) return error
-  return new McpError(
-    'REMOTE_ERROR',
-    error instanceof Error ? error.message : 'Unexpected Overleaf error',
-    { cause: error }
-  )
+  return new McpError('REMOTE_ERROR', error instanceof Error ? error.message : 'Unexpected Overleaf error', {
+    cause: error,
+  })
 }

@@ -41,15 +41,25 @@ describe('interface boundary', () => {
       return result!.messages.map(message => message.ruleId)
     }
 
-    expect(await lint('src/runtime.ts', "import { TOOL_NAMES } from './mcp/tools.js'\nexport const names = TOOL_NAMES\n"))
-      .toContain('@typescript-eslint/no-restricted-imports')
-    expect(await lint('src/sdk.ts', "import type { McpServer } from '@modelcontextprotocol/server'\nexport type Server = McpServer\n"))
-      .toContain('@typescript-eslint/no-restricted-imports')
-    expect(await lint('src/overleaf/tree.ts', "export { createMcpServer } from '../server.js'\n"))
-      .toContain('@typescript-eslint/no-restricted-imports')
+    expect(
+      await lint('src/runtime.ts', "import { TOOL_NAMES } from './mcp/tools.js'\nexport const names = TOOL_NAMES\n")
+    ).toContain('@typescript-eslint/no-restricted-imports')
+    expect(
+      await lint(
+        'src/sdk.ts',
+        "import type { McpServer } from '@modelcontextprotocol/server'\nexport type Server = McpServer\n"
+      )
+    ).toContain('@typescript-eslint/no-restricted-imports')
+    expect(await lint('src/overleaf/tree.ts', "export { createMcpServer } from '../server.js'\n")).toContain(
+      '@typescript-eslint/no-restricted-imports'
+    )
     expect(await lint('src/runtime.ts', "console.error('x')\n")).toContain('no-console')
     expect(await lint('src/runtime.ts', "process.stderr.write('x')\n")).toContain('no-restricted-properties')
-    expect(await lint('src/server.ts', "import { McpServer } from '@modelcontextprotocol/server'\nexport const Server = McpServer\n"))
-      .toEqual([])
+    expect(
+      await lint(
+        'src/server.ts',
+        "import { McpServer } from '@modelcontextprotocol/server'\nexport const Server = McpServer\n"
+      )
+    ).toEqual([])
   }, 60_000)
 })

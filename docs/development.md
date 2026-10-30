@@ -6,6 +6,7 @@
 npm install
 npm run check        # tsc --noEmit
 npm run lint         # eslint
+npm run format:check # prettier; npm run format rewrites the files
 npm test             # vitest, no network needed
 npm run build        # emits dist/
 npm pack --dry-run   # verifies the published file list
@@ -141,7 +142,7 @@ node scripts/npm-downloads.ts /tmp/npm-downloads.json   # Node 22.18 or newer ru
 2. Merge to `main` with CI green.
 3. Publish, in either of two ways. Both run the `Publish to npm` workflow, which checks that the
    tag equals the package version and that `CHANGELOG.md` has a section for it, re-runs check,
-   lint, test, and build, and publishes to npm with trusted publishing. No npm token is stored in
+   lint, the format check, test, and build, and publishes to npm with trusted publishing. No npm token is stored in
    the repository.
     - **From the Actions tab:** run `Publish to npm` on `main` with the version, for example
       `0.4.0` (or `gh workflow run publish.yml --ref main -f version=0.4.0`). After publishing, it

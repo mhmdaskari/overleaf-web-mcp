@@ -60,10 +60,8 @@ function createHarness(
     trackChangesActive: true,
   }
   const connections = {
-    withConnection: async <T>(
-      _projectId: string,
-      operation: (value: typeof connection) => Promise<T>
-    ) => await operation(connection),
+    withConnection: async <T>(_projectId: string, operation: (value: typeof connection) => Promise<T>) =>
+      await operation(connection),
   }
   return { api: new DocumentsApi(connections, options), connection }
 }
@@ -95,14 +93,14 @@ describe('document API', () => {
 
     const result = await api.writeFile('project', 'main.tex', revision, 'new')
 
-    expect(connection.submitUpdate).toHaveBeenCalledWith(
-      'doc',
-      {
-        doc: 'doc',
-        v: 3,
-        op: [{ p: 0, d: 'old' }, { p: 0, i: 'new' }],
-      }
-    )
+    expect(connection.submitUpdate).toHaveBeenCalledWith('doc', {
+      doc: 'doc',
+      v: 3,
+      op: [
+        { p: 0, d: 'old' },
+        { p: 0, i: 'new' },
+      ],
+    })
     expect(result).toMatchObject({
       trackChangesActive: true,
       writeMode: 'untracked',
@@ -130,7 +128,10 @@ describe('document API', () => {
     expect(connection.submitUpdate).toHaveBeenCalledWith('doc', {
       doc: 'doc',
       v: 3,
-      op: [{ p: 0, d: 'old' }, { p: 0, i: 'new' }],
+      op: [
+        { p: 0, d: 'old' },
+        { p: 0, i: 'new' },
+      ],
       // Overleaf takes the author from the session; tc seeds the tracked-change ids and is
       // refused when longer than 18 characters.
       meta: { tc: expect.stringMatching(/^[0-9a-f]{18}$/u) },
@@ -176,9 +177,7 @@ describe('document API', () => {
     const update = connection.submitUpdate.mock.calls[0]?.[1] as {
       op: Array<{ textOperation: Array<Record<string, any>> }>
     }
-    const components = update.op[0]!.textOperation.filter(
-      component => typeof component === 'object'
-    )
+    const components = update.op[0]!.textOperation.filter(component => typeof component === 'object')
     expect(components).toEqual([
       {
         i: 'new',
@@ -204,9 +203,9 @@ describe('document API', () => {
       content: 'old',
     })
 
-    await expect(
-      api.writeFile('project', 'main.tex', revision, 'new', 'tracked')
-    ).rejects.toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
+    await expect(api.writeFile('project', 'main.tex', revision, 'new', 'tracked')).rejects.toMatchObject({
+      code: 'PROTOCOL_UNSUPPORTED',
+    })
     expect(connection.submitUpdate).not.toHaveBeenCalled()
   })
 
@@ -223,9 +222,10 @@ describe('document API', () => {
       content: 'same',
     })
 
-    await expect(
-      api.writeFile('project', 'main.tex', revision, 'same', 'tracked')
-    ).resolves.toMatchObject({ writeMode: 'tracked', revision })
+    await expect(api.writeFile('project', 'main.tex', revision, 'same', 'tracked')).resolves.toMatchObject({
+      writeMode: 'tracked',
+      revision,
+    })
     expect(connection.submitUpdate).not.toHaveBeenCalled()
   })
 
@@ -267,10 +267,7 @@ describe('document API', () => {
   })
 
   test('allows a character outside the BMP that the ShareJS document already holds', async () => {
-    const { api, connection } = createHarness([
-      shareDocument('a \u{1F600}', 3),
-      shareDocument('b \u{1F600}', 4),
-    ])
+    const { api, connection } = createHarness([shareDocument('a \u{1F600}', 3), shareDocument('b \u{1F600}', 4)])
     const revision = createRevision({
       projectId: 'project',
       docId: 'doc',
@@ -288,11 +285,9 @@ describe('document API', () => {
   test('edits around a character outside the BMP that a ShareJS write spans without sending it again', async () => {
     const before = 'Intro \u{1F600} text old.'
     const target = 'Intro2 \u{1F600} text new.'
-    const { api, connection } = createHarness(
-      [shareDocument(before, 3), shareDocument(target, 4)],
-      undefined,
-      { currentUserId: 'user' }
-    )
+    const { api, connection } = createHarness([shareDocument(before, 3), shareDocument(target, 4)], undefined, {
+      currentUserId: 'user',
+    })
     const revision = createRevision({
       projectId: 'project',
       docId: 'doc',
@@ -301,9 +296,10 @@ describe('document API', () => {
       content: before,
     })
 
-    await expect(
-      api.writeFile('project', 'main.tex', revision, target, 'tracked')
-    ).resolves.toMatchObject({ protocol: 'sharejs', writeMode: 'tracked' })
+    await expect(api.writeFile('project', 'main.tex', revision, target, 'tracked')).resolves.toMatchObject({
+      protocol: 'sharejs',
+      writeMode: 'tracked',
+    })
     expect(connection.submitUpdate).toHaveBeenCalledOnce()
     const update = connection.submitUpdate.mock.calls[0]![1] as {
       op: Array<{ p: number; i?: string; d?: string }>
@@ -329,9 +325,10 @@ describe('document API', () => {
       content: before,
     })
 
-    await expect(
-      api.writeFile('project', 'main.tex', revision, 'a2 \u{1F600} b\n\n\u{1F601}')
-    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT', details: { line: 3 } })
+    await expect(api.writeFile('project', 'main.tex', revision, 'a2 \u{1F600} b\n\n\u{1F601}')).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      details: { line: 3 },
+    })
     expect(connection.submitUpdate).not.toHaveBeenCalled()
   })
 
@@ -346,9 +343,10 @@ describe('document API', () => {
       content: before,
     })
 
-    await expect(
-      api.writeFile('project', 'main.tex', revision, `${before}\n\u{1F600} b`)
-    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT', details: { line: 2 } })
+    await expect(api.writeFile('project', 'main.tex', revision, `${before}\n\u{1F600} b`)).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      details: { line: 2 },
+    })
     expect(connection.submitUpdate).not.toHaveBeenCalled()
   })
 
@@ -363,17 +361,15 @@ describe('document API', () => {
       content: before,
     })
 
-    await expect(
-      api.writeFile('project', 'main.tex', revision, 'x\n\u{1F601}\u{1F600}')
-    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT', details: { line: 2 } })
+    await expect(api.writeFile('project', 'main.tex', revision, 'x\n\u{1F601}\u{1F600}')).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      details: { line: 2 },
+    })
     expect(connection.submitUpdate).not.toHaveBeenCalled()
   })
 
   test('leaves characters outside the BMP on a history-OT document to Overleaf', async () => {
-    const { api, connection } = createHarness([
-      historyDocument('old', 3),
-      historyDocument('old \u{1F600}', 4),
-    ])
+    const { api, connection } = createHarness([historyDocument('old', 3), historyDocument('old \u{1F600}', 4)])
     const revision = createRevision({
       projectId: 'project',
       docId: 'doc',
@@ -390,10 +386,7 @@ describe('document API', () => {
 
   test('recovers a timed-out write when the intended hash is live', async () => {
     const timeout = new McpError('TIMEOUT', 'ack timeout')
-    const { api } = createHarness(
-      [shareDocument('old', 3), shareDocument('new', 4)],
-      timeout
-    )
+    const { api } = createHarness([shareDocument('old', 3), shareDocument('new', 4)], timeout)
     const revision = createRevision({
       projectId: 'project',
       docId: 'doc',
@@ -410,11 +403,7 @@ describe('document API', () => {
   test('polls the bounded recovery window when the original revision is initially live', async () => {
     const timeout = new McpError('TIMEOUT', 'ack timeout')
     const { api, connection } = createHarness(
-      [
-        shareDocument('old', 3),
-        shareDocument('old', 3),
-        shareDocument('new', 4),
-      ],
+      [shareDocument('old', 3), shareDocument('old', 3), shareDocument('new', 4)],
       timeout,
       {
         recoveryTimeoutMs: 20,
@@ -437,10 +426,7 @@ describe('document API', () => {
 
   test('observes a write whose socket closed after sending instead of resubmitting it', async () => {
     const disconnected = new McpError('OUTCOME_UNKNOWN', 'socket closed')
-    const { api, connection } = createHarness(
-      [shareDocument('old', 3), shareDocument('new', 4)],
-      disconnected
-    )
+    const { api, connection } = createHarness([shareDocument('old', 3), shareDocument('new', 4)], disconnected)
     const revision = createRevision({
       projectId: 'project',
       docId: 'doc',
@@ -478,10 +464,7 @@ describe('document API', () => {
 
   test('reports a conflict when a third state is live after the socket closed mid-write', async () => {
     const disconnected = new McpError('OUTCOME_UNKNOWN', 'socket closed')
-    const { api, connection } = createHarness(
-      [shareDocument('old', 3), shareDocument('collaborator', 4)],
-      disconnected
-    )
+    const { api, connection } = createHarness([shareDocument('old', 3), shareDocument('collaborator', 4)], disconnected)
     const revision = createRevision({
       projectId: 'project',
       docId: 'doc',
@@ -499,10 +482,7 @@ describe('document API', () => {
 
   test('reports an unknown conflict instead of retrying a timed-out write', async () => {
     const timeout = new McpError('TIMEOUT', 'ack timeout')
-    const { api, connection } = createHarness(
-      [shareDocument('old', 3), shareDocument('collaborator', 4)],
-      timeout
-    )
+    const { api, connection } = createHarness([shareDocument('old', 3), shareDocument('collaborator', 4)], timeout)
     const revision = createRevision({
       projectId: 'project',
       docId: 'doc',

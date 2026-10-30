@@ -115,7 +115,8 @@ async function main(): Promise<void> {
   const [output, nameArgument] = process.argv.slice(2)
   if (output === undefined) throw new Error('Usage: node scripts/npm-downloads.ts <output.json> [package]')
   const name =
-    nameArgument ?? (JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { name: string }).name
+    nameArgument ??
+    (JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { name: string }).name
   const fetcher: Fetcher = url => fetch(url, { headers: { accept: 'application/json' } })
   const created = await packageCreatedDay(name, fetcher)
   const first = created < NPM_STATS_FIRST_DAY ? NPM_STATS_FIRST_DAY : created

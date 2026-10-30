@@ -43,7 +43,15 @@ const NESTED_ROOT: RawFolder = {
   _id: 'folder-root',
   name: 'rootFolder',
   docs: [raw({ _id: 'doc-main', name: 'main.tex' })],
-  fileRefs: [raw({ _id: 'file-plot', name: 'plot.png', hash: PLOT_HASH, created: '2026-01-01T00:00:00.000Z', linkedFileData: null })],
+  fileRefs: [
+    raw({
+      _id: 'file-plot',
+      name: 'plot.png',
+      hash: PLOT_HASH,
+      created: '2026-01-01T00:00:00.000Z',
+      linkedFileData: null,
+    }),
+  ],
   folders: [
     {
       _id: 'folder-chapters',
@@ -176,7 +184,13 @@ describe('get_project_tree golden results', () => {
   test('an empty project with no settings, empty-string settings, and a root document that is gone', async () => {
     const harness = await goldenRuntime(
       { _id: 'folder-root', name: 'rootFolder', docs: [], fileRefs: [], folders: [] },
-      { rootDoc_id: 'doc-gone', compiler: '', imageName: '', spellCheckLanguage: '', trackChangesState: { 'user-other': true } }
+      {
+        rootDoc_id: 'doc-gone',
+        compiler: '',
+        imageName: '',
+        spellCheckLanguage: '',
+        trackChangesState: { 'user-other': true },
+      }
     )
     try {
       const result = await run(harness.service, 'get_project_tree', { projectId: PROJECT })
@@ -190,7 +204,13 @@ describe('get_project_tree golden results', () => {
 
   test('track changes on for this account only', async () => {
     const harness = await goldenRuntime(
-      { _id: 'folder-root', name: 'rootFolder', docs: [raw({ _id: 'doc-main', name: 'main.tex' })], fileRefs: [], folders: [] },
+      {
+        _id: 'folder-root',
+        name: 'rootFolder',
+        docs: [raw({ _id: 'doc-main', name: 'main.tex' })],
+        fileRefs: [],
+        folders: [],
+      },
       { trackChangesState: { [USER]: true, 'user-other': false, __guests__: false } }
     )
     try {
@@ -229,21 +249,28 @@ describe('get_project_tree golden results', () => {
 
 describe('manage_entity golden results', () => {
   test('create_folder, reducing the folder Overleaf returns to its id and name', async () => {
-    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({
-      [`POST /project/${PROJECT}/folder`]: json({
-        _id: 'folder-tables',
-        name: 'tables',
-        docs: [],
-        fileRefs: [],
-        folders: [],
-      }),
-    }))
+    const harness = await goldenRuntime(
+      NESTED_ROOT,
+      {},
+      routes({
+        [`POST /project/${PROJECT}/folder`]: json({
+          _id: 'folder-tables',
+          name: 'tables',
+          docs: [],
+          fileRefs: [],
+          folders: [],
+        }),
+      })
+    )
     try {
-      expectGolden('manage_entity', await run(harness.service, 'manage_entity', {
-        projectId: PROJECT,
-        action: 'create_folder',
-        path: 'chapters/tables',
-      }))
+      expectGolden(
+        'manage_entity',
+        await run(harness.service, 'manage_entity', {
+          projectId: PROJECT,
+          action: 'create_folder',
+          path: 'chapters/tables',
+        })
+      )
       expect(harness.requests).toEqual([`POST /project/${PROJECT}/folder`])
     } finally {
       await harness.close()
@@ -251,63 +278,91 @@ describe('manage_entity golden results', () => {
   })
 
   test('create_folder when Overleaf answers without the folder', async () => {
-    const harness = await goldenRuntime(NESTED_ROOT, { trackChangesState: true }, routes({
-      [`POST /project/${PROJECT}/folder`]: () => new Response(''),
-    }))
+    const harness = await goldenRuntime(
+      NESTED_ROOT,
+      { trackChangesState: true },
+      routes({
+        [`POST /project/${PROJECT}/folder`]: () => new Response(''),
+      })
+    )
     try {
-      expectGolden('manage_entity', await run(harness.service, 'manage_entity', {
-        projectId: PROJECT,
-        action: 'create_folder',
-        path: 'notes',
-      }))
+      expectGolden(
+        'manage_entity',
+        await run(harness.service, 'manage_entity', {
+          projectId: PROJECT,
+          action: 'create_folder',
+          path: 'notes',
+        })
+      )
     } finally {
       await harness.close()
     }
   })
 
   test('rename a document', async () => {
-    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({
-      [`POST /project/${PROJECT}/doc/doc-intro/rename`]: noContent,
-    }))
+    const harness = await goldenRuntime(
+      NESTED_ROOT,
+      {},
+      routes({
+        [`POST /project/${PROJECT}/doc/doc-intro/rename`]: noContent,
+      })
+    )
     try {
-      expectGolden('manage_entity', await run(harness.service, 'manage_entity', {
-        projectId: PROJECT,
-        action: 'rename',
-        path: 'chapters/intro.tex',
-        newName: 'introduction.tex',
-      }))
+      expectGolden(
+        'manage_entity',
+        await run(harness.service, 'manage_entity', {
+          projectId: PROJECT,
+          action: 'rename',
+          path: 'chapters/intro.tex',
+          newName: 'introduction.tex',
+        })
+      )
     } finally {
       await harness.close()
     }
   })
 
   test('move a binary file, with track changes on', async () => {
-    const harness = await goldenRuntime(NESTED_ROOT, { trackChangesState: true }, routes({
-      [`POST /project/${PROJECT}/file/file-plot/move`]: noContent,
-    }))
+    const harness = await goldenRuntime(
+      NESTED_ROOT,
+      { trackChangesState: true },
+      routes({
+        [`POST /project/${PROJECT}/file/file-plot/move`]: noContent,
+      })
+    )
     try {
-      expectGolden('manage_entity', await run(harness.service, 'manage_entity', {
-        projectId: PROJECT,
-        action: 'move',
-        path: 'plot.png',
-        destinationFolderPath: 'figures',
-      }))
+      expectGolden(
+        'manage_entity',
+        await run(harness.service, 'manage_entity', {
+          projectId: PROJECT,
+          action: 'move',
+          path: 'plot.png',
+          destinationFolderPath: 'figures',
+        })
+      )
     } finally {
       await harness.close()
     }
   })
 
   test('delete a folder', async () => {
-    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({
-      [`DELETE /project/${PROJECT}/folder/folder-appendix`]: noContent,
-    }))
+    const harness = await goldenRuntime(
+      NESTED_ROOT,
+      {},
+      routes({
+        [`DELETE /project/${PROJECT}/folder/folder-appendix`]: noContent,
+      })
+    )
     try {
-      expectGolden('manage_entity', await run(harness.service, 'manage_entity', {
-        projectId: PROJECT,
-        action: 'delete',
-        path: 'chapters/appendix',
-        confirmPath: 'chapters/appendix',
-      }))
+      expectGolden(
+        'manage_entity',
+        await run(harness.service, 'manage_entity', {
+          projectId: PROJECT,
+          action: 'delete',
+          path: 'chapters/appendix',
+          confirmPath: 'chapters/appendix',
+        })
+      )
     } finally {
       await harness.close()
     }
@@ -316,14 +371,18 @@ describe('manage_entity golden results', () => {
   // Overleaf's answer to a rename or delete is not part of the result: none of its keys, an
   // address among them, may reach the caller.
   test('delete a document whose response is a JSON body with extra keys', async () => {
-    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({
-      [`DELETE /project/${PROJECT}/doc/doc-proofs`]: json({
-        _id: 'doc-proofs',
-        deleted: true,
-        deletedBy: { id: 'user-other', email: 'collaborator@example.test' },
-        project: { name: 'Placeholder project' },
-      }),
-    }))
+    const harness = await goldenRuntime(
+      NESTED_ROOT,
+      {},
+      routes({
+        [`DELETE /project/${PROJECT}/doc/doc-proofs`]: json({
+          _id: 'doc-proofs',
+          deleted: true,
+          deletedBy: { id: 'user-other', email: 'collaborator@example.test' },
+          project: { name: 'Placeholder project' },
+        }),
+      })
+    )
     try {
       const result = await run(harness.service, 'manage_entity', {
         projectId: PROJECT,
@@ -340,14 +399,18 @@ describe('manage_entity golden results', () => {
   })
 
   test('rename a binary file whose response is a JSON body with extra keys', async () => {
-    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({
-      [`POST /project/${PROJECT}/file/file-data/rename`]: json({
-        _id: 'file-data',
-        name: 'values.csv',
-        rev: 3,
-        owner: { email: 'owner@example.test', first_name: 'Placeholder' },
-      }),
-    }))
+    const harness = await goldenRuntime(
+      NESTED_ROOT,
+      {},
+      routes({
+        [`POST /project/${PROJECT}/file/file-data/rename`]: json({
+          _id: 'file-data',
+          name: 'values.csv',
+          rev: 3,
+          owner: { email: 'owner@example.test', first_name: 'Placeholder' },
+        }),
+      })
+    )
     try {
       const result = await run(harness.service, 'manage_entity', {
         projectId: PROJECT,
@@ -370,9 +433,13 @@ describe('download_file golden results', () => {
 
   test('a text document to a new local file', async () => {
     const folder = await mkdtemp(join(tmpdir(), 'overleaf-golden-download-'))
-    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({
-      [`GET /Project/${PROJECT}/doc/doc-main/download`]: () => new Response(MAIN_TEXT),
-    }))
+    const harness = await goldenRuntime(
+      NESTED_ROOT,
+      {},
+      routes({
+        [`GET /Project/${PROJECT}/doc/doc-main/download`]: () => new Response(MAIN_TEXT),
+      })
+    )
     try {
       const localPath = join(folder, 'main.tex')
       const result = (await run(harness.service, 'download_file', {
@@ -391,9 +458,13 @@ describe('download_file golden results', () => {
 
   test('a binary file replacing an existing local file with overwrite', async () => {
     const folder = await mkdtemp(join(tmpdir(), 'overleaf-golden-download-'))
-    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({
-      [`GET /Project/${PROJECT}/file/file-plot`]: () => new Response(PLOT_BYTES),
-    }))
+    const harness = await goldenRuntime(
+      NESTED_ROOT,
+      {},
+      routes({
+        [`GET /Project/${PROJECT}/file/file-plot`]: () => new Response(PLOT_BYTES),
+      })
+    )
     try {
       const localPath = join(folder, 'plot.png')
       await writeFile(localPath, 'older bytes')

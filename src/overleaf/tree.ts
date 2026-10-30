@@ -50,7 +50,6 @@ export const TREE_HASH_NOTE =
   'hash is a git blob hash, sha1("blob " + byteLength + "\\0" + content), identical to ' +
   '`git hash-object <file>`. It is present only on binary file entities; doc entities have no hash.'
 
-
 export function normalizeProjectPath(path: string): string {
   const slashPath = path.replace(/\\/gu, '/')
   const normalized = posix.normalize(slashPath).replace(/^\.\//u, '').replace(/^\//u, '')
@@ -109,19 +108,12 @@ export function flattenProjectTree(input: RawFolder[] | RawFolder): ProjectEntit
   return output
 }
 
-export function resolveProjectPath(
-  tree: ProjectEntity[],
-  path: string,
-  expectedType?: EntityType
-): ProjectEntity {
+export function resolveProjectPath(tree: ProjectEntity[], path: string, expectedType?: EntityType): ProjectEntity {
   const normalized = normalizeProjectPath(path)
   const entity = tree.find(candidate => candidate.path === normalized)
   if (!entity) throw new McpError('NOT_FOUND', `Project path was not found: ${normalized}`)
   if (expectedType && entity.type !== expectedType) {
-    throw new McpError(
-      'INVALID_ARGUMENT',
-      `${normalized} is a ${entity.type}, not a ${expectedType}.`
-    )
+    throw new McpError('INVALID_ARGUMENT', `${normalized} is a ${entity.type}, not a ${expectedType}.`)
   }
   return entity
 }

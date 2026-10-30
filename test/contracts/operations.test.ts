@@ -17,7 +17,7 @@ const CONFIRMATIONS = [
 ]
 
 function shape(name: (typeof OPERATION_NAMES)[number]): Record<string, unknown> {
-  return (operationContract(name).inputSchema?.shape ?? {})
+  return operationContract(name).inputSchema?.shape ?? {}
 }
 
 describe('operation contracts', () => {

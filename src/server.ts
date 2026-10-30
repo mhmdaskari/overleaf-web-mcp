@@ -29,16 +29,8 @@ export function createMcpServer(
   activity?: ToolActivity,
   options: ToolRegistrationOptions = {}
 ): McpServer {
-  const server = new McpServer(
-    { name: SERVER_NAME, version: SERVER_VERSION },
-    { instructions: SERVER_INSTRUCTIONS }
-  )
-  registerOverleafTools(
-    server as unknown as Parameters<typeof registerOverleafTools>[0],
-    runtime,
-    activity,
-    options
-  )
+  const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { instructions: SERVER_INSTRUCTIONS })
+  registerOverleafTools(server as unknown as Parameters<typeof registerOverleafTools>[0], runtime, activity, options)
   registerCompileResources(
     server as unknown as ResourceRegistrar,
     runtime,
@@ -100,11 +92,9 @@ export function runStdioServer(
   const input = options.input ?? process.stdin
   const exit = options.exit ?? ((code: number) => process.exit(code))
   const graceMs = options.stdinCloseGraceMs ?? STDIN_CLOSE_GRACE_MS
-  const connection = serveOverStdio(
-    runtime,
-    new StdioServerTransport(input, options.output ?? process.stdout),
-    { onDiagnostic: options.onDiagnostic }
-  )
+  const connection = serveOverStdio(runtime, new StdioServerTransport(input, options.output ?? process.stdout), {
+    onDiagnostic: options.onDiagnostic,
+  })
   let closed: Promise<void> | undefined
   const close = (waitMs: number): Promise<void> =>
     (closed ??= (async () => {

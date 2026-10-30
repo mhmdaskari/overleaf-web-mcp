@@ -43,10 +43,10 @@ describe('authenticated HTTP client', () => {
       baseUrl: 'https://overleaf.test',
       jar: new CookieJar(),
       fetcher: async () =>
-        new Response(
-          JSON.stringify({ success: false, error: 'duplicate_file_name', detail: 'main.tex' }),
-          { status: 422, headers: { 'content-type': 'application/json' } }
-        ),
+        new Response(JSON.stringify({ success: false, error: 'duplicate_file_name', detail: 'main.tex' }), {
+          status: 422,
+          headers: { 'content-type': 'application/json' },
+        }),
     })
 
     await expect(client.postJson('/project/p/upload')).rejects.toMatchObject({
@@ -59,8 +59,7 @@ describe('authenticated HTTP client', () => {
     const client = new OverleafHttpClient({
       baseUrl: 'https://overleaf.test',
       jar: new CookieJar(),
-      fetcher: async () =>
-        new Response('slow down', { status: 429, headers: { 'retry-after': '30' } }),
+      fetcher: async () => new Response('slow down', { status: 429, headers: { 'retry-after': '30' } }),
     })
 
     await expect(client.postJson('/project/new/upload')).rejects.toMatchObject({

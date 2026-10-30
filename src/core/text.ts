@@ -16,10 +16,7 @@ function assertNotSplitSurrogate(text: string, offset: number): void {
     /[\uD800-\uDBFF]/u.test(text[offset - 1] ?? '') &&
     /[\uDC00-\uDFFF]/u.test(text[offset] ?? '')
   ) {
-    throw new McpError(
-      'INVALID_ARGUMENT',
-      'The requested position splits a UTF-16 surrogate pair.'
-    )
+    throw new McpError('INVALID_ARGUMENT', 'The requested position splits a UTF-16 surrogate pair.')
   }
 }
 
@@ -46,10 +43,7 @@ export function lineColumnToOffset(content: string, position: LineColumn): numbe
   const actualLineEnd = lineEnd < 0 ? normalized.length : lineEnd
   const offset = lineStart + position.column - 1
   if (offset > actualLineEnd) {
-    throw new McpError(
-      'INVALID_ARGUMENT',
-      `Column ${position.column} is outside line ${position.line}.`
-    )
+    throw new McpError('INVALID_ARGUMENT', `Column ${position.column} is outside line ${position.line}.`)
   }
   assertNotSplitSurrogate(normalized, offset)
   return offset
