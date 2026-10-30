@@ -383,6 +383,24 @@ overleaf-web-mcp compile log "$P" --build-ref "$(jq -r .compile.buildRef build.j
 `compile log` reads the same build without compiling again. Exit 6 from `compile run` means the
 build finished but its PDF could not be saved; `downloadError` says why.
 
+### Review tracked changes
+
+```bash
+overleaf-web-mcp tracked-changes list "$P" --file main.tex > changes.json
+jq '.documents[0].changes[] | {changeId, type, start, excerpt, authorId, pairedChangeId}' changes.json
+# ... decide with the user which changes to reject ...
+overleaf-web-mcp tracked-changes reject "$P" main.tex \
+  --revision "$(jq -r '.documents[0].revision' changes.json)" \
+  --change <changeId> --change <pairedChangeId> --confirm-count 2
+```
+
+`--confirm-count` is the number of changes the user confirmed, typed back, not computed. A
+replacement is two changes linked by `pairedChangeId`; pass both. Exit 4 is `REVISION_CONFLICT`
+and exit 1 with `NOT_FOUND` names ids that are no longer tracked changes: list again before
+deciding. Exit 3 with `REVIEW_UNSUPPORTED` means the project or the deployment cannot decide
+tracked changes this way. List again after every decision, since ids merge and split as the
+document changes.
+
 ### Any other tool
 
 ```bash

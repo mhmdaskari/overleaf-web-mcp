@@ -679,6 +679,17 @@ describe('manage_tracked_changes on a ShareJS document', () => {
     expect(rejected.connection.submitUpdate).toHaveBeenCalledOnce()
   })
 
+  test('a fresh join of the other protocol is PROTOCOL_UNSUPPORTED, after one decision and no recovery', async () => {
+    const { document } = await shareFixture()
+    const { document: history } = await historyFixture()
+    const h = harness({ joins: [document, history] })
+    const error = await rejection(h.api.manageTrackedChanges(decide(document, 'accept', ['change-1'], 1)))
+    expect(error.code).toBe('PROTOCOL_UNSUPPORTED')
+    expect(h.http.request).toHaveBeenCalledOnce()
+    expect(h.connection.submitUpdate).not.toHaveBeenCalled()
+    expect(h.connections.invalidate).not.toHaveBeenCalled()
+  })
+
   test('an accept whose ids are gone but whose text changed is REVISION_CONFLICT with outcome unknown', async () => {
     const { document } = await shareFixture()
     const changes = (document.ranges as { changes: unknown[] }).changes

@@ -52,6 +52,8 @@ const REVISE_DOCUMENT =
   '\\section{Introduction}\nIntroduction text for the revise task.\n\n\\section{Methods}\nMethods text for the revise task.\n'
 const REVIEW_DOCUMENT = '\\section{Results}\nThe measured value is 42 units.\n'
 const REVIEW_ANCHOR = 'measured value'
+// A tracked suggestion away from the comment's anchor: one insert, ".0", rejected afterwards.
+const REVIEW_SUGGESTION: readonly [string, string] = ['42 units', '42.0 units']
 const BROKEN_DOCUMENT =
   '\\documentclass{article}\n\\begin{document}\n\\undefinedcommand Disposable diagnose test.\n\\end{document}\n'
 const CHAPTER = 'Disposable chapter for the sync task.\n'
@@ -320,6 +322,28 @@ function cliCommand(tool: OperationName, input: Record<string, unknown>): { args
     case 'get_compile_log':
       if (only('projectId', 'buildRef', 'format') && input.format === 'errors-only') {
         return { args: ['compile', 'log', value('projectId'), '--build-ref', value('buildRef'), '--errors-only'] }
+      }
+      break
+    case 'list_tracked_changes':
+      if (only('projectId', 'filePath')) {
+        return { args: ['tracked-changes', 'list', value('projectId'), ...option('--file', 'filePath')] }
+      }
+      break
+    case 'manage_tracked_changes':
+      if (only('projectId', 'filePath', 'revision', 'action', 'changeIds', 'confirmCount')) {
+        const changeIds = input.changeIds as string[]
+        return {
+          args: [
+            'tracked-changes',
+            value('action'),
+            value('projectId'),
+            value('filePath'),
+            '--revision',
+            value('revision'),
+            ...changeIds.flatMap(id => ['--change', id]),
+            ...option('--confirm-count', 'confirmCount'),
+          ],
+        }
       }
       break
     case 'list_comments':
@@ -716,7 +740,7 @@ const TASKS: readonly TaskDefinition[] = [
   },
   {
     name: 'review',
-    title: 'resolving a review task on a comment thread',
+    title: 'resolving a review task on a comment thread and a tracked change',
     run: async run => {
       const { projectId } = run
       const filePath = `review-${run.label}.tex`
@@ -749,6 +773,31 @@ const TASKS: readonly TaskDefinition[] = [
         status: 'resolved',
       })
       run.checks.finalStatus = resolved.status
+      // A tracked suggestion, listed and rejected, which leaves the text as it was before it.
+      const [from, to] = REVIEW_SUGGESTION
+      await run.ok('write_file_tracked', 'write_file', {
+        projectId,
+        filePath,
+        revision: resolved.revision,
+        content: before.content.replace(from, to),
+        writeMode: 'tracked',
+      })
+      const suggestions = await run.ok('list_tracked_changes', 'list_tracked_changes', { projectId, filePath })
+      const changes = suggestions.documents[0]?.changes ?? []
+      run.checks.trackedChangesListed = changes.length
+      run.checks.trackedChangeByAuthor = changes.every(change => change.authorId !== null)
+      run.check('one_tracked_insert_listed', changes.length === 1 && changes[0]?.type === 'insert')
+      const document = run.need('tracked_document_listed', suggestions.documents[0])
+      const decided = await run.ok('manage_tracked_changes', 'manage_tracked_changes', {
+        projectId,
+        filePath,
+        revision: document.revision,
+        action: 'reject',
+        changeIds: changes.map(change => change.changeId),
+        confirmCount: changes.length,
+      })
+      run.checks.remainingChangeCount = decided.remainingChangeCount
+      run.check('tracked_change_rejected', decided.remainingChangeCount === 0)
       const after = await run.ok('read_back', 'read_file', { projectId, filePath }, 'check')
       run.checks.accidentalMutations = after.content === before.content ? 0 : 1
       run.check('document_unchanged', after.content === before.content)

@@ -34,6 +34,7 @@ Once connected, you talk to your assistant in plain language. The assistant pick
 - "Which figures in `./figures` differ from what's in the project? Upload only those."
 - "Make the project match `~/papers/thesis`, and show me what would be deleted first."
 - "Summarize the open review comments and reply to the one about Table 2."
+- "Go through the tracked changes in `main.tex` with me, and accept the ones I approve."
 
 ## What it can do
 
@@ -59,7 +60,10 @@ errors and warnings by file and line, with a clear answer on whether it built cl
 log, save the PDF or any other output locally, or stop a running compile.
 
 **Review.** List comment threads with their locations, reply, add a comment anchored to exact
-text, and resolve or reopen threads.
+text, and resolve or reopen threads. List tracked changes with their authors and locations, and
+accept or reject them once you have confirmed which. Accepting or rejecting them needs a project
+whose owner's Overleaf plan includes track changes, and on self-hosted Overleaf an edition that
+includes it; otherwise the decision is refused with nothing changed.
 
 **Follow history.** Poll recent project history with a version cursor to see who changed what.
 
@@ -67,7 +71,9 @@ text, and resolve or reopen threads.
 
 - Text edits require the revision from a prior read and fail with a conflict if the document
   changed underneath.
-- Tracked changes are opt-in and never silently downgraded to plain edits.
+- Tracked changes are opt-in and never silently downgraded to plain edits. Accepting or
+  rejecting them needs the revision they were listed with and their number confirmed, and is
+  verified afterwards.
 - Deletes require the path, or the number of entries, to be confirmed; downloads, including a
   whole-project zip, never overwrite a local file unless asked, and never touch the saved session.
 - A folder sync needs the `planToken` from `plan_sync`, and stops before changing anything if

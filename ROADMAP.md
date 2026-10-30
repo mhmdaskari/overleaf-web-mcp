@@ -180,8 +180,8 @@ what you find:
       `server/discover` results.
 - [ ] `SERVER_INSTRUCTIONS` stays under the 450-word bound in `test/server.test.ts` (444 words at
       0.4.0, 445 at 0.4.1, 392 at 0.5.0, which brought it under 400 once so v0.6.0 and v0.8.0 can
-      spend the headroom, 417 at 0.6.0, 440 at 0.6.2 and 0.7.0); after that, a stage that adds
-      guidance trims elsewhere.
+      spend the headroom, 417 at 0.6.0, 440 at 0.6.2 and 0.7.0, 445 at 0.8.0); after that, a stage
+      that adds guidance trims elsewhere.
 - [ ] The limits and their environment variables still hold: `OVERLEAF_MAX_DOC_LENGTH` (fallback
       2,097,152 UTF-16 code units → `DOC_TOO_LARGE`) and `OVERLEAF_MAX_UPDATE_CHARS` (7,340,032
       serialized characters → `UPDATE_TOO_LARGE`).
@@ -867,8 +867,10 @@ list_tracked_changes({ projectId: string, filePath?: string, type?: "insert" | "
                        authorId?: string, excerptChars?: number /* 0..500, default 120 */,
                        limit?: number /* 1..500, default 100 */ })
   → { documents: [{ filePath, revision, protocol: "sharejs" | "history-ot", totalChanges,
+                    undecidableChanges?,                 // changes stored without an id
                     changes: [{ changeId, type, start: { line, column }, end: { line, column },
-                                length, excerpt?, excerptTruncated, authorId, timestamp }] }],
+                                length, excerpt?, excerptTruncated, authorId, timestamp?,
+                                pairedChangeId? }] }],  // links the two halves of a replacement
       totalMatched, truncated, trackChangesActive, indexUnavailable?: true }
   // positions 1-based in UTF-16 units. annotations: readOnlyHint true
 
@@ -911,13 +913,13 @@ CLI: `tracked-changes list <projectId> [--file <path>]` and `tracked-changes acc
 ### Tasks
 
 - [x] Confirm items 1–10 into `docs/private-api.md`, and capture sanitized fixtures `test/fixtures/protocol/sharejs-tracked-changes.json` and `history-ot-tracked-changes.json` from a disposable project (an insert, a delete, a replacement pair, non-ASCII text; placeholder ids, users, and timestamps), plus a hygiene test over `test/fixtures/protocol` that fails on 24-hex ids, email addresses, and session cookie names. The history-ot fixture is hand-authored from source, since no history-ot document was available live.
-- [ ] `src/protocol/tracked-changes.ts` (pure parsers, ids, locations, excerpts, overlap detection, decision planner) with exact-operation tests; the shared recovery helper, with documents and comments moved onto it.
-- [ ] `TrackedChangesApi` in `src/overleaf/tracked-changes.ts`, inside the per-project queue, reading `features.trackChanges` and `permissionsLevel` from `ProjectConnection`; contract entries (`overleaf-read`, `overleaf-write`) registered after `set_comment_status`; `REVIEW_UNSUPPORTED` in `ERROR_CODES`.
-- [ ] CLI aliases and `docs/cli.md`; `src/cli/exit-codes.ts` maps `REVIEW_UNSUPPORTED` to 3 and `applied_untracked` to 4.
-- [ ] The fidelity check in `DocumentsApi.writeFile`, skipping no-op writes, with an optional `kind` on `SyncFailure` (`src/overleaf/sync.ts`); the `otUpdateError` mapping in `ProjectConnection.submitUpdate`.
-- [ ] Tracked-change decisions join the review task in `test/live/compare-interfaces.test.ts`.
-- [ ] A "Tracked changes" paragraph in `src/mcp/instructions.ts` within the 450-word bound: list first, confirm with the user, pass revision, ids, and a matching `confirmCount`, re-list after `REVISION_CONFLICT` or `NOT_FOUND`.
-- [ ] README (the counts, two Review rows, the comparison row, the plan caveat), `docs/tools.md`, `docs/safety.md`, `docs/internals.md`, `docs/using.md`; an opt-in live test behind `RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`; CHANGELOG 0.8.0 `Added` and `Changed`.
+- [x] `src/protocol/tracked-changes.ts` (pure parsers, ids, locations, excerpts, overlap detection, decision planner) with exact-operation tests; the shared recovery helper, with documents and comments moved onto it.
+- [x] `TrackedChangesApi` in `src/overleaf/tracked-changes.ts`, inside the per-project queue, reading `features.trackChanges` and `permissionsLevel` from `ProjectConnection`; contract entries (`overleaf-read`, `overleaf-write`) registered after `set_comment_status`; `REVIEW_UNSUPPORTED` in `ERROR_CODES`.
+- [x] CLI aliases and `docs/cli.md`; `src/cli/exit-codes.ts` maps `REVIEW_UNSUPPORTED` to 3 and `applied_untracked` to 4.
+- [x] The fidelity check in `DocumentsApi.writeFile`, skipping no-op writes, with an optional `kind` on `SyncFailure` (`src/overleaf/sync.ts`); the `otUpdateError` mapping in `ProjectConnection.submitUpdate`.
+- [x] Tracked-change decisions join the review task in `test/live/compare-interfaces.test.ts`.
+- [x] Tracked-change guidance in `src/mcp/instructions.ts` (a "Review" paragraph shared with `add_comment`) within the 450-word bound: list first, confirm with the user, pass revision, ids, and a matching `confirmCount`, re-list after `REVISION_CONFLICT` or `NOT_FOUND`.
+- [x] README (the counts, two Review rows, the comparison row, the plan caveat), `docs/tools.md`, `docs/safety.md`, `docs/internals.md`, `docs/using.md`; an opt-in live test behind `RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`; CHANGELOG 0.8.0 `Added` and `Changed`.
 
 ### Acceptance
 

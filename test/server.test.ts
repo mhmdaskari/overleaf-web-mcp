@@ -326,6 +326,11 @@ describe('MCP server', () => {
       'planToken',
       'confirmDeleteCount',
       'REMOTE_DRIFT',
+      'add_comment',
+      'list_tracked_changes',
+      'manage_tracked_changes',
+      'confirmCount',
+      'NOT_FOUND',
       'AUTH_EXPIRED',
     ]) {
       expect(instructions).toContain(term)

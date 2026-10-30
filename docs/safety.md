@@ -33,16 +33,49 @@ if track changes is already on for this account. `upload_file`'s result says whi
 `writeMode` is `tracked` exactly when a text document replaced a text document while track
 changes is on.
 
+A tracked write is also checked after it verifies: every span it inserted must be held by tracked
+inserts by this account, and every span it deleted by tracked deletes by this account, unless the
+deleted text was itself a tracked insert. If Overleaf recorded any of it as a plain edit, the call
+fails with `PROTOCOL_UNSUPPORTED` and `details.kind: "applied_untracked"`. That edit is live and
+is never undone automatically, since undoing it would be another write; review it before writing
+again.
+
+**A write the account cannot make is never sent.** Overleaf judges a document update by its
+shape: one that only adds comments needs view access, one that only makes tracked changes needs
+review access, and anything else needs owner or edit access. Every document write is checked
+against the account's access level to the project before it is sent, so an untracked write from
+a review-only collaborator, a text change of any kind from a read-only one, and a history-OT
+comment status change from either fail with `PERMISSION_DENIED` (`details.accessLevel`,
+`details.required`), and nothing reaches Overleaf, which would otherwise refuse the update and drop
+the connection.
+
+**Tracked-change decisions are counted, checked, and verified.** `manage_tracked_changes` accepts or
+rejects the tracked changes named by `changeIds` in one document, and needs the `revision` that
+`list_tracked_changes` returned for it and `confirmCount` equal to the number of ids. Before
+anything is sent it refuses, in this order: a missing or different `confirmCount`
+(`CONFIRMATION_MISMATCH`); an account without owner or edit access (`PERMISSION_DENIED`); a project
+whose owner's plan, or whose deployment, does not offer track changes (`REVIEW_UNSUPPORTED`); a
+stale revision (`REVISION_CONFLICT`); an id that is not a live change in that document (`NOT_FOUND`,
+`details.missingChangeIds`); a change left out that overlaps a chosen one (`INVALID_ARGUMENT`,
+`details.overlappingChangeIds`), so a decision never takes half of an overlapping pair; and, for a
+reject on a ShareJS document, a chosen change that does not match the document text
+(`PROTOCOL_UNSUPPORTED`; list the changes again). The decision is then sent once, through Overleaf's
+accept route or as one untracked edit that carries no tracking metadata, and verified on a fresh
+read of the document: the chosen changes are gone and the text is what the decision should leave,
+and on a history-OT document every tracked change left is as expected too. One that timed out is
+observed like a write, never resent.
+
 **Destructive actions need a second value.** Deleting an entity with `manage_entity` requires
 `confirmPath` to equal `path` exactly, deleting several with `delete_entities` requires
-`confirmCount` to equal the number of paths, and a mirror `sync_directory` requires
-`confirmDeleteCount` to equal the number of entries its plan would delete. Trashing, archiving,
-or deleting a project with `manage_project` requires `confirmName` to equal the project's current
-name exactly, without trimming. The current name is read from Overleaf first, and the check
-happens before any change is sent. A wrong value fails with `CONFIRMATION_MISMATCH` and changes
-nothing. Projects follow Overleaf's own model: trash first, which is reversible, and permanent
-deletion only from the trash. `download_file` and `download_project_zip` refuse to replace an
-existing local file unless `overwrite` is `true`.
+`confirmCount` to equal the number of paths, a mirror `sync_directory` requires
+`confirmDeleteCount` to equal the number of entries its plan would delete, and accepting or
+rejecting tracked changes with `manage_tracked_changes` requires `confirmCount` to equal the number
+of `changeIds`. Trashing, archiving, or deleting a project with `manage_project` requires
+`confirmName` to equal the project's current name exactly, without trimming. The current name is
+read from Overleaf first, and the check happens before any change is sent. A wrong value fails with
+`CONFIRMATION_MISMATCH` and changes nothing. Projects follow Overleaf's own model: trash first,
+which is reversible, and permanent deletion only from the trash. `download_file` and
+`download_project_zip` refuse to replace an existing local file unless `overwrite` is `true`.
 
 Replacements are confirmed by value or by expected state too. `upload_file` replaces a binary
 file with `overwrite: true` or with `expectedHash` equal to the hash it has now, and a text
@@ -179,6 +212,16 @@ in one call.
   `TIMEOUT` when the path is empty before and after or holds the same binary with the same hash,
   and `OUTCOME_UNKNOWN` in any other case, a document included. It is never sent again.
 - Comment and history results name each author by id and display name, never by email address.
+  Tracked changes name their author by id only.
+- `list_tracked_changes` never reads every document: without `filePath` it reads only the
+  documents Overleaf's range index lists with changes, and none at all, with
+  `indexUnavailable: true`, when the deployment has no index. An excerpt is at most
+  `excerptChars` UTF-16 units and never splits a surrogate pair.
+- `manage_tracked_changes` requires `confirmCount` equal to the number of `changeIds`, else
+  `CONFIRMATION_MISMATCH` before the project is joined. It takes at most 500 ids, each once, all
+  in one document. A ShareJS accept is one request to Overleaf's accept route with exactly those
+  ids; a ShareJS reject and every history-OT decision is one OT update with no tracking metadata.
+  Either is verified on a fresh join and never sent twice.
 - `download_project_zip` fails with `CONFIRMATION_MISMATCH` before any request when `localPath`
   holds a file and `overwrite` is not `true`, with `PROTOCOL_UNSUPPORTED` when the response is
   not a zip archive, and with `REMOTE_ERROR`, retryable, when the archive lacks its zip end
@@ -234,10 +277,10 @@ is why the command line's exit code depends on whether the operation is read-onl
 | Code | Meaning | What to do |
 | --- | --- | --- |
 | `AUTH_EXPIRED` | No saved session, or Overleaf no longer accepts it. | Run `npx overleaf-web-mcp login` again. Do not retry the call. |
-| `PERMISSION_DENIED` | Overleaf refused the operation for this account (HTTP 403), or a document write needs more access than the account has, which is checked before anything is sent (`details.accessLevel`, `details.required`): review-only collaborators can write only tracked changes, and read-only ones only add comments. From `download_project_zip` it can also mean the session expired, since that route checks project access rather than the login. | Check the project's access level; a review-only collaborator writes with `writeMode: "tracked"`. For a project download, check `auth_status` too. |
-| `NOT_FOUND` | The project, path, or Overleaf resource does not exist (HTTP 404), or a local file to upload or a local folder to download into does not exist (`details.errno: "ENOENT"`). | Re-read the tree; the entity may have been renamed or removed. |
+| `PERMISSION_DENIED` | Overleaf refused the operation for this account (HTTP 403), or a document write needs more access than the account has, which is checked before anything is sent (`details.accessLevel`, `details.required`): review-only collaborators can write only tracked changes, and read-only ones only add comments. From `manage_tracked_changes`, the account is not the owner or an editor, which deciding tracked changes needs (`details.accessLevel`), with nothing sent. From `download_project_zip` it can also mean the session expired, since that route checks project access rather than the login. | Check the project's access level; a review-only collaborator writes with `writeMode: "tracked"`. For a project download, check `auth_status` too. |
+| `NOT_FOUND` | The project, path, or Overleaf resource does not exist (HTTP 404), or a local file to upload or a local folder to download into does not exist (`details.errno: "ENOENT"`), or a `changeIds` entry is not a tracked change in the document (`details.missingChangeIds`, nothing sent). | Re-read the tree; the entity may have been renamed or removed. For a tracked change, list the changes again. |
 | `REVISION_CONFLICT` | The document changed since the revision you hold, or the verified result differs from the intent, or another update followed a tracked write before it could be checked as tracked (the text is live; `details.outcome: "unknown"`). `details.liveRevision` carries the current revision. | Read again, reconcile, and write with the new revision. |
-| `PROTOCOL_UNSUPPORTED` | The deployment speaks a collaboration protocol version this release does not, or the document's OT protocol changed between read and write, or a tracked write has no user id, or a project download was not a zip archive, or a downloaded `.pdf` was not a PDF, or a response that should be JSON was not (`details.path`, and `details.contentType` when it names a media type), or a compile response lacked its expected keys (`details` `{ endpoint, expectedKeys, receivedKeys }`), or a read-only tool's result did not match its output schema (`details.kind: "response_shape"`, `details.paths`), or a tracked write applied without being recorded as tracked changes by this account (`details.kind: "applied_untracked"`, `details.liveRevision`, no `details.outcome`: it is live and not reverted). | Read again. If the protocol version is the issue, see `OVERLEAF_PROTOCOL_VERSIONS`. For `applied_untracked`, review the live text before writing again. |
+| `PROTOCOL_UNSUPPORTED` | The deployment speaks a collaboration protocol version this release does not, or the document's OT protocol changed between read and write, or a tracked write has no user id, or a project download was not a zip archive, or a downloaded `.pdf` was not a PDF, or a response that should be JSON was not (`details.path`, and `details.contentType` when it names a media type), or a compile response lacked its expected keys (`details` `{ endpoint, expectedKeys, receivedKeys }`), or a read-only tool's result did not match its output schema (`details.kind: "response_shape"`, `details.paths`), or a tracked write applied without being recorded as tracked changes by this account (`details.kind: "applied_untracked"`, `details.liveRevision`, no `details.outcome`: it is live and not reverted), or a `manage_tracked_changes` reject on a ShareJS document found a chosen change that does not match the document text (nothing was sent). | Read again. If the protocol version is the issue, see `OVERLEAF_PROTOCOL_VERSIONS`. For `applied_untracked`, review the live text before writing again. For a refused reject, list the tracked changes again. |
 | `DOC_TOO_LARGE` | The resulting document would reach the advertised maximum length. | Split the content across documents. |
 | `UPDATE_TOO_LARGE` | The serialized edit exceeds the configured update limit, or Overleaf answered HTTP 413, or refused a document update as too large (`details.outcome: "not_applied"`: nothing was stored). | Split the change into smaller writes, each with a fresh revision. |
 | `TIMEOUT` | A request or OT application timed out. For writes, `details.outcome: "not_applied"` means the original revision stayed live throughout the recovery window. In a `batch_upload` result, the path was as before the upload when the tree was read back; the upload could still land late. | Safe to read and try again with a fresh revision. |
@@ -249,12 +292,13 @@ is why the command line's exit code depends on whether the operation is read-onl
 | `NO_BUILD` | `get_compile_log`, `download_compile_output`, or a compile output resource was called without a `buildRef`, and this process has not compiled the project. Each command line call is a new process. | Call `compile_project` first, or pass the `buildRef` an earlier compile returned; on the command line, `--build-ref`. |
 | `BUILD_NOT_FOUND` | Overleaf no longer keeps the build's output (`details.buildId`, `details.file`). | Compile again. |
 | `PARTIAL_CLEANUP` | A multi-step operation applied some steps and could not undo them all. `details` says what remains. | Inspect the project and finish the cleanup by hand. |
-| `INVALID_ARGUMENT` | The call was malformed, a path was invalid, an entity had the wrong type, Overleaf rejected a name, an id held a character that is not path-safe (`details.parameter`), an upload would replace a text document without `uncheckedDocumentReplace: true` (`details.missing`), a name is already used in the target folder or a folder would move into itself, a local file cannot be read or written (`details.errno`, such as `EISDIR` or `EACCES`), or text written to a ShareJS (legacy editor) document adds a character outside the Basic Multilingual Plane, such as an emoji, adds another copy of one the document holds, or changes their order (`details.line`, the 1-based line of the first added one; Overleaf would store each as U+FFFD; nothing was sent). `details.overleafError` may carry Overleaf's short reason code. | Fix the arguments; to replace a document, prefer `write_file` with `localPath`. Replace characters outside the Basic Multilingual Plane, for example with a LaTeX command. |
-| `CONFIRMATION_MISMATCH` | A confirm-by-value parameter (`confirmPath`, `confirmName`, `confirmCount`, `confirmDeleteCount`) did not equal the value it must repeat exactly, or mirror mode was called without `confirmDeleteCount`, or `download_project_zip` or `download_compile_output` found a file at `localPath` without `overwrite: true`, or `upload_file` was given `overwrite: false` for a path that holds a document or binary file, or would replace a binary without `overwrite: true` or `expectedHash`, or `batch_upload` found taken destinations with `onConflict` left at `fail`, or `sync_directory` had no `planToken` (`details.missing` names the parameter to pass). Nothing was changed. | Re-read the path, name, or plan and pass the value back verbatim, after confirming with the user. |
+| `INVALID_ARGUMENT` | The call was malformed, a path was invalid, an entity had the wrong type, Overleaf rejected a name, an id held a character that is not path-safe (`details.parameter`), an upload would replace a text document without `uncheckedDocumentReplace: true` (`details.missing`), a name is already used in the target folder or a folder would move into itself, a local file cannot be read or written (`details.errno`, such as `EISDIR` or `EACCES`), or a tracked-change decision names an id twice (`details.duplicateChangeIds`) or would leave out a change that overlaps a chosen one (`details.overlappingChangeIds`; nothing was sent), or text written to a ShareJS (legacy editor) document adds a character outside the Basic Multilingual Plane, such as an emoji, adds another copy of one the document holds, or changes their order (`details.line`, the 1-based line of the first added one; Overleaf would store each as U+FFFD; nothing was sent). `details.overleafError` may carry Overleaf's short reason code. | Fix the arguments; to replace a document, prefer `write_file` with `localPath`. Replace characters outside the Basic Multilingual Plane, for example with a LaTeX command. |
+| `CONFIRMATION_MISMATCH` | A confirm-by-value parameter (`confirmPath`, `confirmName`, `confirmCount`, `confirmDeleteCount`) did not equal the value it must repeat exactly, or mirror mode was called without `confirmDeleteCount`, or `download_project_zip` or `download_compile_output` found a file at `localPath` without `overwrite: true`, or `upload_file` was given `overwrite: false` for a path that holds a document or binary file, or would replace a binary without `overwrite: true` or `expectedHash`, or `batch_upload` found taken destinations with `onConflict` left at `fail`, or `sync_directory` had no `planToken` (`details.missing` names the parameter to pass), or `manage_tracked_changes` had no `confirmCount`. Nothing was changed. | Re-read the path, name, or plan and pass the value back verbatim, after confirming with the user. |
 | `RATE_LIMITED` | Overleaf answered HTTP 429, most often on project creation, zip import, project download, or uploads. `details.retryAfterMs` carries Overleaf's hint when it sent one; the project download sends none. Nothing was applied by that request, and `batch_upload` stops there. | Wait at least `retryAfterMs`, or a minute when it is absent (uploads are counted over 15 minutes, so a batch may need longer), then try once more. |
 | `REMOTE_DRIFT` | The project, or the local folder, changed since the `planToken` was issued (`details.changed` is `remote`, `local`, or `both`), or an entity planned for deletion, or a path a sync was about to upload to, changed just before, or an upload's `expectedHash` no longer matches. Nothing was changed by that step. | Run `plan_sync` again, or read `get_project_tree` again, and review the change with the user. |
 | `PATH_OUTSIDE_ROOT` | A local path is outside what the server may touch, nothing done. `details.kind` says why: `outside_folder` for a symbolic link or `.olignore` in `localFolderPath` that leads outside it, `outside_read_roots` or `outside_write_roots` for a path outside `OVERLEAF_LOCAL_READ_ROOTS` or `OVERLEAF_LOCAL_WRITE_ROOTS`, and `session_files` for a download onto the saved session. | Use a path inside the allowed folders, remove the link, or exclude it with an `ignore` pattern. |
 | `POLICY_DENIED` | The access policy does not allow this project (`OVERLEAF_ALLOWED_PROJECTS`, `details.parameter`) or this effect (`OVERLEAF_ALLOWED_EFFECTS`, `details.effect`). Nothing was sent. | Do not work around it; ask the person who configured the server. |
+| `REVIEW_UNSUPPORTED` | Tracked changes cannot be decided here, and nothing was changed. `details.kind` says why: `feature_disabled` when the project's owner's plan or the deployment does not offer track changes, `route_unavailable` when this Overleaf has no route to accept them, and `document_protocol` when Overleaf refused to accept changes in the document's protocol. | Do not retry; decide the changes in the Overleaf editor, or ask the project's owner. The command line exits 3. |
 | `REMOTE_ERROR` | Anything else Overleaf returned or a network failure, including a project download cut short before its zip end record, or a redirect answering a request that changes something. `details.status` carries the HTTP status when there is one, and `details.reason` an identifier for a socket error: `not_connected` when the project socket was already closed and nothing was sent, `disconnected` when it closed before answering a read or during the project join (both `retryable: true`). After a write whose socket closed or failed once the update was sent, `details.outcome: "not_applied"` (with `retryable: false`) means the original revision stayed live throughout the recovery window. Local file-system failures are never `REMOTE_ERROR`. | Retry once if `retryable` is `true`; otherwise report it. |
 
 ## What changed in 0.6.0

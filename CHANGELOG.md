@@ -7,6 +7,16 @@ each such change is listed below.
 
 ## [0.8.0] - Unreleased
 
+Tracked-change review. Two new tools list a project's tracked changes, with their locations,
+authors, and excerpts, and accept or reject them in one document, on both of Overleaf's document
+protocols: every decision is checked before anything is sent, sent once, and verified on a fresh
+read. The same work makes every document write safer: an OT write the account's access level
+cannot make is refused before it is sent, a tracked write is checked for having been recorded as
+tracked changes, and Overleaf's `otUpdateError` is classified rather than passed on. Comments on
+non-ASCII text are now located and verified correctly. The server registers 33 tools, two more
+than 0.7.x. Planned in
+[ROADMAP.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/ROADMAP.md).
+
 ### Added
 
 - **`list_tracked_changes`**, read-only: lists tracked changes with `changeId`, `type`, `start`
@@ -24,11 +34,12 @@ each such change is listed below.
   anything is sent it refuses a missing or different `confirmCount` (`CONFIRMATION_MISMATCH`),
   access below owner or edit (`PERMISSION_DENIED`), a project without track changes
   (`REVIEW_UNSUPPORTED`), a stale revision (`REVISION_CONFLICT`), an id that is not a live change
-  (`NOT_FOUND`, `details.missingChangeIds`), and a change left out that overlaps a chosen one
-  (`INVALID_ARGUMENT`, `details.overlappingChangeIds`). A ShareJS accept goes through Overleaf's
-  accept route; a ShareJS reject and every history-OT decision is one untracked OT update with no
-  tracking metadata. The result is verified on a fresh join, and a decision that timed out is
-  observed, never resent. Returns the resulting `revision`, `remainingChangeCount`,
+  (`NOT_FOUND`, `details.missingChangeIds`), a change left out that overlaps a chosen one
+  (`INVALID_ARGUMENT`, `details.overlappingChangeIds`), and, for a ShareJS reject, a chosen change
+  that does not match the document text (`PROTOCOL_UNSUPPORTED`). A ShareJS accept goes through
+  Overleaf's accept route; a ShareJS reject and every history-OT decision is one untracked OT update
+  with no tracking metadata. The result is verified on a fresh join, and a decision that timed out
+  is observed, never resent. Returns the resulting `revision`, `remainingChangeCount`,
   `trackChangesActive`, and `recoveredAfterTimeout`. The server now registers 33 tools.
 - **`REVIEW_UNSUPPORTED`**, a new error code, with `details.kind` `feature_disabled` (the
   project's owner's plan or the deployment has no track changes), `route_unavailable` (Overleaf
@@ -37,6 +48,10 @@ each such change is listed below.
   `details.kind: "applied_untracked"`.
 - **Command line:** `tracked-changes list`, `tracked-changes accept`, and
   `tracked-changes reject`, shorthand for the two tools.
+- **Protocol fixtures for review**: a sanitized live capture of a ShareJS document with tracked
+  changes and a comment on non-ASCII text, a history-OT document with tracked changes written from
+  Overleaf's source together with the decision operations expected for it, and a test that fails
+  on a 24-hex id, an `@`, or a session cookie name in any file under `test/fixtures/protocol`.
 
 ### Changed
 
@@ -79,9 +94,22 @@ each such change is listed below.
   the result is then `REVISION_CONFLICT` with `details.outcome: "unknown"` and
   `details.liveRevision`, and the text is live. A no-op write is not checked. A `sync_directory`
   failed entry for such a step carries `kind: "applied_untracked"` beside its `details`.
+- **ShareJS range text is decoded like the document's lines.** Overleaf sends the text of a
+  ShareJS document's comment and tracked-change ranges as the Latin-1 reading of its UTF-8 bytes,
+  as it sends the lines; that text is now decoded the same way when the document is joined.
+  Positions, ids, and metadata are not encoded and are read as they are, and so is the text of the
+  project's range index, which is plain UTF-8.
+- The connect-time instructions (445 words) gain the tracked-change review steps, with
+  `add_comment` under one Review paragraph, and are tightened elsewhere to stay under 450 words.
 
 ### Fixed
 
+- **Comments on non-ASCII text are located and verified correctly.** On a ShareJS
+  (legacy editor) document, a comment anchored to text with a character outside ASCII, such as
+  "naïve café", was read back in its encoded form: `list_comments` reported a wrong `end` and
+  `quotedText`, and `add_comment` created the thread and attached it, then failed with
+  `OUTCOME_UNKNOWN` because the exact range could not be verified. Comment ranges are now decoded
+  as the document's lines are, so both report the range that was selected.
 - **An unconfirmed document write is reported as not applied only when the original revision was
   the last thing seen.** When a document write from `write_file`, `write_section`, `create_file`,
   or `sync_directory` timed out or lost its socket after sending, and a recovery read saw the
@@ -91,6 +119,21 @@ each such change is listed below.
   [the safety page](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) already described
   `not_applied`: the original revision stayed live throughout the recovery window. Comment writes
   already worked this way.
+
+### Documentation
+
+- The tool reference documents both new tools, the access check before a write, and
+  `applied_untracked`; the safety model lists `REVIEW_UNSUPPORTED` and how a decision is checked,
+  sent, and verified; the command line page lists the new commands and exit codes; the usage
+  guide, internals page, and README cover reviewing tracked changes, and the comparison now marks
+  accepting and rejecting them as supported. The private API catalogue records the accept route,
+  how a reject is sent, the range encoding, the change shapes of both protocols, the
+  track-changes features, and where `otUpdateError` comes from, each marked as read in Overleaf's
+  source, confirmed live, or both.
+- The roadmap records what checking v0.8.0's ten open protocol questions found.
+- `docs/development.md` describes the opt-in live test of tracked-change review,
+  `RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`, and the interface comparison's review task now
+  rejects a tracked change too.
 
 ## [0.7.1] - 2026-10-25
 

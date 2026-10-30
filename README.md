@@ -30,7 +30,7 @@
   </picture>
 </p>
 
-Overleaf Web MCP is a [Model Context Protocol](https://modelcontextprotocol.io) server, the `overleaf-web-mcp` command line, and a TypeScript library, `createOverleafClient` from `overleaf-web-mcp/core`, all over one engine with the same safety checks. It signs in to Overleaf once through a browser window you control, then lets an AI assistant, a script, or your own program work on your projects the way you would in the web editor: browse files, make revision-checked edits, optionally as tracked changes, compile, and handle review comments. It uses the same browser-facing endpoints the Overleaf editor uses, so no Git integration or premium plan is needed for the core workflow.
+Overleaf Web MCP is a [Model Context Protocol](https://modelcontextprotocol.io) server, the `overleaf-web-mcp` command line, and a TypeScript library, `createOverleafClient` from `overleaf-web-mcp/core`, all over one engine with the same safety checks. It signs in to Overleaf once through a browser window you control, then lets an AI assistant, a script, or your own program work on your projects the way you would in the web editor: browse files, make revision-checked edits, optionally as tracked changes, compile, and handle review comments and tracked changes. It uses the same browser-facing endpoints the Overleaf editor uses, so no Git integration or premium plan is needed for the core workflow.
 
 ## What you can say
 
@@ -43,6 +43,7 @@ Once connected, talk to your assistant in plain language. It picks the tools.
 - "Which figures in `./figures` differ from what's in the project? Upload only those."
 - "Make the project match `~/papers/thesis`, and show me what would be deleted first."
 - "Summarize the open review comments and reply to the one about Table 2."
+- "Go through the tracked changes in `main.tex` with me, and accept the ones I approve."
 
 ## Get started
 
@@ -126,7 +127,7 @@ try {
 - **Write safely.** Replace a whole document or a single section. Every edit is checked against the revision you read first, so a collaborator's concurrent change is reported instead of overwritten. Edits can be recorded as Overleaf tracked changes.
 - **Work by section.** Parse `\section` headings in a file, read one section, replace one section.
 - **Compile.** Build the project's configured root document, or any document you name, and get the errors and warnings from its log by file and line, with a clear yes or no on whether it built cleanly. Read the full log, save the PDF or any other output locally, or stop a running compile.
-- **Review.** List comment threads with their locations, reply, add a comment anchored to exact text, and resolve or reopen threads.
+- **Review.** List comment threads with their locations, reply, add a comment anchored to exact text, and resolve or reopen threads. List tracked changes with their authors and locations, and accept or reject them once you have confirmed which. Accepting or rejecting them needs a project whose owner's Overleaf plan includes track changes, and on self-hosted Overleaf an edition that includes it; otherwise the decision is refused with nothing changed.
 - **Follow history.** Poll recent project history with a version cursor to see who changed what.
 
 ## Tools
@@ -179,7 +180,7 @@ An upload that would replace a file, and a folder sync without a `planToken`, ar
 ## How it keeps your project safe
 
 - Text edits require the revision from a prior read and fail with a conflict if the document changed underneath.
-- Tracked changes are opt-in and never silently downgraded to plain edits.
+- Tracked changes are opt-in and never silently downgraded to plain edits. Accepting or rejecting them needs the revision they were listed with and their number confirmed, and is verified afterwards.
 - Deleting a file requires its path to be confirmed, deleting several requires their count, and trashing or deleting a project requires its name. Projects go to the trash first; permanent deletion only works from there. Downloads, including a whole-project zip, never overwrite a local file unless asked, and never write over the saved session.
 - A write that times out is observed, never resubmitted, so nothing is applied twice. The same holds for each file in a batch upload.
 - A folder sync needs the `planToken` from `plan_sync`, and stops before changing anything if the project or the folder changed since the plan. It deletes only in mirror mode, only with the delete count confirmed, and never after a failed upload.
@@ -204,7 +205,7 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | Sends edits as collaborative OT operations, not whole files | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
 | Refuses an edit if the document changed since it was read | ✅ | 🟡⁶ | ❌ | 🟡⁶ | ✅ | 🟡⁷ |
 | Writes as tracked changes when asked | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Accepts or rejects tracked changes | ❌ | ❌ | 🟡⁸ | ❌ | ❌ | ✅ |
+| Accepts or rejects tracked changes | ✅ | ❌ | 🟡⁸ | ❌ | ❌ | ✅ |
 | Reads and replaces one `\section` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Creates, renames, moves, and deletes files and folders | ✅ | 🟡⁹ | 🟡¹⁰ | 🟡⁹ | ✅ | ❌ |
 | Uploads and downloads binary files | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹¹ |
