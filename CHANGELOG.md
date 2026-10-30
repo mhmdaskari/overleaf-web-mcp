@@ -113,12 +113,18 @@ than 0.7.x. Planned in
 - **An unconfirmed document write is reported as not applied only when the original revision was
   the last thing seen.** When a document write from `write_file`, `write_section`, `create_file`,
   or `sync_directory` timed out or lost its socket after sending, and a recovery read saw the
-  original revision but every later read failed until the recovery window ended, the error was `TIMEOUT` (exit 4) or `REMOTE_ERROR`
-  (exit 1) with `details.outcome: "not_applied"`, although the write could have applied after
-  that sighting. It is now `OUTCOME_UNKNOWN` (exit 5), as
+  original revision but every later read failed until the recovery window ended, the error was
+  `TIMEOUT` (exit 4) or `REMOTE_ERROR` (exit 1) with `details.outcome: "not_applied"`, although
+  the write could have applied after that sighting. It is now `OUTCOME_UNKNOWN` (exit 5), as
   [the safety page](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) already described
   `not_applied`: the original revision stayed live throughout the recovery window. Comment writes
   already worked this way.
+- **A rate-limited project join is `RATE_LIMITED`, not `AUTH_EXPIRED`.** Overleaf allows one
+  account about 45 joins of one project a minute, and `sync_directory` joins about once per
+  upload, so a sync of a few dozen files could reach it. The refused join was reported as
+  `AUTH_EXPIRED` (exit 3), telling the caller to log in again although the session was fine. It is
+  now `RATE_LIMITED` (exit 7), retryable, with `details.reason: "join_rate_limited"`; nothing was
+  sent. Wait a minute before trying again. Every other refused join is still `AUTH_EXPIRED`.
 
 ### Documentation
 

@@ -15,6 +15,8 @@ const KNOWN_REASONS: Record<string, string> = {
   'doc not found': 'doc_not_found',
   'update is too large': 'update_too_large',
   'too many requests': 'rate_limited',
+  // web's join-project limiter, about 45 joins a minute for one user on one project.
+  'rate-limit hit when joining project': 'join_rate_limited',
   'client not handshaken': 'not_handshaken',
   // real-time's reply to an update it failed on for a reason it does not name.
   'something went wrong in real-time service': 'realtime_error',
