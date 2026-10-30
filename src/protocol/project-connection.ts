@@ -26,6 +26,12 @@ export interface JoinProjectData {
     compiler?: string
     imageName?: string
     spellCheckLanguage?: string
+    /** The project owner's features; read defensively, since any key can be missing. */
+    features?: {
+      trackChanges?: boolean
+      trackChangesVisible?: boolean
+      [key: string]: unknown
+    }
     [key: string]: unknown
   }
   permissionsLevel: string
@@ -63,6 +69,33 @@ function decodeLegacyLine(line: string): string {
   } catch {
     return line
   }
+}
+
+/** Decodes one range entry's `op.i`, `op.d`, and `op.c` into a copy; positions, ids, and metadata are not encoded. */
+function decodeRangeEntry(entry: unknown): unknown {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry
+  const { op } = entry as { op?: unknown }
+  if (!op || typeof op !== 'object' || Array.isArray(op)) return entry
+  const decoded: Record<string, unknown> = { ...(op as Record<string, unknown>) }
+  for (const key of ['i', 'd', 'c']) {
+    const value = decoded[key]
+    if (typeof value === 'string') decoded[key] = decodeLegacyLine(value)
+  }
+  return { ...(entry as Record<string, unknown>), op: decoded }
+}
+
+/**
+ * With `encodeRanges`, Overleaf sends a ShareJS document's range text as the latin1 string of its
+ * UTF-8 bytes, like the lines. The frame is left as received and a decoded copy is returned.
+ */
+function decodeLegacyRanges(ranges: unknown): unknown {
+  if (!ranges || typeof ranges !== 'object' || Array.isArray(ranges)) return ranges
+  const copy: Record<string, unknown> = { ...(ranges as Record<string, unknown>) }
+  for (const key of ['changes', 'comments']) {
+    const entries = copy[key]
+    if (Array.isArray(entries)) copy[key] = entries.map(decodeRangeEntry)
+  }
+  return copy
 }
 
 function effectiveTrackChanges(
@@ -330,7 +363,7 @@ export class ProjectConnection {
       protocol: 'sharejs',
       version: rawVersion as number,
       content,
-      ranges,
+      ranges: decodeLegacyRanges(ranges),
       rawSnapshot: content,
     }
   }

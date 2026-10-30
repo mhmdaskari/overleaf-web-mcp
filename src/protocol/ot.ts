@@ -17,7 +17,7 @@ export interface HistorySnapshot {
   }>
 }
 
-export type ShareJsComponent = { p: number; i?: string; d?: string; c?: string; t?: string }
+export type ShareJsComponent = { p: number; i?: string; d?: string; c?: string; t?: string; u?: boolean }
 export type HistoryOperation = Record<string, unknown>
 export interface HistoryTrackingContext {
   userId: string
