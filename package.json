@@ -61,6 +61,7 @@
     "@types/proper-lockfile": "^4.1.4",
     "@types/ws": "^8.18.1",
     "eslint": "^9.39.2",
+    "prettier": "^3.9.10",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.54.0",
@@ -70,12 +71,14 @@
     "build": "tsc -p tsconfig.build.json",
     "check": "tsc --noEmit",
     "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,js,mjs}\"",
+    "format:check": "prettier --check \"**/*.{ts,js,mjs}\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "login": "node dist/cli.js login",
     "start": "node dist/cli.js",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run check && npm run lint && npm test"
+    "prepublishOnly": "npm run check && npm run lint && npm run format:check && npm test"
   },
   "keywords": [
     "mcp",
