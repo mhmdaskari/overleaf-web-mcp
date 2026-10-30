@@ -20,13 +20,13 @@ export const EXIT_CODES = [
   {
     exitCode: 3,
     meaning: 'Not allowed or not available; do not retry. AUTH_EXPIRED means run `overleaf-web-mcp login`.',
-    errorCodes: ['AUTH_EXPIRED', 'PERMISSION_DENIED', 'POLICY_DENIED'],
+    errorCodes: ['AUTH_EXPIRED', 'PERMISSION_DENIED', 'POLICY_DENIED', 'REVIEW_UNSUPPORTED'],
   },
   {
     exitCode: 4,
     meaning:
-      'Read or plan again, then decide: the document or project changed, a write is known not to have applied, or part of it applied (details.created or details.applied).',
-    errorCodes: ['REVISION_CONFLICT', 'REMOTE_DRIFT', 'TIMEOUT'],
+      'Read or plan again, then decide: the document or project changed, a write is known not to have applied, or part of it applied (details.created or details.applied), or a tracked write applied untracked (details.kind "applied_untracked").',
+    errorCodes: ['REVISION_CONFLICT', 'REMOTE_DRIFT', 'TIMEOUT', 'PROTOCOL_UNSUPPORTED'],
   },
   {
     exitCode: 5,
@@ -46,7 +46,12 @@ export const EXIT_CODES = [
 ] as const satisfies ReadonlyArray<{ exitCode: number; meaning: string; errorCodes: readonly ErrorCode[] }>
 
 const FIX_THE_CALL: ReadonlySet<ErrorCode> = new Set(['INVALID_ARGUMENT', 'CONFIRMATION_MISMATCH', 'PATH_OUTSIDE_ROOT'])
-const NOT_ALLOWED: ReadonlySet<ErrorCode> = new Set(['AUTH_EXPIRED', 'PERMISSION_DENIED', 'POLICY_DENIED'])
+const NOT_ALLOWED: ReadonlySet<ErrorCode> = new Set([
+  'AUTH_EXPIRED',
+  'PERMISSION_DENIED',
+  'POLICY_DENIED',
+  'REVIEW_UNSUPPORTED',
+])
 const RETRY_LATER: ReadonlySet<ErrorCode> = new Set(['RATE_LIMITED', 'COMPILE_RATE_LIMITED', 'COMPILE_UNAVAILABLE'])
 
 /** Whether the operation changes nothing on Overleaf and writes nothing locally. */
@@ -72,6 +77,8 @@ export function exitCodeForError(error: McpError, operation?: OperationName): nu
   if (outcome === 'unknown' || error.code === 'OUTCOME_UNKNOWN') return 5
   if (NOT_ALLOWED.has(error.code)) return 3
   if (!readOnly && operation !== undefined && partlyApplied(error.details)) return 4
+  // A tracked write that applied untracked is live, never reverted: read it, then decide.
+  if (error.code === 'PROTOCOL_UNSUPPORTED' && error.details?.kind === 'applied_untracked') return 4
   if (FIX_THE_CALL.has(error.code)) return 2
   if (error.code === 'REVISION_CONFLICT' || error.code === 'REMOTE_DRIFT') return 4
   if (error.code === 'TIMEOUT') {

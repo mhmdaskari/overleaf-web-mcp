@@ -66,6 +66,31 @@ describe('operation contracts', () => {
     expect(OPERATIONS.download_file.effects).toContain('local-write')
   })
 
+  test('register the two tracked-change operations after set_comment_status, annotated exactly', () => {
+    const at = OPERATION_NAMES.indexOf('set_comment_status')
+    expect(OPERATION_NAMES.slice(at + 1, at + 3)).toEqual(['list_tracked_changes', 'manage_tracked_changes'])
+    expect(OPERATION_NAMES).toHaveLength(33)
+    expect(OPERATIONS.list_tracked_changes.annotations).toStrictEqual({ readOnlyHint: true })
+    expect(OPERATIONS.list_tracked_changes.effects).toEqual(['overleaf-read'])
+    expect(OPERATIONS.manage_tracked_changes.annotations).toStrictEqual({ destructiveHint: true, idempotentHint: true })
+    expect(OPERATIONS.manage_tracked_changes.effects).toEqual(['overleaf-write', 'overleaf-read'])
+    for (const name of ['list_tracked_changes', 'manage_tracked_changes'] as const) {
+      expect(operationContract(name).outputSchema, name).toBeDefined()
+    }
+    // confirmCount is checked by the operation, so a missing one is CONFIRMATION_MISMATCH, not a schema error.
+    const input = operationContract('manage_tracked_changes').inputSchema!
+    const base = { projectId: 'p', filePath: 'main.tex', revision: 'r', action: 'accept', changeIds: ['c'] }
+    expect(input.safeParse(base).success).toBe(true)
+    expect(input.safeParse({ ...base, changeIds: [] }).success).toBe(false)
+    expect(
+      input.safeParse({ ...base, changeIds: Array.from({ length: 501 }, (_, index) => `c${index}`) }).success
+    ).toBe(false)
+    const list = operationContract('list_tracked_changes').inputSchema!
+    expect(list.safeParse({ projectId: 'p', excerptChars: 501 }).success).toBe(false)
+    expect(list.safeParse({ projectId: 'p', limit: 0 }).success).toBe(false)
+    expect(list.parse({ projectId: 'p' })).toEqual({ projectId: 'p', excerptChars: 120, limit: 100 })
+  })
+
   test('list every error code once, POLICY_DENIED included', () => {
     expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length)
     expect(ERROR_CODES).toContain('POLICY_DENIED')

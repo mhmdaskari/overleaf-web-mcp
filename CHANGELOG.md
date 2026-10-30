@@ -7,6 +7,37 @@ each such change is listed below.
 
 ## [0.8.0] - Unreleased
 
+### Added
+
+- **`list_tracked_changes`**, read-only: lists tracked changes with `changeId`, `type`, `start`
+  and `end` (1-based line and UTF-16 column in the visible text), `length`, a bounded `excerpt`
+  that never splits a surrogate pair, `excerptTruncated`, `authorId`, `timestamp`, and
+  `pairedChangeId` for the two halves of a replacement, per document with its `revision`,
+  `protocol`, `totalChanges`, and `undecidableChanges` when Overleaf stored a change without an id.
+  `type`, `authorId`, `limit` (`totalMatched`, `truncated`), and `excerptChars` shape the result.
+  With `filePath` it reads that document; without it, only the documents Overleaf's range index
+  lists with changes, and `indexUnavailable: true` when there is no index, never every document.
+  History-OT changes carry ids made up from the change itself (`ht_...`), valid only with the
+  listed revision.
+- **`manage_tracked_changes`**, destructive: accepts or rejects tracked changes in one document,
+  given the listed `revision`, the `changeIds`, and `confirmCount` equal to their number. Before
+  anything is sent it refuses a missing or different `confirmCount` (`CONFIRMATION_MISMATCH`),
+  access below owner or edit (`PERMISSION_DENIED`), a project without track changes
+  (`REVIEW_UNSUPPORTED`), a stale revision (`REVISION_CONFLICT`), an id that is not a live change
+  (`NOT_FOUND`, `details.missingChangeIds`), and a change left out that overlaps a chosen one
+  (`INVALID_ARGUMENT`, `details.overlappingChangeIds`). A ShareJS accept goes through Overleaf's
+  accept route; a ShareJS reject and every history-OT decision is one untracked OT update with no
+  tracking metadata. The result is verified on a fresh join, and a decision that timed out is
+  observed, never resent. Returns the resulting `revision`, `remainingChangeCount`,
+  `trackChangesActive`, and `recoveredAfterTimeout`. The server now registers 33 tools.
+- **`REVIEW_UNSUPPORTED`**, a new error code, with `details.kind` `feature_disabled` (the
+  project's owner's plan or the deployment has no track changes), `route_unavailable` (Overleaf
+  has no accept route), or `document_protocol` (Overleaf refused the document's protocol). The
+  command line exits 3 for it, and 4 for `PROTOCOL_UNSUPPORTED` with
+  `details.kind: "applied_untracked"`.
+- **Command line:** `tracked-changes list`, `tracked-changes accept`, and
+  `tracked-changes reject`, shorthand for the two tools.
+
 ### Fixed
 
 - **An unconfirmed document write is reported as not applied only when the original revision was

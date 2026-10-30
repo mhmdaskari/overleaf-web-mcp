@@ -1,6 +1,6 @@
 # Command line
 
-Every tool is also a command. `overleaf-web-mcp` reaches the same 31 operations as the MCP
+Every tool is also a command. `overleaf-web-mcp` reaches the same 33 operations as the MCP
 server, through the same service, checks, and safety defaults, and prints one JSON result whose
 exit code says what is safe to do next. Use it from a shell, a script, a CI job, or a coding
 agent that works in a terminal; no MCP client is involved. Three [Agent Skills](#agent-skills)
@@ -52,6 +52,9 @@ overleaf-web-mcp compile run <projectId> [--root <path>] [--draft] [--stop-on-fi
 overleaf-web-mcp compile log <projectId> --build-ref <r> [--tail <n>] [--kind latex|bibtex] [--errors-only]
 overleaf-web-mcp compile download <projectId> <localPath> --build-ref <r> [--file <f>] [--overwrite]
 overleaf-web-mcp comments list <projectId> [--status open|resolved|all] [--file <path>] [--author <a>]
+overleaf-web-mcp tracked-changes list <projectId> [--file <path>] [--type insert|delete] [--author <id>] [--limit <n>] [--excerpt-chars <n>]
+overleaf-web-mcp tracked-changes accept <projectId> <path> --revision <r> --change <id>... --confirm-count <n>
+overleaf-web-mcp tracked-changes reject <projectId> <path> --revision <r> --change <id>... --confirm-count <n>
 ```
 
 `serve`, `login`, `keepalive`, and `--help` are the server and session commands; `serve` is the
@@ -77,6 +80,9 @@ prints the help and exits 0.
 | `compile log` | `get_compile_log` | `--build-ref` `buildRef`, `--tail` `tail`, `--kind` `kind`, `--errors-only` `format: "errors-only"` |
 | `compile download` | `download_compile_output` | `<localPath>` `localPath`, `--build-ref` `buildRef`, `--file` `file`, `--overwrite` `overwrite: true` |
 | `comments list` | `list_comments` | `--status` `status`, `--file` `filePath`, `--author` `author` |
+| `tracked-changes list` | `list_tracked_changes` | `--file` `filePath`, `--type` `type`, `--author` `authorId`, `--limit` `limit`, `--excerpt-chars` `excerptChars` |
+| `tracked-changes accept` | `manage_tracked_changes` | `action: "accept"`, `<path>` `filePath`, `--revision` `revision`, each `--change` one `changeIds` entry, `--confirm-count` `confirmCount` |
+| `tracked-changes reject` | `manage_tracked_changes` | as `tracked-changes accept`, with `action: "reject"` |
 
 A few rules the table does not show:
 
@@ -87,7 +93,12 @@ A few rules the table does not show:
 - A `planToken` is bound to the local folder, `--destination`, and `--ignore`, so `sync apply`
   needs the same values `sync plan` was given. Mirror mode needs `--confirm-delete-count`.
 - `compile log` and `compile download` require `--build-ref`.
-- `--limit`, `--tail`, and `--confirm-delete-count` take whole numbers.
+- `tracked-changes accept` and `reject` take the `revision` that `tracked-changes list` printed for
+  the document, and `--confirm-count` equal to the number of `--change` ids after the user has
+  confirmed them; without it the call is refused with `CONFIRMATION_MISMATCH`, exit 2, and
+  nothing is sent.
+- `--limit`, `--tail`, `--excerpt-chars`, `--confirm-delete-count`, and `--confirm-count` take
+  whole numbers.
 - An unknown option, a missing value, or the wrong number of arguments is a usage error: exit 2,
   with a message that names the option but never repeats a value.
 - Local paths, here and in requests, resolve against the shell's working directory.
@@ -184,8 +195,8 @@ unknown command. The exit codes below are for operation commands only.
 | 0 | Complete. | |
 | 1 | Failed for another reason; read the error code. | for example `NOT_FOUND`, `PROTOCOL_UNSUPPORTED`, `REMOTE_ERROR`, `COMPILE_FAILED`, `COMPILE_TIMEOUT`, `NO_BUILD`, `BUILD_NOT_FOUND`, `DOC_TOO_LARGE`, `UPDATE_TOO_LARGE`, `PARTIAL_CLEANUP` |
 | 2 | Fix the call: a usage error, or an argument, confirmation, or local path was refused. Nothing was changed. | usage errors, `INVALID_ARGUMENT`, `CONFIRMATION_MISMATCH`, `PATH_OUTSIDE_ROOT` |
-| 3 | Not allowed or not available; do not retry. `AUTH_EXPIRED` means run `overleaf-web-mcp login`. | `AUTH_EXPIRED`, `PERMISSION_DENIED`, `POLICY_DENIED` |
-| 4 | Read or plan again, then decide: the document or project changed, a write is known not to have applied, or part of it applied. | `REVISION_CONFLICT`, `REMOTE_DRIFT`; `TIMEOUT` with `details.outcome: "not_applied"` from an operation that is not read-only; any error with `details.created: true` or a non-empty `details.applied` from one |
+| 3 | Not allowed or not available; do not retry. `AUTH_EXPIRED` means run `overleaf-web-mcp login`. | `AUTH_EXPIRED`, `PERMISSION_DENIED`, `POLICY_DENIED`, `REVIEW_UNSUPPORTED` |
+| 4 | Read or plan again, then decide: the document or project changed, a write is known not to have applied, part of it applied, or a tracked write applied untracked. | `REVISION_CONFLICT`, `REMOTE_DRIFT`; `TIMEOUT` with `details.outcome: "not_applied"` from an operation that is not read-only; `PROTOCOL_UNSUPPORTED` with `details.kind: "applied_untracked"`; any error with `details.created: true` or a non-empty `details.applied` from one |
 | 5 | Outcome unknown: a write may have applied. Read before acting; never re-run it blindly. | `OUTCOME_UNKNOWN`; `TIMEOUT` from an operation that is not read-only, unless `details.outcome` is `not_applied` |
 | 6 | Partial: some steps completed. The result is on stdout with `status: "partial"`. | none: a `batch_upload`, `sync_directory`, or `delete_entities` result with `status: "partial"`, or `compile run --download` whose download failed |
 | 7 | Safe to retry later: nothing was changed. | `RATE_LIMITED`, `COMPILE_RATE_LIMITED`, `COMPILE_UNAVAILABLE`; `TIMEOUT` from a read-only operation |
@@ -213,9 +224,9 @@ Four rules reach beyond the codes in the table, and one rule overrides everythin
 
 The read-only operations are those annotated so in the [tool reference](tools.md): `auth_status`,
 `list_projects`, `get_project_tree`, `read_file`, `plan_sync`, `get_sections`,
-`get_section_content`, `get_compile_log`, `list_comments`, and `monitor_project_history`.
-`download_file` and `download_compile_output` write a local file, so they are not;
-`capabilities <projectId>` exits as `list_projects` would.
+`get_section_content`, `get_compile_log`, `list_comments`, `list_tracked_changes`, and
+`monitor_project_history`. `download_file` and `download_compile_output` write a local file, so
+they are not; `capabilities <projectId>` exits as `list_projects` would.
 
 `retryable` alone is not a safe signal for a wrapper that re-runs commands: the HTTP client marks
 every timeout `retryable: true`, uploads and deletes included. A script may re-run on 7, should

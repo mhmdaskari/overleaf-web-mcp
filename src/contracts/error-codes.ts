@@ -27,6 +27,7 @@ export const ERROR_CODES = [
   'PATH_OUTSIDE_ROOT',
   'POLICY_DENIED',
   'REMOTE_ERROR',
+  'REVIEW_UNSUPPORTED',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

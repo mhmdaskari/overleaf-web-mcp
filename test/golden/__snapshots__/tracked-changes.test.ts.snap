@@ -1,0 +1,410 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`list_tracked_changes golden results > a history-OT document by filePath, its ids made up from the changes 1`] = `
+{
+  "documents": [
+    {
+      "changes": [
+        {
+          "authorId": "USER",
+          "changeId": "ht_UaOhlwmPc6swfwMmVsgUVW",
+          "end": {
+            "column": 21,
+            "line": 1,
+          },
+          "excerpt": "INSERTED ",
+          "excerptTruncated": false,
+          "length": 9,
+          "start": {
+            "column": 12,
+            "line": 1,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "ht_X9ekvOW1emz-HfNoqbcBOe",
+          "end": {
+            "column": 7,
+            "line": 2,
+          },
+          "excerpt": " this phrase",
+          "excerptTruncated": false,
+          "length": 12,
+          "start": {
+            "column": 7,
+            "line": 2,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "delete",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "ht_D16H4Mg4U9rNp3yG7NeCXc",
+          "end": {
+            "column": 12,
+            "line": 3,
+          },
+          "excerpt": "new",
+          "excerptTruncated": false,
+          "length": 3,
+          "pairedChangeId": "ht_jnnvbnvqiAOUau1-XFOnSQ",
+          "start": {
+            "column": 9,
+            "line": 3,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "ht_jnnvbnvqiAOUau1-XFOnSQ",
+          "end": {
+            "column": 12,
+            "line": 3,
+          },
+          "excerpt": "old",
+          "excerptTruncated": false,
+          "length": 3,
+          "pairedChangeId": "ht_D16H4Mg4U9rNp3yG7NeCXc",
+          "start": {
+            "column": 12,
+            "line": 3,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "delete",
+        },
+        {
+          "authorId": "USER2",
+          "changeId": "ht_hfYEdUXqZIVAXUI1_blvkk",
+          "end": {
+            "column": 17,
+            "line": 4,
+          },
+          "excerpt": "über ",
+          "excerptTruncated": false,
+          "length": 5,
+          "start": {
+            "column": 12,
+            "line": 4,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "ht_hFtAmojvjDOaIim7SBAUVM",
+          "end": {
+            "column": 22,
+            "line": 4,
+          },
+          "excerpt": "😀 ",
+          "excerptTruncated": false,
+          "length": 3,
+          "start": {
+            "column": 22,
+            "line": 4,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "delete",
+        },
+      ],
+      "filePath": "history.tex",
+      "protocol": "history-ot",
+      "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiSERPQyIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6MTIsInNoYTI1NiI6IjUzMWQ0MGEzNjYyYjMyZDAzNDA5M2Q5ODRkMzRjOWRhNWQ3ZmQ1ZTY1ZGZlZGQ1ZTkxMjRhMmUwYTE5M2ViNzEifQ",
+      "totalChanges": 6,
+    },
+  ],
+  "totalMatched": 6,
+  "trackChangesActive": true,
+  "truncated": false,
+}
+`;
+
+exports[`list_tracked_changes golden results > every document the range index lists, with a type filter, a limit, and short excerpts 1`] = `
+{
+  "documents": [
+    {
+      "changes": [
+        {
+          "authorId": "USER",
+          "changeId": "change-1",
+          "end": {
+            "column": 21,
+            "line": 1,
+          },
+          "excerpt": "INSE",
+          "excerptTruncated": true,
+          "length": 9,
+          "start": {
+            "column": 12,
+            "line": 1,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "change-3",
+          "end": {
+            "column": 12,
+            "line": 3,
+          },
+          "excerpt": "new",
+          "excerptTruncated": false,
+          "length": 3,
+          "pairedChangeId": "change-4",
+          "start": {
+            "column": 9,
+            "line": 3,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "change-5",
+          "end": {
+            "column": 17,
+            "line": 4,
+          },
+          "excerpt": "über",
+          "excerptTruncated": true,
+          "length": 5,
+          "start": {
+            "column": 12,
+            "line": 4,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+      ],
+      "filePath": "main.tex",
+      "protocol": "sharejs",
+      "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiRE9DIiwicHJvdG9jb2wiOiJzaGFyZWpzIiwib3RWZXJzaW9uIjo2LCJzaGEyNTYiOiJhYzcyMWFjMzk0NTU0OGJkMDYwODljZWU1NDFkMjdkNjJmNjU4YzJkNjdiZTljZjM4YzIxMWU1MzdkNWE2NTI5In0",
+      "totalChanges": 5,
+    },
+    {
+      "changes": [
+        {
+          "authorId": "USER",
+          "changeId": "ht_UaOhlwmPc6swfwMmVsgUVW",
+          "end": {
+            "column": 21,
+            "line": 1,
+          },
+          "excerpt": "INSE",
+          "excerptTruncated": true,
+          "length": 9,
+          "start": {
+            "column": 12,
+            "line": 1,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+      ],
+      "filePath": "history.tex",
+      "protocol": "history-ot",
+      "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiSERPQyIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6MTIsInNoYTI1NiI6IjUzMWQ0MGEzNjYyYjMyZDAzNDA5M2Q5ODRkMzRjOWRhNWQ3ZmQ1ZTY1ZGZlZGQ1ZTkxMjRhMmUwYTE5M2ViNzEifQ",
+      "totalChanges": 6,
+    },
+  ],
+  "totalMatched": 6,
+  "trackChangesActive": true,
+  "truncated": true,
+}
+`;
+
+exports[`list_tracked_changes golden results > no range index: indexUnavailable and no document read 1`] = `
+{
+  "documents": [],
+  "indexUnavailable": true,
+  "totalMatched": 0,
+  "trackChangesActive": true,
+  "truncated": false,
+}
+`;
+
+exports[`list_tracked_changes golden results > one ShareJS document by filePath 1`] = `
+{
+  "documents": [
+    {
+      "changes": [
+        {
+          "authorId": "USER",
+          "changeId": "change-1",
+          "end": {
+            "column": 21,
+            "line": 1,
+          },
+          "excerpt": "INSERTED ",
+          "excerptTruncated": false,
+          "length": 9,
+          "start": {
+            "column": 12,
+            "line": 1,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "change-2",
+          "end": {
+            "column": 7,
+            "line": 2,
+          },
+          "excerpt": " this phrase",
+          "excerptTruncated": false,
+          "length": 12,
+          "start": {
+            "column": 7,
+            "line": 2,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "delete",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "change-3",
+          "end": {
+            "column": 12,
+            "line": 3,
+          },
+          "excerpt": "new",
+          "excerptTruncated": false,
+          "length": 3,
+          "pairedChangeId": "change-4",
+          "start": {
+            "column": 9,
+            "line": 3,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "change-4",
+          "end": {
+            "column": 12,
+            "line": 3,
+          },
+          "excerpt": "old",
+          "excerptTruncated": false,
+          "length": 3,
+          "pairedChangeId": "change-3",
+          "start": {
+            "column": 12,
+            "line": 3,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "delete",
+        },
+        {
+          "authorId": "USER",
+          "changeId": "change-5",
+          "end": {
+            "column": 17,
+            "line": 4,
+          },
+          "excerpt": "über ",
+          "excerptTruncated": false,
+          "length": 5,
+          "start": {
+            "column": 12,
+            "line": 4,
+          },
+          "timestamp": "2026-01-01T00:00:00.000Z",
+          "type": "insert",
+        },
+      ],
+      "filePath": "main.tex",
+      "protocol": "sharejs",
+      "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiRE9DIiwicHJvdG9jb2wiOiJzaGFyZWpzIiwib3RWZXJzaW9uIjo2LCJzaGEyNTYiOiJhYzcyMWFjMzk0NTU0OGJkMDYwODljZWU1NDFkMjdkNjJmNjU4YzJkNjdiZTljZjM4YzIxMWU1MzdkNWE2NTI5In0",
+      "totalChanges": 5,
+    },
+  ],
+  "totalMatched": 5,
+  "trackChangesActive": true,
+  "truncated": false,
+}
+`;
+
+exports[`manage_tracked_changes golden results > a ShareJS accept that timed out after Overleaf applied it is recovered, never resent 1`] = `
+{
+  "action": "accept",
+  "changeIds": [
+    "change-1",
+  ],
+  "filePath": "main.tex",
+  "protocol": "sharejs",
+  "recoveredAfterTimeout": true,
+  "remainingChangeCount": 4,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiRE9DIiwicHJvdG9jb2wiOiJzaGFyZWpzIiwib3RWZXJzaW9uIjo2LCJzaGEyNTYiOiJhYzcyMWFjMzk0NTU0OGJkMDYwODljZWU1NDFkMjdkNjJmNjU4YzJkNjdiZTljZjM4YzIxMWU1MzdkNWE2NTI5In0",
+  "trackChangesActive": true,
+}
+`;
+
+exports[`manage_tracked_changes golden results > accepts a ShareJS replacement through the accept route 1`] = `
+{
+  "action": "accept",
+  "changeIds": [
+    "change-3",
+    "change-4",
+  ],
+  "filePath": "main.tex",
+  "protocol": "sharejs",
+  "remainingChangeCount": 3,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiRE9DIiwicHJvdG9jb2wiOiJzaGFyZWpzIiwib3RWZXJzaW9uIjo2LCJzaGEyNTYiOiJhYzcyMWFjMzk0NTU0OGJkMDYwODljZWU1NDFkMjdkNjJmNjU4YzJkNjdiZTljZjM4YzIxMWU1MzdkNWE2NTI5In0",
+  "trackChangesActive": true,
+}
+`;
+
+exports[`manage_tracked_changes golden results > decides history-OT changes with the fixture operation: accept-replacement-pair 1`] = `
+{
+  "action": "accept",
+  "changeIds": [
+    "ht_D16H4Mg4U9rNp3yG7NeCXc",
+    "ht_jnnvbnvqiAOUau1-XFOnSQ",
+  ],
+  "filePath": "history.tex",
+  "protocol": "history-ot",
+  "remainingChangeCount": 4,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiSERPQyIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6MTMsInNoYTI1NiI6IjUzMWQ0MGEzNjYyYjMyZDAzNDA5M2Q5ODRkMzRjOWRhNWQ3ZmQ1ZTY1ZGZlZGQ1ZTkxMjRhMmUwYTE5M2ViNzEifQ",
+  "trackChangesActive": true,
+}
+`;
+
+exports[`manage_tracked_changes golden results > decides history-OT changes with the fixture operation: reject-non-ascii-and-astral 1`] = `
+{
+  "action": "reject",
+  "changeIds": [
+    "ht_hfYEdUXqZIVAXUI1_blvkk",
+    "ht_hFtAmojvjDOaIim7SBAUVM",
+  ],
+  "filePath": "history.tex",
+  "protocol": "history-ot",
+  "remainingChangeCount": 4,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiSERPQyIsInByb3RvY29sIjoiaGlzdG9yeS1vdCIsIm90VmVyc2lvbiI6MTMsInNoYTI1NiI6IjJlOWQ0NzBhNzM2MGM5ZTJmZGI3ZmNkYTQ0MGUzMmQxZjBhNzIwNTg5ZDA2ZmZjZDJjOTQ0OGExYjhlYjM5YzQifQ",
+  "trackChangesActive": true,
+}
+`;
+
+exports[`manage_tracked_changes golden results > rejects ShareJS changes, non-ASCII included, in one untracked update 1`] = `
+{
+  "action": "reject",
+  "changeIds": [
+    "change-5",
+    "change-3",
+    "change-4",
+    "change-1",
+  ],
+  "filePath": "main.tex",
+  "protocol": "sharejs",
+  "remainingChangeCount": 1,
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiRE9DIiwicHJvdG9jb2wiOiJzaGFyZWpzIiwib3RWZXJzaW9uIjo3LCJzaGEyNTYiOiJkOTM5Y2VlOWY1NDQxZDk5Y2UyMGRmMWFlMjU3ZTEyZGQ2NmQ5M2Y0ODIzZWQ4Mjc3MDNlZWQzMTY5NWZkMjNmIn0",
+  "trackChangesActive": true,
+}
+`;

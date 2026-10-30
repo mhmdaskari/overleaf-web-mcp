@@ -125,6 +125,18 @@ function commands(): Command[] {
       argv: ['compile', 'download', 'p', join(out, 'build.pdf'), '--build-ref', 'ref', '--overwrite'],
     },
     { label: 'comments list', argv: ['comments', 'list', 'p', '--status', 'all', '--author', 'Ada'] },
+    {
+      label: 'tracked-changes list',
+      argv: ['tracked-changes', 'list', 'p', '--file', 'main.tex', '--type', 'insert', '--limit', '5'],
+    },
+    {
+      label: 'tracked-changes accept',
+      argv: ['tracked-changes', 'accept', 'p', 'main.tex', '--revision', 'r', '--change', 'c', '--confirm-count', '1'],
+    },
+    {
+      label: 'tracked-changes reject',
+      argv: ['tracked-changes', 'reject', 'p', 'main.tex', '--revision', 'r', '--change', 'c', '--confirm-count', '1'],
+    },
   ]
   const calls = OPERATION_NAMES.map(name => ({
     label: `call ${name}`,

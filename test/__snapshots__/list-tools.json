@@ -1136,7 +1136,8 @@
                   "REMOTE_DRIFT",
                   "PATH_OUTSIDE_ROOT",
                   "POLICY_DENIED",
-                  "REMOTE_ERROR"
+                  "REMOTE_ERROR",
+                  "REVIEW_UNSUPPORTED"
                 ]
               },
               "message": {
@@ -1722,7 +1723,8 @@
                   "REMOTE_DRIFT",
                   "PATH_OUTSIDE_ROOT",
                   "POLICY_DENIED",
-                  "REMOTE_ERROR"
+                  "REMOTE_ERROR",
+                  "REVIEW_UNSUPPORTED"
                 ]
               },
               "message": {
@@ -1912,7 +1914,8 @@
                   "REMOTE_DRIFT",
                   "PATH_OUTSIDE_ROOT",
                   "POLICY_DENIED",
-                  "REMOTE_ERROR"
+                  "REMOTE_ERROR",
+                  "REVIEW_UNSUPPORTED"
                 ]
               },
               "message": {
@@ -3289,6 +3292,330 @@
         "revision",
         "trackChangesActive",
         "writeMode"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": true
+    }
+  },
+  {
+    "name": "list_tracked_changes",
+    "description": "List tracked changes (suggestions) and where they are, so they can be accepted or rejected with manage_tracked_changes. With filePath, that document is read and its list is authoritative. Without it, Overleaf's project range index only chooses which documents to read: just the documents it lists with changes are read, its change ids are never used, and it may lag or leave a document out, so name a document with filePath for an authoritative list (this matters most for history-OT documents, whose index ids are never valid). indexUnavailable: true means the deployment has no index and no document was read. type and authorId keep only matching changes; limit (default 100, at most 500) caps the changes returned across all documents, totalMatched counts every match, and truncated says some were left out. Returns documents, each with filePath, revision (pass it to manage_tracked_changes), protocol, totalChanges (every tracked change in the document, unfiltered), undecidableChanges when some changes carry no id and cannot be decided by this server, and changes: changeId, type (insert: suggested text that is visible; delete: suggested removal of text that is no longer visible), start and end (1-based line and UTF-16 column in the text read_file returns; a delete is a point, so its start equals its end), length in UTF-16 units, excerpt of the inserted or deleted text (at most excerptChars UTF-16 units, default 120, 0 for none) with excerptTruncated, authorId (an Overleaf user id, or null), an ISO timestamp, and pairedChangeId linking the insert and the delete of one replacement. Also returns trackChangesActive. Ids merge and split as the document is edited, and history-OT ids are valid only with the revision they were listed with, so list again before deciding.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Overleaf project ID"
+        },
+        "filePath": {
+          "description": "Only this document, read directly rather than through the index",
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "description": "Only inserts or only deletes",
+          "type": "string",
+          "enum": [
+            "insert",
+            "delete"
+          ]
+        },
+        "authorId": {
+          "description": "Only changes by this Overleaf user id",
+          "type": "string",
+          "minLength": 1
+        },
+        "excerptChars": {
+          "default": 120,
+          "description": "Longest excerpt of each change, in UTF-16 units; 0 for none",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "limit": {
+          "default": 100,
+          "description": "Most changes returned across all documents",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      },
+      "required": [
+        "projectId"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "documents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "filePath": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              },
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "sharejs",
+                  "history-ot"
+                ]
+              },
+              "totalChanges": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "undecidableChanges": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "changeId": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "insert",
+                        "delete"
+                      ]
+                    },
+                    "start": {
+                      "type": "object",
+                      "properties": {
+                        "line": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "column": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "line",
+                        "column"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "end": {
+                      "type": "object",
+                      "properties": {
+                        "line": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "column": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "line",
+                        "column"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "length": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "excerpt": {
+                      "type": "string"
+                    },
+                    "excerptTruncated": {
+                      "type": "boolean"
+                    },
+                    "authorId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    },
+                    "pairedChangeId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "changeId",
+                    "type",
+                    "start",
+                    "end",
+                    "length",
+                    "excerptTruncated",
+                    "authorId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "filePath",
+              "revision",
+              "protocol",
+              "totalChanges",
+              "changes"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "totalMatched": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "indexUnavailable": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "documents",
+        "totalMatched",
+        "truncated",
+        "trackChangesActive"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "manage_tracked_changes",
+    "description": "Accept or reject tracked changes in one document. First list them with list_tracked_changes and confirm them with the user, then pass that document's filePath and revision, the changeIds (1 to 500, each once), and confirmCount equal to the number of changeIds; a missing or different confirmCount is CONFIRMATION_MISMATCH and nothing is sent. Accepting an insert keeps its text and accepting a delete removes it; rejecting an insert removes its text and rejecting a delete restores it. A tracked replacement is an insert and a delete linked by pairedChangeId: pass both ids. Checked in this order before anything is sent: access (only the owner and collaborators who can edit may decide; review-only and read-only access is PERMISSION_DENIED), whether track changes is available for the project (REVIEW_UNSUPPORTED, details.kind \"feature_disabled\"; review may need a plan that includes it), the revision (REVISION_CONFLICT), that every id is a tracked change in this document (NOT_FOUND, details.missingChangeIds), and that no change left out overlaps a chosen one (INVALID_ARGUMENT, details.overlappingChangeIds). REVIEW_UNSUPPORTED with details.kind \"route_unavailable\" or \"document_protocol\" means this Overleaf cannot decide changes this way. The decision is sent once and verified on a fresh read of the document. One that timed out is observed, never resent: recoveredAfterTimeout: true when it applied, TIMEOUT or REMOTE_ERROR with details.outcome \"not_applied\" when it did not, REVISION_CONFLICT with details.outcome \"unknown\" when the document changed meanwhile, and OUTCOME_UNKNOWN when it could not be observed. A repeated decision changes nothing: it fails with REVISION_CONFLICT when the first one changed the document's revision, as every reject and every history-OT decision does, or with NOT_FOUND when it did not, as after an accept on a ShareJS document, which leaves the revision as it was. Rejecting on a ShareJS (legacy editor) document may notify the change's author; on a history-OT document it does not. Returns action, filePath, changeIds, the resulting revision and protocol, remainingChangeCount (tracked changes left in the document), trackChangesActive, and recoveredAfterTimeout. List again after every decision and after REVISION_CONFLICT or NOT_FOUND: ids merge and split, and history-OT ids are valid only with the revision they were listed with.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Overleaf project ID"
+        },
+        "filePath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project-relative path using forward slashes"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The revision list_tracked_changes returned for this document"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "reject"
+          ]
+        },
+        "changeIds": {
+          "minItems": 1,
+          "maxItems": 500,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "changeId values from list_tracked_changes, all in this document, each once"
+        },
+        "confirmCount": {
+          "description": "Must equal the number of changeIds, after the user has confirmed them",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "projectId",
+        "filePath",
+        "revision",
+        "action",
+        "changeIds"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "reject"
+          ]
+        },
+        "filePath": {
+          "type": "string"
+        },
+        "changeIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "revision": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "sharejs",
+            "history-ot"
+          ]
+        },
+        "remainingChangeCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "recoveredAfterTimeout": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "action",
+        "filePath",
+        "changeIds",
+        "revision",
+        "protocol",
+        "remainingChangeCount",
+        "trackChangesActive"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false

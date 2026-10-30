@@ -139,6 +139,41 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
     trackChangesActive: false,
     writeMode: 'untracked',
   },
+  list_tracked_changes: {
+    documents: [
+      {
+        filePath: 'main.tex',
+        revision: 'r',
+        protocol: 'sharejs',
+        totalChanges: 1,
+        changes: [
+          {
+            changeId: 'c',
+            type: 'insert',
+            start: { line: 1, column: 1 },
+            end: { line: 1, column: 4 },
+            length: 3,
+            excerpt: 'new',
+            excerptTruncated: false,
+            authorId: 'u',
+            timestamp: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    ],
+    totalMatched: 1,
+    truncated: false,
+    trackChangesActive: false,
+  },
+  manage_tracked_changes: {
+    action: 'accept',
+    filePath: 'main.tex',
+    changeIds: ['c'],
+    revision: 'r',
+    protocol: 'sharejs',
+    remainingChangeCount: 0,
+    trackChangesActive: false,
+  },
   monitor_project_history: {
     projectId: 'p',
     currentVersion: 2,

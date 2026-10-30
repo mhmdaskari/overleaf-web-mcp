@@ -47,6 +47,7 @@ function fakeRuntime() {
       addComment: vi.fn(),
       setCommentStatus: vi.fn(),
     },
+    trackedChanges: { listTrackedChanges: vi.fn(), manageTrackedChanges: vi.fn() },
     history: { monitorProjectHistory: vi.fn() },
     sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn(), batchUpload: vi.fn() },
   }
