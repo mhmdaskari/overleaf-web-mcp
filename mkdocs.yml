@@ -48,6 +48,7 @@ nav:
   - Internals: internals.md
   - Private API: private-api.md
   - Development: development.md
+  - Contributing: contributing.md
   - Roadmap: roadmap.md
   - Changelog: changelog.md
 
