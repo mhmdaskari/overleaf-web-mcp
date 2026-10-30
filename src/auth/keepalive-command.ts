@@ -37,13 +37,10 @@ export async function runKeepaliveCommand(
   dependencies: KeepaliveCommandDependencies = {}
 ): Promise<KeepaliveResult> {
   const createRuntime =
-    dependencies.createRuntime ??
-    (async (runtimeConfig: AppConfig) => await OverleafRuntime.create(runtimeConfig))
+    dependencies.createRuntime ?? (async (runtimeConfig: AppConfig) => await OverleafRuntime.create(runtimeConfig))
   const runtime = await createRuntime(config)
   try {
-    const sessionExpiresAt = await runtime.cookieStore.sessionExpiresAt(
-      `${runtime.config.baseUrl}/project`
-    )
+    const sessionExpiresAt = await runtime.cookieStore.sessionExpiresAt(`${runtime.config.baseUrl}/project`)
     return {
       refreshed: true,
       baseUrl: runtime.config.baseUrl,

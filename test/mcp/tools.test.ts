@@ -134,8 +134,9 @@ describe('MCP tool registration', () => {
       destructiveHint: true,
     })
     expect(registered.get('compile_project')?.config.description).not.toMatch(/rootDoc_id/u)
-    const rootFilePathSchema = registered.get('compile_project')?.config.inputSchema.shape
-      .rootFilePath as { safeParse: (value: unknown) => { success: boolean } }
+    const rootFilePathSchema = registered.get('compile_project')?.config.inputSchema.shape.rootFilePath as {
+      safeParse: (value: unknown) => { success: boolean }
+    }
     expect(rootFilePathSchema.safeParse(undefined).success).toBe(true)
   })
 
@@ -216,13 +217,7 @@ describe('MCP tool registration', () => {
       writeMode: 'tracked',
     })
 
-    expect(runtime.documents.writeFile).toHaveBeenCalledWith(
-      'project',
-      'main.tex',
-      'revision',
-      'content',
-      'tracked'
-    )
+    expect(runtime.documents.writeFile).toHaveBeenCalledWith('project', 'main.tex', 'revision', 'content', 'tracked')
     expect(runtime.sections.writeSection).toHaveBeenCalledWith(
       'project',
       'main.tex',
@@ -231,19 +226,12 @@ describe('MCP tool registration', () => {
       'content',
       'tracked'
     )
-    expect(runtime.createFile).toHaveBeenCalledWith(
-      'project',
-      'chapter.tex',
-      'content',
-      'tracked'
-    )
+    expect(runtime.createFile).toHaveBeenCalledWith('project', 'chapter.tex', 'content', 'tracked')
   })
 
   test('returns structured tool errors without leaking stack traces', async () => {
     const runtime = fakeRuntime()
-    runtime.documents.readFile.mockRejectedValue(
-      new McpError('AUTH_EXPIRED', 'Re-export cookies.')
-    )
+    runtime.documents.readFile.mockRejectedValue(new McpError('AUTH_EXPIRED', 'Re-export cookies.'))
     const registered = new Map<string, (...args: any[]) => any>()
     registerOverleafTools(
       {
@@ -412,7 +400,15 @@ describe('MCP tool registration', () => {
     }
     // The safety contract has to be readable from the descriptions alone.
     const sync = registered.get('sync_directory')?.config.description as string
-    for (const term of ['plan_sync', 'planToken', 'REMOTE_DRIFT', 'REVISION_CONFLICT', 'confirmDeleteCount', 'CONFIRMATION_MISMATCH', 'never after any upload or write failed']) {
+    for (const term of [
+      'plan_sync',
+      'planToken',
+      'REMOTE_DRIFT',
+      'REVISION_CONFLICT',
+      'confirmDeleteCount',
+      'CONFIRMATION_MISMATCH',
+      'never after any upload or write failed',
+    ]) {
       expect(sync).toContain(term)
     }
     expect(registered.get('plan_sync')?.config.description).toMatch(/changing nothing/u)
@@ -435,12 +431,18 @@ describe('MCP tool registration', () => {
       remaining: [],
       identicalCount: 0,
     }
-    runtime.sync.syncDirectory.mockImplementation(async (_id: string, _path: string, options: {
-      onProgress?: (progress: number, total: number, message: string) => Promise<void>
-    }) => {
-      await options.onProgress?.(1, 2, 'Uploaded 1 of 2')
-      return result
-    })
+    runtime.sync.syncDirectory.mockImplementation(
+      async (
+        _id: string,
+        _path: string,
+        options: {
+          onProgress?: (progress: number, total: number, message: string) => Promise<void>
+        }
+      ) => {
+        await options.onProgress?.(1, 2, 'Uploaded 1 of 2')
+        return result
+      }
+    )
     const registered = new Map<string, (...args: any[]) => any>()
     registerOverleafTools(
       {
@@ -465,13 +467,17 @@ describe('MCP tool registration', () => {
     const synced = await registered.get('sync_directory')!(args, {
       mcpReq: { _meta: { progressToken: 7 }, notify },
     })
-    expect(runtime.sync.syncDirectory).toHaveBeenCalledWith('p', '/work/paper', expect.objectContaining({
-      mode: 'mirror',
-      planToken: 'token',
-      confirmDeleteCount: 3,
-      writeMode: 'untracked',
-      stopOnError: false,
-    }))
+    expect(runtime.sync.syncDirectory).toHaveBeenCalledWith(
+      'p',
+      '/work/paper',
+      expect.objectContaining({
+        mode: 'mirror',
+        planToken: 'token',
+        confirmDeleteCount: 3,
+        writeMode: 'untracked',
+        stopOnError: false,
+      })
+    )
     expect(notify).toHaveBeenCalledWith({
       method: 'notifications/progress',
       params: { progressToken: 7, progress: 1, total: 2, message: 'Uploaded 1 of 2' },
@@ -503,7 +509,17 @@ describe('MCP tool registration', () => {
     const batch = registered.get('batch_upload')!
     expect(batch.config.annotations).toEqual({ destructiveHint: true, idempotentHint: false })
     expect(batch.config.outputSchema).toBeDefined()
-    for (const term of ['destinationPath', 'onConflict', 'fail', 'skip', 'overwrite', 'write_file', 'stopOnError', 'never resubmitted', 'OUTCOME_UNKNOWN']) {
+    for (const term of [
+      'destinationPath',
+      'onConflict',
+      'fail',
+      'skip',
+      'overwrite',
+      'write_file',
+      'stopOnError',
+      'never resubmitted',
+      'OUTCOME_UNKNOWN',
+    ]) {
       expect(batch.config.description).toContain(term)
     }
     const input = batch.config.inputSchema as { parse: (value: unknown) => Record<string, unknown> }
@@ -516,16 +532,32 @@ describe('MCP tool registration', () => {
     // It writes a local file, so it is not read-only, and overwrite can replace one.
     expect(zip.config.annotations).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: false })
     expect(zip.config.outputSchema).toBeDefined()
-    for (const term of ['overwrite', 'CONFIRMATION_MISMATCH', 'mirror sync_directory', 'RATE_LIMITED', 'PERMISSION_DENIED'])  {
+    for (const term of [
+      'overwrite',
+      'CONFIRMATION_MISMATCH',
+      'mirror sync_directory',
+      'RATE_LIMITED',
+      'PERMISSION_DENIED',
+    ]) {
       expect(zip.config.description).toContain(term)
     }
-    expect((zip.config.inputSchema as { parse: (value: unknown) => unknown }).parse({ projectId: 'p', localPath: 'b.zip' })).toEqual({
+    expect(
+      (zip.config.inputSchema as { parse: (value: unknown) => unknown }).parse({ projectId: 'p', localPath: 'b.zip' })
+    ).toEqual({
       projectId: 'p',
       localPath: 'b.zip',
       overwrite: false,
     })
 
-    const uploaded = { status: 'complete', onConflict: 'skip', completed: [], skipped: [], failed: [], remaining: [], verified: true }
+    const uploaded = {
+      status: 'complete',
+      onConflict: 'skip',
+      completed: [],
+      skipped: [],
+      failed: [],
+      remaining: [],
+      verified: true,
+    }
     runtime.sync.batchUpload.mockResolvedValue(uploaded)
     const files = [{ localPath: '/a.png', destinationPath: 'figs/a.png' }]
     const batchResult = await batch.handler({ projectId: 'p', files, onConflict: 'skip', stopOnError: true })
@@ -539,7 +571,10 @@ describe('MCP tool registration', () => {
     const downloaded = { projectId: 'p', localPath: '/abs/b.zip', bytes: 10, replaced: false }
     runtime.projects.downloadProjectZip.mockResolvedValue(downloaded)
     const zipResult = await zip.handler({ projectId: 'p', localPath: 'b.zip', overwrite: false })
-    expect(runtime.projects.downloadProjectZip).toHaveBeenCalledWith('p', 'b.zip', { overwrite: false, timeoutMs: undefined })
+    expect(runtime.projects.downloadProjectZip).toHaveBeenCalledWith('p', 'b.zip', {
+      overwrite: false,
+      timeoutMs: undefined,
+    })
     expect(zipResult.structuredContent).toEqual(downloaded)
   })
 

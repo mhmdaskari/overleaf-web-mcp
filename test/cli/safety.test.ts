@@ -47,7 +47,10 @@ const cleanup: string[] = [base]
 
 beforeAll(async () => {
   await mkdir(base, { mode: 0o700 })
-  await writeFile(jar, `# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t2147483647\toverleaf.sid\t${COOKIE}\n`)
+  await writeFile(
+    jar,
+    `# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t2147483647\toverleaf.sid\t${COOKIE}\n`
+  )
   if (process.platform !== 'win32') await chmod(jar, 0o600)
   await mkdir(local)
   await mkdir(out)
@@ -83,11 +86,25 @@ function commands(): Command[] {
   const aliases: Command[] = [
     {
       label: 'projects list',
-      argv: ['projects', 'list', '--query', 'Paper', '--limit', '5', '--sort', 'name', '--include-archived', '--include-trashed'],
+      argv: [
+        'projects',
+        'list',
+        '--query',
+        'Paper',
+        '--limit',
+        '5',
+        '--sort',
+        'name',
+        '--include-archived',
+        '--include-trashed',
+      ],
     },
     { label: 'tree', argv: ['tree', 'p'] },
     { label: 'files read', argv: ['files', 'read', 'p', 'main.tex'] },
-    { label: 'files write --stdin', argv: ['files', 'write', 'p', 'main.tex', '--revision', 'r', '--stdin', '--tracked'] },
+    {
+      label: 'files write --stdin',
+      argv: ['files', 'write', 'p', 'main.tex', '--revision', 'r', '--stdin', '--tracked'],
+    },
     {
       label: 'files write --content-file',
       argv: ['files', 'write', 'p', 'main.tex', '--revision', 'r', '--content-file', join(local, 'main.tex')],
@@ -98,7 +115,10 @@ function commands(): Command[] {
       label: 'sync apply',
       argv: ['sync', 'apply', 'p', local, '--mode', 'additive', '--unplanned', '--stop-on-error', '--progress'],
     },
-    { label: 'compile run', argv: ['compile', 'run', 'p', '--draft', '--download', join(out, 'run.pdf'), '--overwrite'] },
+    {
+      label: 'compile run',
+      argv: ['compile', 'run', 'p', '--draft', '--download', join(out, 'run.pdf'), '--overwrite'],
+    },
     { label: 'compile log', argv: ['compile', 'log', 'p', '--build-ref', 'ref', '--tail', '20', '--errors-only'] },
     {
       label: 'compile download',
@@ -170,7 +190,10 @@ function reflecting(style: Style): Fetcher {
       case 'network':
         throw new Error(`socket hang up after sending ${echo}`)
       case 'server-error':
-        return new Response(`Internal error while handling ${echo}`, { status: 500, headers: { 'content-type': 'text/plain' } })
+        return new Response(`Internal error while handling ${echo}`, {
+          status: 500,
+          headers: { 'content-type': 'text/plain' },
+        })
       case 'json-error':
         return Response.json({ error: echo, message: echo }, { status: 400 })
       case 'unexpected-json':
@@ -226,12 +249,18 @@ describe('operation commands never open a browser or print a secret', () => {
         alias.words.join(' ')
       ).toBe(true)
     }
-    for (const name of OPERATION_NAMES) expect(lines.some(command => command.label === `call ${name}`), name).toBe(true)
+    for (const name of OPERATION_NAMES)
+      expect(
+        lines.some(command => command.label === `call ${name}`),
+        name
+      ).toBe(true)
   })
 
   test('every local path in the sweep is inside its own temporary folder', () => {
     const paths = commands().flatMap(command =>
-      command.argv.flatMap(arg => (arg.startsWith('{') ? JSON.stringify(JSON.parse(arg)).match(/"\/[^"]*"/gu) ?? [] : [arg]))
+      command.argv.flatMap(arg =>
+        arg.startsWith('{') ? (JSON.stringify(JSON.parse(arg)).match(/"\/[^"]*"/gu) ?? []) : [arg]
+      )
     )
     const found = paths.map(path => path.replace(/^"|"$/gu, '')).filter(path => path.includes('/'))
     expect(found.length).toBeGreaterThan(10)
@@ -247,7 +276,9 @@ describe('operation commands never open a browser or print a secret', () => {
       expectNothingLeaked(run.stderr, `${command.label} with a fake`)
     }
     const failing = fakeServiceRuntime()
-    for (const mock of Object.values(failing).flatMap(value => (vi.isMockFunction(value) ? [value] : Object.values(value)))) {
+    for (const mock of Object.values(failing).flatMap(value =>
+      vi.isMockFunction(value) ? [value] : Object.values(value)
+    )) {
       if (vi.isMockFunction(mock) && mock !== failing.close) {
         mock.mockRejectedValue(new McpError('TIMEOUT', 'Timed out.', { retryable: true }))
       }
@@ -316,7 +347,9 @@ describe('operation commands never open a browser or print a secret', () => {
   test('the browser mock is the one the login command reaches', async () => {
     // Only login may open a browser; here it reaches the mock, so every other test here would have seen any call.
     await expect(
-      runLoginCommand(readConfig({ OVERLEAF_COOKIE_JAR_FILE: join(base, 'unused.txt'), OVERLEAF_BASE_URL: 'https://overleaf.test' }))
+      runLoginCommand(
+        readConfig({ OVERLEAF_COOKIE_JAR_FILE: join(base, 'unused.txt'), OVERLEAF_BASE_URL: 'https://overleaf.test' })
+      )
     ).rejects.toThrow('A browser was opened.')
     expect(captureBrowserSession).toHaveBeenCalledTimes(1)
   })

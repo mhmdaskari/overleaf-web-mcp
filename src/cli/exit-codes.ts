@@ -13,7 +13,8 @@ export const EXIT_CODES = [
   { exitCode: 1, meaning: 'Failed for another reason; read the error code.', errorCodes: [] },
   {
     exitCode: 2,
-    meaning: 'Fix the call: a usage error or an argument, confirmation, or local path was refused. Nothing was changed.',
+    meaning:
+      'Fix the call: a usage error or an argument, confirmation, or local path was refused. Nothing was changed.',
     errorCodes: ['INVALID_ARGUMENT', 'CONFIRMATION_MISMATCH', 'PATH_OUTSIDE_ROOT'],
   },
   {
@@ -32,7 +33,11 @@ export const EXIT_CODES = [
     meaning: 'Outcome unknown: a write may have applied. Read before acting; never re-run it blindly.',
     errorCodes: ['OUTCOME_UNKNOWN', 'TIMEOUT'],
   },
-  { exitCode: 6, meaning: 'Partial: some steps completed. The result is on stdout with status "partial".', errorCodes: [] },
+  {
+    exitCode: 6,
+    meaning: 'Partial: some steps completed. The result is on stdout with status "partial".',
+    errorCodes: [],
+  },
   {
     exitCode: 7,
     meaning: 'Safe to retry later: nothing was changed.',

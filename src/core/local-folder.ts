@@ -58,10 +58,7 @@ function byName(left: Dirent, right: Dirent): number {
  * linked folder that leads back into one of its own ancestors is refused as a cycle. Ignored
  * folders are never descended into, so their contents are reported once, as the folder.
  */
-export async function scanLocalFolder(
-  localFolderPath: string,
-  rules: SyncIgnoreRules
-): Promise<LocalFolderScan> {
+export async function scanLocalFolder(localFolderPath: string, rules: SyncIgnoreRules): Promise<LocalFolderScan> {
   let root: string
   try {
     root = await realpath(localFolderPath)

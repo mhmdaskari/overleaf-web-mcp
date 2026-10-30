@@ -57,7 +57,9 @@ describe('operation commands never load MCP', () => {
       throw new Error('this command opens no session')
     })
     const schema = captureIo()
-    expect(await runCommandLine(['schema', 'read_file', '--input'], schema.io, { env: ENV, createRuntime: unused })).toBe(0)
+    expect(
+      await runCommandLine(['schema', 'read_file', '--input'], schema.io, { env: ENV, createRuntime: unused })
+    ).toBe(0)
     expect(schema.stderr()).toBe('')
     expect(JSON.parse(schema.stdout())).toMatchObject({
       type: 'object',
@@ -67,7 +69,10 @@ describe('operation commands never load MCP', () => {
     const capabilities = captureIo()
     expect(await runCommandLine(['capabilities'], capabilities.io, { env: ENV, createRuntime: unused })).toBe(0)
     expect(capabilities.stderr()).toBe('')
-    const report = JSON.parse(capabilities.stdout()) as { operations: Array<{ name: string }>; project: Record<string, unknown> }
+    const report = JSON.parse(capabilities.stdout()) as {
+      operations: Array<{ name: string }>
+      project: Record<string, unknown>
+    }
     expect(report.operations.map(operation => operation.name)).toEqual(OPERATION_NAMES)
     expect(Object.values(report.project).every(value => value === 'unknown')).toBe(true)
     expect(unused).not.toHaveBeenCalled()

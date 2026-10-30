@@ -104,7 +104,8 @@ async function withRuntime<T>(
   work: (runtime: CliRuntime) => Promise<T>
 ): Promise<T> {
   const config = readConfig(dependencies.env)
-  const create = dependencies.createRuntime ?? (async (runtimeConfig: AppConfig) => await OverleafRuntime.create(runtimeConfig))
+  const create =
+    dependencies.createRuntime ?? (async (runtimeConfig: AppConfig) => await OverleafRuntime.create(runtimeConfig))
   // Opening the session only reads (GET /project), so its failure exits as a read's would, even
   // for a command that writes: nothing of the operation was sent yet.
   const operation = run.operation
@@ -165,7 +166,12 @@ async function runOperation(
   return exitCodeForResult(result)
 }
 
-async function runCapabilities(projectId: string | undefined, io: CliIo, dependencies: CliDependencies, run: Run): Promise<number> {
+async function runCapabilities(
+  projectId: string | undefined,
+  io: CliIo,
+  dependencies: CliDependencies,
+  run: Run
+): Promise<number> {
   const config = readConfig(dependencies.env)
   // The policy is resolved as every other command resolves it, local paths only, so a root that
   // does not exist fails here too instead of being reported as configured.
@@ -185,7 +191,11 @@ async function runCapabilities(projectId: string | undefined, io: CliIo, depende
     } else {
       // The lookup is the project listing list_projects reads, so its failures exit as that read's would.
       run.operation = 'list_projects'
-      const summary = await withRuntime(dependencies, run, async runtime => await runtime.account.findProject(projectId))
+      const summary = await withRuntime(
+        dependencies,
+        run,
+        async runtime => await runtime.account.findProject(projectId)
+      )
       lookup = { projectId, summary }
     }
   }

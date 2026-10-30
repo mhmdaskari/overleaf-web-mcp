@@ -44,10 +44,7 @@ export interface SyncIgnoreRules {
  * Patterns match case-insensitively, and a folder pattern such as `build/` covers everything
  * inside that folder.
  */
-export async function loadSyncIgnoreRules(
-  root: string,
-  extra: readonly string[] = []
-): Promise<SyncIgnoreRules> {
+export async function loadSyncIgnoreRules(root: string, extra: readonly string[] = []): Promise<SyncIgnoreRules> {
   let olignore: string | undefined
   try {
     const path = await realpath(join(root, OLIGNORE_FILE))

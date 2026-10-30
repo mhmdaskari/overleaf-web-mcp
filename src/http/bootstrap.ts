@@ -6,9 +6,7 @@ function decodeHtml(value: string): string {
     .replace(/&gt;/gu, '>')
     .replace(/&amp;/gu, '&')
     .replace(/&#(\d+);/gu, (_match, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([\da-f]+);/giu, (_match, code: string) =>
-      String.fromCodePoint(Number.parseInt(code, 16))
-    )
+    .replace(/&#x([\da-f]+);/giu, (_match, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
 }
 
 function attributes(tag: string): Record<string, string> {

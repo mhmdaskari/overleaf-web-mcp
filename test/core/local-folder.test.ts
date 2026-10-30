@@ -74,9 +74,7 @@ describe('local folder scan', () => {
     const scan = await scanLocalFolder(root, await loadSyncIgnoreRules(root))
 
     expect(scan.files.map(file => file.path)).toEqual(['figures/a.png', 'figures/b.png', 'main.tex'])
-    expect(scan.files.find(file => file.path === 'main.tex')?.hash).toBe(
-      'ce013625030ba8dba906f756967f9e9ca394464a'
-    )
+    expect(scan.files.find(file => file.path === 'main.tex')?.hash).toBe('ce013625030ba8dba906f756967f9e9ca394464a')
     expect(scan.directories).toEqual(['figures'])
     expect(scan.ignored).toEqual([
       { localPath: '.git/', matchedPattern: '.git/' },
@@ -99,9 +97,9 @@ describe('local folder scan', () => {
       details: { localPath: 'escape.txt' },
     })
     // An ignore pattern takes the link out of the sync, so it no longer blocks the scan.
-    await expect(
-      scanLocalFolder(root, await loadSyncIgnoreRules(root, ['escape.txt']))
-    ).resolves.toMatchObject({ ignored: [{ localPath: 'escape.txt', matchedPattern: 'escape.txt' }] })
+    await expect(scanLocalFolder(root, await loadSyncIgnoreRules(root, ['escape.txt']))).resolves.toMatchObject({
+      ignored: [{ localPath: 'escape.txt', matchedPattern: 'escape.txt' }],
+    })
   })
 
   test('refuses a link back into its own parent folder and reports broken links', async () => {

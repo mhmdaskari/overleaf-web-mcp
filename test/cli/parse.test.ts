@@ -28,7 +28,9 @@ describe('CLI command line', () => {
       request: { from: 'none' },
       progress: false,
     })
-    expect(parseCommandLine(['call', 'read_file', '--request', 'r.json'])).toMatchObject({ request: { from: 'file', path: 'r.json' } })
+    expect(parseCommandLine(['call', 'read_file', '--request', 'r.json'])).toMatchObject({
+      request: { from: 'file', path: 'r.json' },
+    })
     expect(parseCommandLine(['call', 'read_file', '--request', '-'])).toMatchObject({ request: { from: 'stdin' } })
     expect(parseCommandLine(['call', 'sync_directory', '--json', '{}', '--progress'])).toMatchObject({
       request: { from: 'json', text: '{}' },
@@ -63,13 +65,17 @@ describe('CLI command line', () => {
   })
 
   test('builds each alias input, leaving defaults to the contract', () => {
-    expect(parseCommandLine(['projects', 'list', '--query', 'Thesis', '--limit', '5', '--include-trashed'])).toMatchObject({
+    expect(
+      parseCommandLine(['projects', 'list', '--query', 'Thesis', '--limit', '5', '--include-trashed'])
+    ).toMatchObject({
       kind: 'alias',
       tool: 'list_projects',
       input: { query: 'Thesis', limit: 5, includeTrashed: true },
     })
     expect(parseCommandLine(['tree', 'p'])).toMatchObject({ tool: 'get_project_tree', input: { projectId: 'p' } })
-    expect(parseCommandLine(['files', 'write', 'p', 'main.tex', '--revision', 'r', '--content-file', 'new.tex', '--tracked'])).toMatchObject({
+    expect(
+      parseCommandLine(['files', 'write', 'p', 'main.tex', '--revision', 'r', '--content-file', 'new.tex', '--tracked'])
+    ).toMatchObject({
       tool: 'write_file',
       input: { projectId: 'p', filePath: 'main.tex', revision: 'r', localPath: 'new.tex', writeMode: 'tracked' },
     })
@@ -81,28 +87,58 @@ describe('CLI command line', () => {
       input: { projectId: 'p', filePath: 'fig.png', localPath: './fig.png', overwrite: true },
     })
     expect(
-      parseCommandLine(['sync', 'plan', 'p', './paper', '--destination', 'src', '--ignore', '*.pdf', '--ignore', 'out/', '--progress'])
+      parseCommandLine([
+        'sync',
+        'plan',
+        'p',
+        './paper',
+        '--destination',
+        'src',
+        '--ignore',
+        '*.pdf',
+        '--ignore',
+        'out/',
+        '--progress',
+      ])
     ).toMatchObject({
       tool: 'plan_sync',
       input: { projectId: 'p', localFolderPath: './paper', destinationFolderPath: 'src', ignore: ['*.pdf', 'out/'] },
       progress: true,
     })
     expect(
-      parseCommandLine(['sync', 'apply', 'p', './paper', '--mode', 'mirror', '--plan-token', 't', '--confirm-delete-count', '2', '--stop-on-error'])
+      parseCommandLine([
+        'sync',
+        'apply',
+        'p',
+        './paper',
+        '--mode',
+        'mirror',
+        '--plan-token',
+        't',
+        '--confirm-delete-count',
+        '2',
+        '--stop-on-error',
+      ])
     ).toMatchObject({
       tool: 'sync_directory',
       input: { mode: 'mirror', planToken: 't', confirmDeleteCount: 2, stopOnError: true },
     })
-    expect(parseCommandLine(['compile', 'run', 'p', '--root', 'paper.tex', '--download', 'out.pdf', '--overwrite'])).toMatchObject({
+    expect(
+      parseCommandLine(['compile', 'run', 'p', '--root', 'paper.tex', '--download', 'out.pdf', '--overwrite'])
+    ).toMatchObject({
       tool: 'compile_project',
       input: { projectId: 'p', rootFilePath: 'paper.tex' },
       download: { localPath: 'out.pdf', overwrite: true },
     })
-    expect(parseCommandLine(['compile', 'log', 'p', '--build-ref', 'b', '--tail', '50', '--errors-only'])).toMatchObject({
+    expect(
+      parseCommandLine(['compile', 'log', 'p', '--build-ref', 'b', '--tail', '50', '--errors-only'])
+    ).toMatchObject({
       tool: 'get_compile_log',
       input: { projectId: 'p', buildRef: 'b', tail: 50, format: 'errors-only' },
     })
-    expect(parseCommandLine(['compile', 'download', 'p', 'out.pdf', '--build-ref', 'b', '--file', 'output.log'])).toMatchObject({
+    expect(
+      parseCommandLine(['compile', 'download', 'p', 'out.pdf', '--build-ref', 'b', '--file', 'output.log'])
+    ).toMatchObject({
       tool: 'download_compile_output',
       input: { projectId: 'p', localPath: 'out.pdf', buildRef: 'b', file: 'output.log' },
     })

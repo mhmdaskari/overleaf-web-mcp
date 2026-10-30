@@ -51,7 +51,8 @@ export const COMPILE_OUTPUT_RESOURCES: readonly CompileOutputResource[] = [
 function projectIdOf(variables: Record<string, string | string[]>): string {
   const value = variables.projectId
   const projectId = Array.isArray(value) ? value[0] : value
-  if (projectId === undefined || projectId === '') throw new McpError('INVALID_ARGUMENT', 'The resource URI names no project.')
+  if (projectId === undefined || projectId === '')
+    throw new McpError('INVALID_ARGUMENT', 'The resource URI names no project.')
   return projectId
 }
 

@@ -53,9 +53,9 @@ describe('npm download badge', () => {
       body: { downloads: 5, start: '2025-04-06', end: '2026-10-06', package: 'pkg' },
     }))
 
-    await expect(
-      totalDownloads('pkg', [{ start: '2020-01-01', end: '2026-10-06' }], fetcher)
-    ).rejects.toThrow(/refusing a partial total/u)
+    await expect(totalDownloads('pkg', [{ start: '2020-01-01', end: '2026-10-06' }], fetcher)).rejects.toThrow(
+      /refusing a partial total/u
+    )
   })
 
   test('fails on an HTTP error or a missing count instead of reporting zero', async () => {
@@ -77,9 +77,17 @@ describe('npm download badge', () => {
   })
 
   test('formats counts like the shields.io npm badges', () => {
-    expect(
-      [0, 950, 1000, 1801, 12_345, 999_499, 999_999, 3_400_000, 1_137_117_703].map(compactCount)
-    ).toEqual(['0', '950', '1k', '1.8k', '12k', '999k', '1M', '3.4M', '1.1B'])
+    expect([0, 950, 1000, 1801, 12_345, 999_499, 999_999, 3_400_000, 1_137_117_703].map(compactCount)).toEqual([
+      '0',
+      '950',
+      '1k',
+      '1.8k',
+      '12k',
+      '999k',
+      '1M',
+      '3.4M',
+      '1.1B',
+    ])
   })
 
   test('writes a shields.io endpoint badge', () => {

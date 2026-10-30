@@ -97,8 +97,7 @@ class Collector {
     if (this.summary.warnings.length < MAX_LOG_ENTRIES) this.summary.warnings.push(entry)
     const undefinedName = UNDEFINED.exec(entry.message)
     if (undefinedName !== null) {
-      const list =
-        undefinedName[1] === 'Reference' ? this.summary.undefinedReferences : this.summary.undefinedCitations
+      const list = undefinedName[1] === 'Reference' ? this.summary.undefinedReferences : this.summary.undefinedCitations
       add(list, undefinedName[2]!)
     }
     this.#missing(entry.message)

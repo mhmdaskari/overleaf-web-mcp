@@ -11,10 +11,7 @@ import { parseHandshake } from './socketio09-codec.js'
 import { upstreamReason } from './upstream-reason.js'
 
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>
-type WebSocketFactory = (
-  url: string,
-  options: { headers: Record<string, string> }
-) => WebSocketPeer
+type WebSocketFactory = (url: string, options: { headers: Record<string, string> }) => WebSocketPeer
 
 export interface OpenProjectConnectionOptions {
   baseUrl: string
@@ -47,9 +44,7 @@ function responseSetCookies(headers: Headers): string[] {
 }
 
 /** Performs the legacy handshake, validates project bootstrap data, and returns a live socket. */
-export async function openProjectConnection(
-  options: OpenProjectConnectionOptions
-): Promise<ProjectConnection> {
+export async function openProjectConnection(options: OpenProjectConnectionOptions): Promise<ProjectConnection> {
   const baseUrl = options.baseUrl.replace(/\/$/u, '')
   const timeoutMs = options.timeoutMs ?? 30_000
   const query = new URLSearchParams({
@@ -77,10 +72,7 @@ export async function openProjectConnection(
     })
   }
   if (response.status === 401 || (response.url && new URL(response.url).pathname.startsWith('/login'))) {
-    throw new McpError(
-      'AUTH_EXPIRED',
-      `Overleaf authentication expired. ${AUTH_LOGIN_INSTRUCTION}`
-    )
+    throw new McpError('AUTH_EXPIRED', `Overleaf authentication expired. ${AUTH_LOGIN_INSTRUCTION}`)
   }
   if (!response.ok) {
     throw new McpError('REMOTE_ERROR', `Socket.IO handshake returned HTTP ${response.status}.`)

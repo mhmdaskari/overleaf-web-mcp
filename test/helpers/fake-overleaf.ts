@@ -84,7 +84,10 @@ function snapshotOf(document: ServerDocument): HistorySnapshot {
     if (index < document.marks.length && document.marks[index] === document.marks[start]) continue
     const type = document.marks[start]
     if (type !== undefined) {
-      trackedChanges.push({ range: { pos: start, length: index - start }, tracking: { type, userId: 'user', ts: TIMESTAMP } })
+      trackedChanges.push({
+        range: { pos: start, length: index - start },
+        tracking: { type, userId: 'user', ts: TIMESTAMP },
+      })
     }
     start = index
   }

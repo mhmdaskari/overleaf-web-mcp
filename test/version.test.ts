@@ -6,9 +6,10 @@ import { SERVER_NAME, SERVER_VERSION, USER_AGENT } from '../src/version.js'
 
 describe('package identity', () => {
   test('keeps MCP and transport identity aligned with package metadata', () => {
-    const packageJson = JSON.parse(
-      readFileSync(new URL('../package.json', import.meta.url), 'utf8')
-    ) as { name: string; version: string }
+    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      name: string
+      version: string
+    }
 
     expect(SERVER_NAME).toBe(packageJson.name)
     expect(SERVER_VERSION).toBe(packageJson.version)
@@ -16,12 +17,12 @@ describe('package identity', () => {
   })
 
   test('keeps the MCP Registry entry aligned with package metadata', () => {
-    const packageJson = JSON.parse(
-      readFileSync(new URL('../package.json', import.meta.url), 'utf8')
-    ) as { name: string; version: string; mcpName: string }
-    const serverJson = JSON.parse(
-      readFileSync(new URL('../server.json', import.meta.url), 'utf8')
-    ) as {
+    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      name: string
+      version: string
+      mcpName: string
+    }
+    const serverJson = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8')) as {
       name: string
       description: string
       version: string
@@ -37,8 +38,8 @@ describe('package identity', () => {
       expect.objectContaining({
         registryType: 'npm',
         identifier: packageJson.name,
-        version: packageJson.version
-      })
+        version: packageJson.version,
+      }),
     ])
   })
 })

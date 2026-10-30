@@ -153,7 +153,8 @@ const READ_BACK_CODES_KEPT: ReadonlySet<string> = new Set(['AUTH_EXPIRED', 'POLI
 /** Keeps the failure's code and details and adds which settings were stored before it. */
 function partialSettingsFailure(error: unknown, applied: string[], failed: string): McpError {
   const cause = asMcpError(error)
-  const stored = applied.length === 0 ? 'No setting was' : `${applied.join(', ')} ${applied.length === 1 ? 'was' : 'were'}`
+  const stored =
+    applied.length === 0 ? 'No setting was' : `${applied.join(', ')} ${applied.length === 1 ? 'was' : 'were'}`
   return new McpError(
     cause.code,
     `${cause.message} ${stored} applied before the request for ${failed} failed, and no later setting was sent.`,
@@ -186,11 +187,7 @@ export class ProjectsApi {
     try {
       projectId = createdProjectSchema.parse(response).project_id
     } catch (error) {
-      throw new McpError(
-        'PROTOCOL_UNSUPPORTED',
-        `Overleaf returned an unsupported ${what} response.`,
-        { cause: error }
-      )
+      throw new McpError('PROTOCOL_UNSUPPORTED', `Overleaf returned an unsupported ${what} response.`, { cause: error })
     }
     if (!isPathSafeId(projectId)) {
       throw new McpError('PROTOCOL_UNSUPPORTED', `Overleaf returned an unsupported project id from ${what}.`)
@@ -237,10 +234,9 @@ export class ProjectsApi {
     this.#policy.assertProject(sourceProjectId, 'sourceProjectId')
     this.#policy.assertEffect('project-lifecycle')
     validateProjectName(name)
-    const response = await this.#options.http.postJson(
-      `/Project/${encodeURIComponent(sourceProjectId)}/clone`,
-      { projectName: name }
-    )
+    const response = await this.#options.http.postJson(`/Project/${encodeURIComponent(sourceProjectId)}/clone`, {
+      projectName: name,
+    })
     const projectId = this.#parseCreated(response, 'project clone')
     return { projectId, name, url: this.#projectUrl(projectId) }
   }
@@ -326,10 +322,9 @@ export class ProjectsApi {
     )
     let response: { body: ReadableStream<Uint8Array>; contentType?: string }
     try {
-      response = await this.#options.http.getStream(
-        `/Project/${encodeURIComponent(projectId)}/download/zip`,
-        { timeoutMs: options.timeoutMs ?? DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS }
-      )
+      response = await this.#options.http.getStream(`/Project/${encodeURIComponent(projectId)}/download/zip`, {
+        timeoutMs: options.timeoutMs ?? DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS,
+      })
     } catch (error) {
       await target.discard()
       throw error
@@ -418,10 +413,7 @@ export class ProjectsApi {
    * own settings, so the web UI's Recompile follows the change too. Returns the settings as
    * re-read from a fresh project join.
    */
-  async updateProjectSettings(
-    projectId: string,
-    settings: ProjectSettingsInput
-  ): Promise<ProjectSettings> {
+  async updateProjectSettings(projectId: string, settings: ProjectSettingsInput): Promise<ProjectSettings> {
     this.#policy.assertProject(projectId)
     // The settings are re-read afterwards, so that read is allowed before anything is changed.
     this.#policy.assertEffect('project-lifecycle', 'overleaf-read')
@@ -471,9 +463,7 @@ export class ProjectsApi {
       ...(tree.rootDocPath === undefined ? {} : { rootDocPath: tree.rootDocPath }),
       ...(tree.compiler === undefined ? {} : { compiler: tree.compiler }),
       ...(tree.imageName === undefined ? {} : { imageName: tree.imageName }),
-      ...(tree.spellCheckLanguage === undefined
-        ? {}
-        : { spellCheckLanguage: tree.spellCheckLanguage }),
+      ...(tree.spellCheckLanguage === undefined ? {} : { spellCheckLanguage: tree.spellCheckLanguage }),
     }
   }
 }

@@ -4,11 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test, vi } from 'vitest'
 
-import {
-  captureBrowserSession,
-  type BrowserProcess,
-  type CdpTransport,
-} from '../../src/auth/browser-login.js'
+import { captureBrowserSession, type BrowserProcess, type CdpTransport } from '../../src/auth/browser-login.js'
 
 describe('browser-assisted login', () => {
   test('captures only target-origin cookies after the authenticated project page loads', async () => {

@@ -36,12 +36,8 @@ Body
 
   test('scopes a section through the next heading at the same or higher level', () => {
     const sections = findSections(source)
-    expect(source.slice(sections[0]!.start, sections[0]!.end)).toContain(
-      '\\subsection*{Background}'
-    )
-    expect(source.slice(sections[0]!.start, sections[0]!.end)).not.toContain(
-      '\\section{Methods}'
-    )
+    expect(source.slice(sections[0]!.start, sections[0]!.end)).toContain('\\subsection*{Background}')
+    expect(source.slice(sections[0]!.start, sections[0]!.end)).not.toContain('\\section{Methods}')
   })
 
   test('replaces a section by stable index without traversing input files', () => {
@@ -74,9 +70,7 @@ Line break then comment \\% \section{Commented After Linebreak}
   test('reads a heading name after a line-break control symbol as text', () => {
     const input = '\\section{A}\nText line\\\\section{X} more\n\\section{B}\n'
     expect(titles(input)).toEqual(['A', 'B'])
-    expect(replaceSection(input, 'section:0', 'New body\n')).toBe(
-      '\\section{A}\nNew body\n\\section{B}\n'
-    )
+    expect(replaceSection(input, 'section:0', 'New body\n')).toBe('\\section{A}\nNew body\n\\section{B}\n')
     // An even run of backslashes before the name leaves a real heading after the line breaks.
     expect(titles('x\\\\\\section{X}')).toEqual(['X'])
     expect(titles('x\\\\\\\\section{X}')).toEqual([])
@@ -88,9 +82,7 @@ Line break then comment \\% \section{Hidden}
 \section{B}
 `
     const [a] = findSections(input)
-    expect(input.slice(a!.bodyStart, a!.end)).toBe(
-      'Line break then comment \\\\% \\section{Hidden}\n'
-    )
+    expect(input.slice(a!.bodyStart, a!.end)).toBe('Line break then comment \\\\% \\section{Hidden}\n')
   })
 })
 
@@ -142,10 +134,7 @@ describe('offsets around astral characters', () => {
 describe('inline verbatim', () => {
   test('masks a heading inside \\verb with any delimiter', () => {
     expect(titles('\\verb|\\section{V}|')).toEqual([])
-    expect(titles('\\section{A}\nUse \\verb+\\section{V}+ here.\n\\section{B}')).toEqual([
-      'A',
-      'B',
-    ])
+    expect(titles('\\section{A}\nUse \\verb+\\section{V}+ here.\n\\section{B}')).toEqual(['A', 'B'])
     expect(titles('\\verb*!\\section{V}!\n\\section{B}')).toEqual(['B'])
   })
 

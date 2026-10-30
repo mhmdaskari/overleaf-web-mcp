@@ -23,14 +23,7 @@ describe('section tools API', () => {
     const sections = await api.getSections('project', 'main.tex')
 
     expect(sections.sections).toHaveLength(2)
-    await api.writeSection(
-      'project',
-      'main.tex',
-      'revision',
-      sections.sections[0]!.id,
-      'Replacement\n',
-      'tracked'
-    )
+    await api.writeSection('project', 'main.tex', 'revision', sections.sections[0]!.id, 'Replacement\n', 'tracked')
     expect(documents.writeFile).toHaveBeenCalledWith(
       'project',
       'main.tex',

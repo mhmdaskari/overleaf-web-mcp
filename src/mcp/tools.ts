@@ -78,9 +78,7 @@ export class ToolActivity {
 function trackedRegistrar(registrar: ToolRegistrar, activity: ToolActivity): ToolRegistrar {
   return {
     registerTool: (name, config, handler) =>
-      registrar.registerTool(name, config, (args, extra) =>
-        activity.track(() => handler(args, extra))
-      ),
+      registrar.registerTool(name, config, (args, extra) => activity.track(() => handler(args, extra))),
   }
 }
 

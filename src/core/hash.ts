@@ -14,10 +14,7 @@ import { McpError } from './errors.js'
  * entities, so text documents can only be compared by reading their content.
  */
 export function gitBlobHash(content: Uint8Array): string {
-  return createHash('sha1')
-    .update(`blob ${content.byteLength}\0`, 'utf8')
-    .update(content)
-    .digest('hex')
+  return createHash('sha1').update(`blob ${content.byteLength}\0`, 'utf8').update(content).digest('hex')
 }
 
 /** Files up to this size are read whole; larger ones are streamed through the hash. */

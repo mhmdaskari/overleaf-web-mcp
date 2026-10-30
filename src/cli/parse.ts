@@ -5,10 +5,7 @@ import { ALIASES, OPERATION_COMMAND_WORDS, usageError, type AliasCall, type Alia
 
 /** Where `call` reads its request from. */
 export type RequestSource =
-  | { from: 'none' }
-  | { from: 'file'; path: string }
-  | { from: 'stdin' }
-  | { from: 'json'; text: string }
+  { from: 'none' } | { from: 'file'; path: string } | { from: 'stdin' } | { from: 'json'; text: string }
 
 export type OperationCommand =
   | { kind: 'help' }
@@ -71,7 +68,9 @@ function parse(
 function expectPositionals(positionals: string[], names: readonly string[], command: string): void {
   if (positionals.length !== names.length) {
     const expected = names.length === 0 ? 'no arguments' : names.map(name => `<${name}>`).join(' ')
-    throw usageError(`${command} takes ${expected}; got ${positionals.length} argument${positionals.length === 1 ? '' : 's'}.`)
+    throw usageError(
+      `${command} takes ${expected}; got ${positionals.length} argument${positionals.length === 1 ? '' : 's'}.`
+    )
   }
 }
 
@@ -102,7 +101,8 @@ function parseSchema(args: string[]): OperationCommand {
   if (values.help === true) return { kind: 'help' }
   if (positionals.length > 1) throw usageError('schema takes one tool name.')
   const tool = toolName(positionals[0], 'schema')
-  if ((values.input === true) === (values.output === true)) throw usageError('schema takes exactly one of --input or --output.')
+  if ((values.input === true) === (values.output === true))
+    throw usageError('schema takes exactly one of --input or --output.')
   return { kind: 'schema', tool, io: values.input === true ? 'input' : 'output' }
 }
 

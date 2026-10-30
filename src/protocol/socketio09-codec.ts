@@ -78,7 +78,7 @@ export function parseSocketPacket(value: string): SocketPacket {
     const ack = /^(\d+)(?:\+(.*))?$/su.exec(data ?? '')
     if (!ack) throw new McpError('PROTOCOL_UNSUPPORTED', 'Invalid Socket.IO ack packet.')
     try {
-      const args = ack[2] ? JSON.parse(ack[2]) as unknown : []
+      const args = ack[2] ? (JSON.parse(ack[2]) as unknown) : []
       if (!Array.isArray(args)) throw new Error('ack is not an array')
       return { type: 'ack', ackId: Number(ack[1]), args }
     } catch (error) {

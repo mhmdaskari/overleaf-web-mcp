@@ -29,7 +29,8 @@ describe('operation registry', () => {
 
   test('every minimal input parses against its contract', () => {
     for (const name of OPERATION_NAMES) {
-      const schema = (OPERATIONS[name] as { inputSchema?: { safeParse(value: unknown): { success: boolean } } }).inputSchema
+      const schema = (OPERATIONS[name] as { inputSchema?: { safeParse(value: unknown): { success: boolean } } })
+        .inputSchema
       if (schema !== undefined) expect(schema.safeParse(INPUTS[name]).success, name).toBe(true)
     }
   })
@@ -73,7 +74,14 @@ describe('createOverleafService', () => {
     runtime.compile.stopCompile.mockRejectedValue(new McpError('NOT_FOUND', 'gone'))
     const service = createOverleafService(runtime)
     await expect(
-      service.stop_compile({ projectId: 'p' }, { onDiagnostic: () => { throw new Error('closed') } })
+      service.stop_compile(
+        { projectId: 'p' },
+        {
+          onDiagnostic: () => {
+            throw new Error('closed')
+          },
+        }
+      )
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
 
@@ -127,29 +135,49 @@ describe('createOverleafService', () => {
       onConflict: 'overwrite',
       uncheckedDocumentReplace: true,
     })
-    expect(runtime.sync.batchUpload).toHaveBeenCalledWith('p', [{ localPath: '/a.tex', destinationPath: 'a.tex' }], expect.objectContaining({
-      onConflict: 'overwrite',
-      uncheckedDocumentReplace: true,
-    }))
+    expect(runtime.sync.batchUpload).toHaveBeenCalledWith(
+      'p',
+      [{ localPath: '/a.tex', destinationPath: 'a.tex' }],
+      expect.objectContaining({
+        onConflict: 'overwrite',
+        uncheckedDocumentReplace: true,
+      })
+    )
   })
 
   test('passes progress through to the sync operations', async () => {
     const runtime = fakeRuntime()
     const onProgress = vi.fn(async () => undefined)
     await createOverleafService(runtime).plan_sync({ projectId: 'p', localFolderPath: '/w' }, { onProgress })
-    const forwarded = runtime.sync.planSync.mock.calls[0]?.[2].onProgress as (p: number, t: number, m: string) => Promise<void>
+    const forwarded = runtime.sync.planSync.mock.calls[0]?.[2].onProgress as (
+      p: number,
+      t: number,
+      m: string
+    ) => Promise<void>
     await forwarded(1, 2, 'Read 1 of 2 documents')
     expect(onProgress).toHaveBeenCalledWith(1, 2, 'Read 1 of 2 documents')
   })
 
   test('a progress callback that throws never fails the call, which may already have applied', async () => {
     const runtime = fakeRuntime()
-    runtime.sync.deleteEntities.mockImplementation(async (_projectId: string, _paths: string[], _count: number, options: {
-      onProgress?: (progress: number, total: number, message: string) => Promise<void>
-    }) => {
-      await options.onProgress?.(1, 1, 'Deleted 1 of 1')
-      return { status: 'complete', completed: [{ path: 'a.png', type: 'file', entityId: 'f' }], failed: [], remaining: [] }
-    })
+    runtime.sync.deleteEntities.mockImplementation(
+      async (
+        _projectId: string,
+        _paths: string[],
+        _count: number,
+        options: {
+          onProgress?: (progress: number, total: number, message: string) => Promise<void>
+        }
+      ) => {
+        await options.onProgress?.(1, 1, 'Deleted 1 of 1')
+        return {
+          status: 'complete',
+          completed: [{ path: 'a.png', type: 'file', entityId: 'f' }],
+          failed: [],
+          remaining: [],
+        }
+      }
+    )
     const failing = [
       vi.fn(async () => {
         throw new Error('progress sink failed')

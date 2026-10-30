@@ -77,7 +77,9 @@ async function failure(call: () => Promise<unknown>): Promise<McpError> {
 describe('compile_project', () => {
   test('maps rootFilePath to rootDoc_id and rootResourcePath and posts a bounded compile request with its options', async () => {
     const { api, requests } = harness()
-    await expect(api.compileProject('project', 'main.tex', 30_000, { stopOnFirstError: true, draft: true })).resolves.toMatchObject({
+    await expect(
+      api.compileProject('project', 'main.tex', 30_000, { stopOnFirstError: true, draft: true })
+    ).resolves.toMatchObject({
       status: 'success',
       rootFilePath: 'main.tex',
     })
@@ -109,7 +111,11 @@ describe('compile_project', () => {
 
   test('a clean build is builtCleanly with its page count', async () => {
     const { api, requests } = harness({
-      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux'), stats: { 'latexmk-errors': 0 } },
+      compile: {
+        status: 'success',
+        outputFiles: outputs('output.pdf', 'output.log', 'output.aux'),
+        stats: { 'latexmk-errors': 0 },
+      },
       files: { 'output.log': await fixture('clean.log') },
     })
     const result = await api.compileProject('p', 'main.tex')
@@ -131,30 +137,39 @@ describe('compile_project', () => {
   })
 
   // included.aux leaves its citations to an \include'd file's own aux, so it cannot rule BibTeX out.
-  test.each(['bibtex.aux', 'biblatex.aux', 'included.aux'])('merges the BibTeX log into the summary when %s may cite a bibliography', async aux => {
-    const { api } = harness({
-      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg') },
-      files: {
-        'output.log': await fixture('missing-bib.log'),
-        'output.aux': await fixture(aux),
-        'output.blg': await fixture('missing-bib.blg'),
-      },
-    })
-    const { summary, buildRef, outputFiles } = await api.compileProject('p', 'main.tex')
-    expect(outputFiles.map(file => file.path)).toEqual(expect.arrayContaining(['output.bbl', 'output.blg']))
-    expect(summary).toMatchObject({
-      builtCleanly: false,
-      errorCount: 1,
-      missingFiles: ['refs.bib'],
-      undefinedCitations: ['knuth84', 'lamport94'],
-    })
-    expect(decodeBuildRef(buildRef!).files).toEqual(expect.arrayContaining(['output.bbl', 'output.blg']))
-  })
+  test.each(['bibtex.aux', 'biblatex.aux', 'included.aux'])(
+    'merges the BibTeX log into the summary when %s may cite a bibliography',
+    async aux => {
+      const { api } = harness({
+        compile: {
+          status: 'success',
+          outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg'),
+        },
+        files: {
+          'output.log': await fixture('missing-bib.log'),
+          'output.aux': await fixture(aux),
+          'output.blg': await fixture('missing-bib.blg'),
+        },
+      })
+      const { summary, buildRef, outputFiles } = await api.compileProject('p', 'main.tex')
+      expect(outputFiles.map(file => file.path)).toEqual(expect.arrayContaining(['output.bbl', 'output.blg']))
+      expect(summary).toMatchObject({
+        builtCleanly: false,
+        errorCount: 1,
+        missingFiles: ['refs.bib'],
+        undefinedCitations: ['knuth84', 'lamport94'],
+      })
+      expect(decodeBuildRef(buildRef!).files).toEqual(expect.arrayContaining(['output.bbl', 'output.blg']))
+    }
+  )
 
-  test('a BibTeX log left over from an earlier build is not this build\'s', async () => {
+  test("a BibTeX log left over from an earlier build is not this build's", async () => {
     // Overleaf's incremental compile directory keeps an earlier root's .blg and .bbl and lists them again.
     const { api, requests } = harness({
-      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg') },
+      compile: {
+        status: 'success',
+        outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg'),
+      },
       files: {
         'output.log': await fixture('clean.log'),
         'output.aux': await fixture('no-bib.aux'),
@@ -166,13 +181,21 @@ describe('compile_project', () => {
     expect(summary).toMatchObject({ builtCleanly: true, errorCount: 0, undefinedCitations: [], missingFiles: [] })
     // Not offered as this build's outputs, as the output tools would refuse them.
     expect(outputFiles.map(file => file.path)).toEqual(['output.pdf', 'output.log', 'output.aux'])
-    expect(requests.map(request => request.url.pathname.split('/').at(-1)).sort()).toEqual(['compile', 'output.aux', 'output.log'])
+    expect(requests.map(request => request.url.pathname.split('/').at(-1)).sort()).toEqual([
+      'compile',
+      'output.aux',
+      'output.log',
+    ])
 
     // The output tools answer as for a build in which BibTeX never ran, in this process or another.
     await expect(api.getCompileLog('p', { kind: 'bibtex' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
-    await expect(api.downloadCompileOutput('p', '/tmp/x.bbl', { file: 'output.bbl' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(api.downloadCompileOutput('p', '/tmp/x.bbl', { file: 'output.bbl' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
     const other = harness({ files: { 'output.blg': await fixture('missing-bib.blg') } })
-    await expect(other.api.getCompileLog('p', { kind: 'bibtex', buildRef })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(other.api.getCompileLog('p', { kind: 'bibtex', buildRef })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
     expect(other.requests).toHaveLength(0)
     expect(requests).toHaveLength(3)
   })
@@ -198,21 +221,30 @@ describe('compile_project', () => {
     const before = requests.length
 
     await expect(api.getCompileLog('p', { kind: 'bibtex' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
-    await expect(api.downloadCompileOutput('p', '/tmp/x.bbl', { file: 'output.bbl' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(api.downloadCompileOutput('p', '/tmp/x.bbl', { file: 'output.bbl' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
     expect(requests).toHaveLength(before)
     await expect(api.getCompileLog('p')).resolves.toMatchObject({ file: 'output.log' })
 
     const other = harness({ files: { 'output.blg': await fixture('missing-bib.blg') } })
-    await expect(other.api.getCompileLog('p', { kind: 'bibtex', buildRef })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(other.api.getCompileLog('p', { kind: 'bibtex', buildRef })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
     expect(other.requests).toHaveLength(0)
-    const forged = Buffer.from(JSON.stringify({ format: 1, projectId: 'p', buildId: BUILD, noBibliography: 'no' })).toString('base64url')
+    const forged = Buffer.from(
+      JSON.stringify({ format: 1, projectId: 'p', buildId: BUILD, noBibliography: 'no' })
+    ).toString('base64url')
     expect(() => decodeBuildRef(forged)).toThrow(McpError)
   })
 
-  test('a \\citation without \\bibdata does not make a leftover BibTeX log this build\'s', async () => {
+  test("a \\citation without \\bibdata does not make a leftover BibTeX log this build's", async () => {
     // \cite with no \bibliography writes \citation lines but no \bibdata, so latexmk never runs BibTeX.
     const { api } = harness({
-      compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg') },
+      compile: {
+        status: 'success',
+        outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.bbl', 'output.blg'),
+      },
       files: {
         'output.log': await fixture('missing-bib.log'),
         'output.aux': await fixture('citation-only.aux'),
@@ -275,7 +307,7 @@ describe('compile_project', () => {
     })
   })
 
-  test('HTTP 429 is COMPILE_RATE_LIMITED with the server\'s wait', async () => {
+  test("HTTP 429 is COMPILE_RATE_LIMITED with the server's wait", async () => {
     const { api } = harness({
       compile: new Response('slow down', { status: 429, headers: { 'retry-after': '7' } }),
     })
@@ -308,7 +340,11 @@ describe('compile_project', () => {
       stats: { 'latex-runs': 2, odd: SENTINEL, [`${SENTINEL} key`]: 1, infinite: Infinity },
     }
     const succeeded = harness({
-      compile: { status: 'success', outputFiles: [{ path: 'output.pdf', type: 'pdf', build: BUILD, url: SENTINEL }], ...extra },
+      compile: {
+        status: 'success',
+        outputFiles: [{ path: 'output.pdf', type: 'pdf', build: BUILD, url: SENTINEL }],
+        ...extra,
+      },
     })
     const result = await succeeded.api.compileProject('p', 'main.tex')
     expect(JSON.stringify(result)).not.toContain(SENTINEL)
@@ -316,10 +352,14 @@ describe('compile_project', () => {
     expect(result.stats).toEqual({ 'latex-runs': 2 })
 
     for (const status of ['timedout', 'terminated', `${SENTINEL} free text`]) {
-      const { api } = harness({ compile: { status, outputFiles: [{ path: 'output.log', type: 'log', build: BUILD, url: SENTINEL }], ...extra } })
+      const { api } = harness({
+        compile: { status, outputFiles: [{ path: 'output.log', type: 'log', build: BUILD, url: SENTINEL }], ...extra },
+      })
       const error = await failure(() => api.compileProject('p', 'main.tex'))
       expect(JSON.stringify(error.toJSON())).not.toContain(SENTINEL)
-      expect(Object.keys(error.details ?? {}).every(key => ['status', 'rootFilePath', 'buildId', 'buildRef'].includes(key))).toBe(true)
+      expect(
+        Object.keys(error.details ?? {}).every(key => ['status', 'rootFilePath', 'buildId', 'buildRef'].includes(key))
+      ).toBe(true)
     }
   })
 
@@ -332,7 +372,9 @@ describe('compile_project', () => {
     const second = harness({ files: { 'output.log': await fixture('classic-errors.log') } })
     const log = await second.api.getCompileLog('p', { buildRef })
     expect(log.buildId).toBe(BUILD)
-    expect(second.requests.map(request => request.url.pathname)).toEqual([`/project/p/build/${BUILD}/output/output.log`])
+    expect(second.requests.map(request => request.url.pathname)).toEqual([
+      `/project/p/build/${BUILD}/output/output.log`,
+    ])
   })
 
   test('a compile request that timed out is not retryable, since the compile may still run', async () => {
@@ -350,10 +392,17 @@ describe('compile_project', () => {
   test("defaults to the project's configured root document when no path is given", async () => {
     const http = { postJson: vi.fn(async () => ({ status: 'success', outputFiles: [] })), getStream: vi.fn() }
     const resolvePath = vi.fn()
-    const api = new CompileApi(http, resolvePath, 120_000, async () => ({ ...root, id: 'configured-root', path: '0_main.tex' }))
+    const api = new CompileApi(http, resolvePath, 120_000, async () => ({
+      ...root,
+      id: 'configured-root',
+      path: '0_main.tex',
+    }))
 
     // A blank project ships with a stub main.tex, so the configured root is the honest default.
-    await expect(api.compileProject('project')).resolves.toMatchObject({ status: 'success', rootFilePath: '0_main.tex' })
+    await expect(api.compileProject('project')).resolves.toMatchObject({
+      status: 'success',
+      rootFilePath: '0_main.tex',
+    })
     expect(resolvePath).not.toHaveBeenCalled()
     expect(http.postJson).toHaveBeenCalledWith(
       '/project/project/compile?file_line_errors=true',
@@ -410,7 +459,11 @@ describe('download_compile_output', () => {
 
     test('requests outputs under the user the compile response names, and returns neither url nor user', async () => {
       const { api, requests } = harness({
-        compile: { status: 'success', outputFiles: [perUser('output.pdf'), perUser('output.log')], clsiServerId: 'clsi-1' },
+        compile: {
+          status: 'success',
+          outputFiles: [perUser('output.pdf'), perUser('output.log')],
+          clsiServerId: 'clsi-1',
+        },
         files: { 'output.pdf': PDF, 'output.log': await fixture('clean.log') },
       })
       const result = await api.compileProject(PROJECT, 'main.tex')
@@ -436,14 +489,27 @@ describe('download_compile_output', () => {
       const error = await failure(() => first.api.compileProject(PROJECT, 'main.tex'))
       const second = harness({ files: { 'output.log': await fixture('classic-errors.log') } })
       await second.api.getCompileLog(PROJECT, { buildRef: error.details!.buildRef as string })
-      expect(outputPaths(second.requests)).toEqual([`/project/${PROJECT}/user/${USER}/build/${BUILD}/output/output.log`])
+      expect(outputPaths(second.requests)).toEqual([
+        `/project/${PROJECT}/user/${USER}/build/${BUILD}/output/output.log`,
+      ])
     })
 
     test.each([
       ['another project', [perUser('output.log', 'fedcba9876543210fedcba98')]],
       ['another build', [perUser('output.log', PROJECT, USER, '1a2b3c-4d5e6f')]],
-      ['another origin', [{ ...perUser('output.log'), url: `https://elsewhere.test/project/${PROJECT}/user/${USER}/build/${BUILD}/output/output.log` }]],
-      ['a malformed user', [{ ...perUser('output.log'), url: `/project/${PROJECT}/user/../build/${BUILD}/output/output.log` }]],
+      [
+        'another origin',
+        [
+          {
+            ...perUser('output.log'),
+            url: `https://elsewhere.test/project/${PROJECT}/user/${USER}/build/${BUILD}/output/output.log`,
+          },
+        ],
+      ],
+      [
+        'a malformed user',
+        [{ ...perUser('output.log'), url: `/project/${PROJECT}/user/../build/${BUILD}/output/output.log` }],
+      ],
       ['two different users', [perUser('output.log'), perUser('output.pdf', PROJECT, 'aaaaaaaaaaaaaaaaaaaaaaaa')]],
     ])('a url naming %s is ignored, and the path stays the one without a user', async (_, outputFiles) => {
       const { api, requests } = harness({
@@ -458,8 +524,12 @@ describe('download_compile_output', () => {
     test('a buildRef with a user that is not an ObjectId is INVALID_ARGUMENT', async () => {
       const { api, fetcher } = harness()
       for (const userId of ['../x', 'not-hex-not-hex-not-hex!', 'abc', 7]) {
-        const forged = Buffer.from(JSON.stringify({ format: 1, projectId: PROJECT, buildId: BUILD, userId })).toString('base64url')
-        await expect(api.getCompileLog(PROJECT, { buildRef: forged })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+        const forged = Buffer.from(JSON.stringify({ format: 1, projectId: PROJECT, buildId: BUILD, userId })).toString(
+          'base64url'
+        )
+        await expect(api.getCompileLog(PROJECT, { buildRef: forged })).rejects.toMatchObject({
+          code: 'INVALID_ARGUMENT',
+        })
       }
       expect(fetcher).not.toHaveBeenCalled()
     })
@@ -468,7 +538,9 @@ describe('download_compile_output', () => {
   test('refuses an unsafe file before any request', async () => {
     const { api, fetcher } = harness()
     for (const file of ['../x', '/etc/passwd', 'a/../b', 'a\\b', '']) {
-      await expect(api.downloadCompileOutput('p', '/tmp/x.pdf', { file })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+      await expect(api.downloadCompileOutput('p', '/tmp/x.pdf', { file })).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
     }
     expect(fetcher).not.toHaveBeenCalled()
   })
@@ -500,7 +572,9 @@ describe('download_compile_output', () => {
     const { api } = harness({ compile: { status: 'success', outputFiles: outputs('output.pdf') } })
     await api.compileProject('p', 'main.tex')
     const dir = await folder()
-    await expect(api.downloadCompileOutput('p', join(dir, 'a.gz'), { file: 'output.synctex.gz' })).rejects.toMatchObject({
+    await expect(
+      api.downloadCompileOutput('p', join(dir, 'a.gz'), { file: 'output.synctex.gz' })
+    ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     })
     await expect(api.downloadCompileOutput('p', join(dir, 'a.pdf'))).rejects.toMatchObject({ code: 'BUILD_NOT_FOUND' })
@@ -513,14 +587,18 @@ describe('download_compile_output', () => {
     })
     await api.compileProject('p', 'main.tex')
     const dir = await folder()
-    await expect(api.downloadCompileOutput('p', join(dir, 'a.pdf'))).rejects.toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
+    await expect(api.downloadCompileOutput('p', join(dir, 'a.pdf'))).rejects.toMatchObject({
+      code: 'PROTOCOL_UNSUPPORTED',
+    })
     await expect(readFile(join(dir, 'a.pdf'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   test('a buildRef for another project is refused', async () => {
     const { api } = harness({ compile: { status: 'success', outputFiles: outputs('output.pdf') } })
     const { buildRef } = await api.compileProject('p', 'main.tex')
-    await expect(api.downloadCompileOutput('q', '/tmp/x.pdf', { buildRef })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(api.downloadCompileOutput('q', '/tmp/x.pdf', { buildRef })).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
     await expect(api.getCompileLog('p', { buildRef: 'not-a-ref' })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
   })
 })
@@ -530,7 +608,11 @@ describe('get_compile_log', () => {
     const log = await fixture('nonstop-errors.log')
     const { api } = harness({
       compile: { status: 'success', outputFiles: outputs('output.pdf', 'output.log', 'output.aux', 'output.blg') },
-      files: { 'output.log': log, 'output.aux': await fixture('bibtex.aux'), 'output.blg': await fixture('missing-bib.blg') },
+      files: {
+        'output.log': log,
+        'output.aux': await fixture('bibtex.aux'),
+        'output.blg': await fixture('missing-bib.blg'),
+      },
     })
     await api.compileProject('p', 'main.tex')
 

@@ -163,7 +163,12 @@ class FakeProject {
         const failure = this.failCreates.get(filePath)
         if (failure !== undefined) {
           const landed = failure === 'landed'
-          this.entities.set(filePath, { id: this.#id(), type: 'doc', content: landed ? normalizeLf(content) : '', version: landed ? 2 : 1 })
+          this.entities.set(filePath, {
+            id: this.#id(),
+            type: 'doc',
+            content: landed ? normalizeLf(content) : '',
+            version: landed ? 2 : 1,
+          })
           throw landed
             ? new McpError('REVISION_CONFLICT', 'Verified live content differs from the intended result.', {
                 details: { outcome: 'unknown', created: true },
@@ -179,11 +184,15 @@ class FakeProject {
         const path = folderPath === '' ? name : `${folderPath}/${name}`
         const existing = this.entities.get(path)
         if (options?.ifExists === 'skip' && existing !== undefined) {
-          if (existing.type === 'folder') throw new McpError('INVALID_ARGUMENT', `The project holds a folder at ${path}.`)
+          if (existing.type === 'folder')
+            throw new McpError('INVALID_ARGUMENT', `The project holds a folder at ${path}.`)
           return { path, skipped: true as const, entityId: existing.id, entityType: existing.type }
         }
         // The checks EntitiesApi.uploadFile makes inside the upload's queue job, before sending.
-        if (options?.expectedHash !== undefined && (existing?.type !== 'file' || existing.hash !== options.expectedHash)) {
+        if (
+          options?.expectedHash !== undefined &&
+          (existing?.type !== 'file' || existing.hash !== options.expectedHash)
+        ) {
           throw new McpError('REMOTE_DRIFT', `${path} no longer has expectedHash.`, { details: { changed: 'remote' } })
         }
         if (options?.overwrite === false && existing !== undefined && existing.type !== 'folder') {
@@ -197,7 +206,9 @@ class FakeProject {
         }
         if (this.failUploads.has(path)) throw new McpError('REMOTE_ERROR', 'Overleaf returned HTTP 500.')
         if (this.rateLimitUploads.has(path)) {
-          throw new McpError('RATE_LIMITED', 'Overleaf rate-limited this request. Wait before retrying.', { retryable: true })
+          throw new McpError('RATE_LIMITED', 'Overleaf rate-limited this request. Wait before retrying.', {
+            retryable: true,
+          })
         }
         const timeout = this.timeoutUploads.get(path)
         if (timeout !== undefined) {
@@ -247,7 +258,12 @@ class FakeProject {
           for (const key of [...this.entities.keys()]) {
             if (key === action.path || key.startsWith(`${action.path}/`)) this.entities.delete(key)
           }
-          return { action: 'delete' as const, id: entity.id, trackChangesActive: false, writeMode: 'untracked' as const }
+          return {
+            action: 'delete' as const,
+            id: entity.id,
+            trackChangesActive: false,
+            writeMode: 'untracked' as const,
+          }
         }
         throw new Error(`unexpected ${action.action}`)
       },
@@ -363,7 +379,7 @@ describe('plan_sync', () => {
   test('reports conflicts that a sync cannot resolve on its own', async () => {
     const project = new FakeProject({
       'figures/x.png': png(1),
-      'data': png(2),
+      data: png(2),
       'notes.tex': 'text',
     })
     const root = await localFolder({
@@ -644,7 +660,11 @@ describe('sync_directory', () => {
     expect(project.writeModes).toEqual(['untracked', 'tracked', 'tracked'])
 
     await expect(
-      new SyncApi(project.deps({})).syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true, writeMode: 'tracked' })
+      new SyncApi(project.deps({})).syncDirectory(PROJECT, root, {
+        mode: 'additive',
+        unplanned: true,
+        writeMode: 'tracked',
+      })
     ).rejects.toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
   })
 
@@ -889,7 +909,9 @@ describe('sync_directory without a plan', () => {
     project.treeReads = 0
     project.documentReads = 0
 
-    await expect(api.syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true, planToken })).rejects.toMatchObject({
+    await expect(
+      api.syncDirectory(PROJECT, root, { mode: 'additive', unplanned: true, planToken })
+    ).rejects.toMatchObject({
       code: 'INVALID_ARGUMENT',
     })
     await expect(
@@ -933,7 +955,10 @@ describe('batch_upload replacements', () => {
   test('onConflict defaults to fail: a taken destination refuses the call before any upload', async () => {
     const project = new FakeProject({ 'main.tex': 'old\n', 'fig.png': png(1) })
     const root = await localFolder({ 'main.tex': 'new\n', 'fig.png': png(2), 'new.png': png(3) })
-    const files = ['new.png', 'fig.png', 'main.tex'].map(name => ({ localPath: join(root, name), destinationPath: name }))
+    const files = ['new.png', 'fig.png', 'main.tex'].map(name => ({
+      localPath: join(root, name),
+      destinationPath: name,
+    }))
     const api = new SyncApi(project.deps())
 
     await expect(api.batchUpload(PROJECT, files)).rejects.toMatchObject({
@@ -959,7 +984,9 @@ describe('batch_upload replacements', () => {
     const withDocument = await api.batchUpload(PROJECT, files, { onConflict: 'overwrite' })
     expect(withDocument.status).toBe('partial')
     expect(withDocument.completed).toEqual([expect.objectContaining({ destinationPath: 'fig.png', replaced: true })])
-    expect(withDocument.failed).toEqual([expect.objectContaining({ destinationPath: 'main.tex', errorCode: 'INVALID_ARGUMENT' })])
+    expect(withDocument.failed).toEqual([
+      expect.objectContaining({ destinationPath: 'main.tex', errorCode: 'INVALID_ARGUMENT' }),
+    ])
     expect(project.mutations).toEqual(['upload fig.png'])
 
     const optedIn = await api.batchUpload(PROJECT, files, { onConflict: 'overwrite', uncheckedDocumentReplace: true })
@@ -978,7 +1005,9 @@ describe('batch_upload replacements', () => {
       { onConflict: 'overwrite' }
     )
 
-    expect(result.completed).toEqual([expect.objectContaining({ destinationPath: 'fig.png', recoveredAfterTimeout: true, replaced: true })])
+    expect(result.completed).toEqual([
+      expect.objectContaining({ destinationPath: 'fig.png', recoveredAfterTimeout: true, replaced: true }),
+    ])
   })
 })
 
@@ -1055,11 +1084,15 @@ describe('batch_upload', () => {
     const root = await localFolder({ 'a.png': png(2), 'b.png': png(3), 'c.png': png(4) })
     const oldId = project.entities.get('figures/old.png')!.id
 
-    const result = await new SyncApi(project.deps()).batchUpload(PROJECT, [
-      { localPath: join(root, 'a.png'), destinationPath: 'figures/old.png' },
-      { localPath: join(root, 'b.png'), destinationPath: 'figures/deep/er/b.png' },
-      { localPath: join(root, 'c.png'), destinationPath: 'c.png' },
-    ], { onConflict: 'overwrite' })
+    const result = await new SyncApi(project.deps()).batchUpload(
+      PROJECT,
+      [
+        { localPath: join(root, 'a.png'), destinationPath: 'figures/old.png' },
+        { localPath: join(root, 'b.png'), destinationPath: 'figures/deep/er/b.png' },
+        { localPath: join(root, 'c.png'), destinationPath: 'c.png' },
+      ],
+      { onConflict: 'overwrite' }
+    )
 
     expect(project.mutations).toEqual([
       'upload figures/old.png',
@@ -1075,8 +1108,20 @@ describe('batch_upload', () => {
         { destinationPath: 'figures/old.png', action: 'upload', entityId: oldId, entityType: 'file', replaced: true },
         { destinationPath: 'figures/deep', action: 'create_folder', entityId: expect.any(String) },
         { destinationPath: 'figures/deep/er', action: 'create_folder', entityId: expect.any(String) },
-        { destinationPath: 'figures/deep/er/b.png', action: 'upload', entityId: expect.any(String), entityType: 'file', replaced: false },
-        { destinationPath: 'c.png', action: 'upload', entityId: expect.any(String), entityType: 'file', replaced: false },
+        {
+          destinationPath: 'figures/deep/er/b.png',
+          action: 'upload',
+          entityId: expect.any(String),
+          entityType: 'file',
+          replaced: false,
+        },
+        {
+          destinationPath: 'c.png',
+          action: 'upload',
+          entityId: expect.any(String),
+          entityType: 'file',
+          replaced: false,
+        },
       ],
       skipped: [],
       failed: [],
@@ -1137,14 +1182,32 @@ describe('batch_upload', () => {
     const file = join(root, 'a.png')
     const api = new SyncApi(project.deps())
     const cases: Array<[Array<{ localPath: string; destinationPath: string }>, string]> = [
-      [[{ localPath: file, destinationPath: 'x.png' }, { localPath: file, destinationPath: './x.png' }], 'INVALID_ARGUMENT'],
-      [[{ localPath: file, destinationPath: 'figs' }, { localPath: file, destinationPath: 'figs/x.png' }], 'INVALID_ARGUMENT'],
+      [
+        [
+          { localPath: file, destinationPath: 'x.png' },
+          { localPath: file, destinationPath: './x.png' },
+        ],
+        'INVALID_ARGUMENT',
+      ],
+      [
+        [
+          { localPath: file, destinationPath: 'figs' },
+          { localPath: file, destinationPath: 'figs/x.png' },
+        ],
+        'INVALID_ARGUMENT',
+      ],
       [[{ localPath: file, destinationPath: 'figs/' }], 'INVALID_ARGUMENT'],
       [[{ localPath: file, destinationPath: '.' }], 'INVALID_ARGUMENT'],
       [[{ localPath: file, destinationPath: '../x.png' }], 'INVALID_ARGUMENT'],
       [[{ localPath: file, destinationPath: 'figs/.' }], 'INVALID_ARGUMENT'],
       [[{ localPath: file, destinationPath: 'x/a.png/..' }], 'INVALID_ARGUMENT'],
-      [[{ localPath: file, destinationPath: 'a.png' }, { localPath: join(root, 'missing.png'), destinationPath: 'b.png' }], 'NOT_FOUND'],
+      [
+        [
+          { localPath: file, destinationPath: 'a.png' },
+          { localPath: join(root, 'missing.png'), destinationPath: 'b.png' },
+        ],
+        'NOT_FOUND',
+      ],
       [[{ localPath: root, destinationPath: 'a.png' }], 'INVALID_ARGUMENT'],
       [[], 'INVALID_ARGUMENT'],
     ]
@@ -1156,7 +1219,7 @@ describe('batch_upload', () => {
   })
 
   test('fails a file whose path is taken by a folder or sits under a file, and continues with the rest', async () => {
-    const project = new FakeProject({ 'main.tex': 'x', 'figures': null })
+    const project = new FakeProject({ 'main.tex': 'x', figures: null })
     const root = await localFolder({ 'a.png': png(1), 'b.png': png(2), 'c.png': png(3) })
 
     const result = await new SyncApi(project.deps()).batchUpload(PROJECT, [
@@ -1168,8 +1231,18 @@ describe('batch_upload', () => {
     expect(project.mutations).toEqual(['upload c.png'])
     expect(result.status).toBe('partial')
     expect(result.failed).toEqual([
-      { destinationPath: 'figures', action: 'upload', errorCode: 'INVALID_ARGUMENT', message: expect.stringContaining('folder') },
-      { destinationPath: 'main.tex/b.png', action: 'upload', errorCode: 'INVALID_ARGUMENT', message: expect.stringContaining('main.tex') },
+      {
+        destinationPath: 'figures',
+        action: 'upload',
+        errorCode: 'INVALID_ARGUMENT',
+        message: expect.stringContaining('folder'),
+      },
+      {
+        destinationPath: 'main.tex/b.png',
+        action: 'upload',
+        errorCode: 'INVALID_ARGUMENT',
+        message: expect.stringContaining('main.tex'),
+      },
     ])
     expect(result.completed.map(entry => entry.destinationPath)).toEqual(['c.png'])
   })
@@ -1221,7 +1294,9 @@ describe('batch_upload', () => {
       manageEntity: async (projectId, action) => {
         if (action.action !== 'create_folder') return await deps.manageEntity(projectId, action)
         folderCalls += 1
-        throw new McpError('RATE_LIMITED', 'Overleaf rate-limited this request. Wait before retrying.', { retryable: true })
+        throw new McpError('RATE_LIMITED', 'Overleaf rate-limited this request. Wait before retrying.', {
+          retryable: true,
+        })
       },
     })
     const root = await localFolder({ 'a.png': png(1), 'b.png': png(2), 'c.png': png(3) })
@@ -1250,9 +1325,24 @@ describe('batch_upload', () => {
 
     expect(project.mutations).toEqual([])
     expect(result.failed).toEqual([
-      { destinationPath: 'figs', action: 'create_folder', errorCode: 'PERMISSION_DENIED', message: 'Overleaf returned HTTP 403.' },
-      { destinationPath: 'figs/a.png', action: 'upload', errorCode: 'PERMISSION_DENIED', message: expect.stringContaining('figs') },
-      { destinationPath: 'figs/sub/b.png', action: 'upload', errorCode: 'PERMISSION_DENIED', message: expect.stringContaining('figs/sub') },
+      {
+        destinationPath: 'figs',
+        action: 'create_folder',
+        errorCode: 'PERMISSION_DENIED',
+        message: 'Overleaf returned HTTP 403.',
+      },
+      {
+        destinationPath: 'figs/a.png',
+        action: 'upload',
+        errorCode: 'PERMISSION_DENIED',
+        message: expect.stringContaining('figs'),
+      },
+      {
+        destinationPath: 'figs/sub/b.png',
+        action: 'upload',
+        errorCode: 'PERMISSION_DENIED',
+        message: expect.stringContaining('figs/sub'),
+      },
     ])
   })
 
@@ -1267,7 +1357,12 @@ describe('batch_upload', () => {
 
     expect(result.completed).toEqual([])
     expect(result.failed).toEqual([
-      { destinationPath: 'a.png', action: 'upload', errorCode: 'REMOTE_ERROR', message: expect.stringContaining('nothing is at this path') },
+      {
+        destinationPath: 'a.png',
+        action: 'upload',
+        errorCode: 'REMOTE_ERROR',
+        message: expect.stringContaining('nothing is at this path'),
+      },
     ])
     expect(result.verified).toBe(true)
     expect(result.status).toBe('partial')
@@ -1279,11 +1374,19 @@ describe('batch_upload', () => {
     project.timeoutUploads.set('lost.png', 'lost')
     project.timeoutUploads.set('notes.tex', 'landed')
     project.timeoutUploads.set('same.png', 'landed')
-    const root = await localFolder({ 'landed.png': png(1), 'lost.png': png(2), 'notes.tex': 'text\n', 'same.png': png(5) })
+    const root = await localFolder({
+      'landed.png': png(1),
+      'lost.png': png(2),
+      'notes.tex': 'text\n',
+      'same.png': png(5),
+    })
 
     const result = await new SyncApi(project.deps()).batchUpload(
       PROJECT,
-      ['landed.png', 'lost.png', 'notes.tex', 'same.png'].map(name => ({ localPath: join(root, name), destinationPath: name })),
+      ['landed.png', 'lost.png', 'notes.tex', 'same.png'].map(name => ({
+        localPath: join(root, name),
+        destinationPath: name,
+      })),
       { onConflict: 'overwrite' }
     )
 
@@ -1308,8 +1411,18 @@ describe('batch_upload', () => {
       },
     ])
     expect(result.failed).toEqual([
-      { destinationPath: 'lost.png', action: 'upload', errorCode: 'TIMEOUT', message: expect.stringContaining('had not landed') },
-      { destinationPath: 'notes.tex', action: 'upload', errorCode: 'OUTCOME_UNKNOWN', message: expect.stringContaining('get_project_tree') },
+      {
+        destinationPath: 'lost.png',
+        action: 'upload',
+        errorCode: 'TIMEOUT',
+        message: expect.stringContaining('had not landed'),
+      },
+      {
+        destinationPath: 'notes.tex',
+        action: 'upload',
+        errorCode: 'OUTCOME_UNKNOWN',
+        message: expect.stringContaining('get_project_tree'),
+      },
     ])
   })
 

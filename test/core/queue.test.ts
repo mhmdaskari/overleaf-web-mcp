@@ -21,11 +21,6 @@ describe('project FIFO queue', () => {
 
     await expect(first).rejects.toThrow('expected')
     await expect(second).resolves.toBe(2)
-    expect(events).toEqual([
-      'first:start',
-      'first:end',
-      'second:start',
-      'second:end',
-    ])
+    expect(events).toEqual(['first:start', 'first:end', 'second:start', 'second:end'])
   })
 })

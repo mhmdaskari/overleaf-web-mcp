@@ -14,8 +14,7 @@ import type { OperationOutput } from '../../src/contracts/operations.js'
  * every step is a spawned `node dist/cli.js <args>` with the maintainer's own environment, so the
  * saved session and every OVERLEAF_* setting apply. The project is trashed, never deleted.
  */
-const enabled =
-  process.env.RUN_OVERLEAF_LIVE_TESTS === '1' && process.env.RUN_OVERLEAF_LIVE_CLI_TESTS === '1'
+const enabled = process.env.RUN_OVERLEAF_LIVE_TESTS === '1' && process.env.RUN_OVERLEAF_LIVE_CLI_TESTS === '1'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const CLI = join(ROOT, 'dist', 'cli.js')
@@ -23,8 +22,7 @@ const CLI = join(ROOT, 'dist', 'cli.js')
 const BUILD_OUTPUTS = [CLI, join(ROOT, 'dist', 'cli', 'run.js')]
 const COMMAND_TIMEOUT_MS = 180_000
 
-const DOCUMENT =
-  '\\documentclass{article}\n\\begin{document}\nDisposable command line test.\n\\end{document}\n'
+const DOCUMENT = '\\documentclass{article}\n\\begin{document}\nDisposable command line test.\n\\end{document}\n'
 // A 1x1 PNG, enough for an upload and a hash comparison.
 const FIGURE = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
@@ -62,7 +60,9 @@ async function runCli(args: string[], env: NodeJS.ProcessEnv): Promise<CliRun> {
           resolve({ exitCode: error.code, stdout, stderr })
         } else {
           // Spawn failure or timeout. The command words are enough; argv may hold a project id.
-          reject(new Error(`${args.slice(0, 2).join(' ')} did not exit normally (${String(error.signal ?? error.code)}).`))
+          reject(
+            new Error(`${args.slice(0, 2).join(' ')} did not exit normally (${String(error.signal ?? error.code)}).`)
+          )
         }
       }
     )
@@ -114,7 +114,9 @@ describe.skipIf(!enabled)('command line against a throwaway Overleaf project', (
         expect(tree.rootDocPath).toBe('main.tex')
         expect(tree.entities).toContainEqual(expect.objectContaining({ path: 'main.tex', type: 'doc' }))
 
-        const stub = succeeded<OperationOutput<'read_file'>>(await runCli(['files', 'read', projectId, 'main.tex'], env))
+        const stub = succeeded<OperationOutput<'read_file'>>(
+          await runCli(['files', 'read', projectId, 'main.tex'], env)
+        )
         expect(stub).toMatchObject({ newline: 'LF', revision: expect.any(String) })
 
         const written = succeeded<OperationOutput<'write_file'>>(
@@ -125,7 +127,9 @@ describe.skipIf(!enabled)('command line against a throwaway Overleaf project', (
         )
         expect(written.writeMode).toBe('untracked')
         expect(written.revision).not.toBe(stub.revision)
-        const reread = succeeded<OperationOutput<'read_file'>>(await runCli(['files', 'read', projectId, 'main.tex'], env))
+        const reread = succeeded<OperationOutput<'read_file'>>(
+          await runCli(['files', 'read', projectId, 'main.tex'], env)
+        )
         expect(reread.content === DOCUMENT).toBe(true)
         expect(reread.revision).toBe(written.revision)
 

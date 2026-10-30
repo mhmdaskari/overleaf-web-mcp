@@ -2,12 +2,7 @@ import { McpError } from '../core/errors.js'
 import { FifoQueue } from '../core/queue.js'
 import type { OtProtocol } from '../core/revision.js'
 import { normalizeLf } from '../core/text.js'
-import {
-  flattenProjectTree,
-  type ProjectEntity,
-  type RawEntity,
-  type RawFolder,
-} from '../overleaf/tree.js'
+import { flattenProjectTree, type ProjectEntity, type RawEntity, type RawFolder } from '../overleaf/tree.js'
 import { historyVisibleContent, type HistorySnapshot } from './ot.js'
 import { notConnectedError } from './socketio09-client.js'
 import { upstreamReason } from './upstream-reason.js'
@@ -91,8 +86,9 @@ function findFolder(folders: RawFolder[], folderId: string): RawFolder | undefin
 
 function renameEntity(folders: RawFolder[], entityId: string, name: string): boolean {
   for (const folder of folders) {
-    const entity = [folder, ...(folder.docs ?? []), ...(folder.fileRefs ?? [])]
-      .find(candidate => candidate._id === entityId)
+    const entity = [folder, ...(folder.docs ?? []), ...(folder.fileRefs ?? [])].find(
+      candidate => candidate._id === entityId
+    )
     if (entity) {
       entity.name = name
       return true
@@ -103,9 +99,7 @@ function renameEntity(folders: RawFolder[], entityId: string, name: string): boo
 }
 
 type RemovedEntity =
-  | { type: 'doc'; value: RawEntity }
-  | { type: 'file'; value: RawEntity }
-  | { type: 'folder'; value: RawFolder }
+  { type: 'doc'; value: RawEntity } | { type: 'file'; value: RawEntity } | { type: 'folder'; value: RawFolder }
 
 function takeEntity(folders: RawFolder[], entityId: string): RemovedEntity | undefined {
   for (const folder of folders) {
@@ -177,10 +171,7 @@ export class ProjectConnection {
     this.permissionsLevel = options.join.permissionsLevel
     this.protocolVersion = options.join.protocolVersion
     this.publicId = options.join.publicId
-    this.trackChangesActive = effectiveTrackChanges(
-      options.join.project.trackChangesState,
-      options.currentUserId
-    )
+    this.trackChangesActive = effectiveTrackChanges(options.join.project.trackChangesState, options.currentUserId)
     this.#callTimeoutMs = options.callTimeoutMs ?? 30_000
     this.#applyTimeoutMs = options.applyTimeoutMs ?? this.#callTimeoutMs
 
@@ -272,10 +263,7 @@ export class ProjectConnection {
     return flattenProjectTree(this.project.rootFolder)
   }
 
-  async withDocument<T>(
-    docId: string,
-    operation: (document: JoinedDocument) => Promise<T>
-  ): Promise<T> {
+  async withDocument<T>(docId: string, operation: (document: JoinedDocument) => Promise<T>): Promise<T> {
     // Documents are joined only for one queued operation, avoiding stale client-side snapshots.
     return await this.queue.run(async () => {
       const document = await this.joinDocument(docId)
@@ -314,11 +302,7 @@ export class ProjectConnection {
     }
 
     if (rawType === 'history-ot') {
-      if (
-        !rawLines ||
-        typeof rawLines !== 'object' ||
-        typeof (rawLines as HistorySnapshot).content !== 'string'
-      ) {
+      if (!rawLines || typeof rawLines !== 'object' || typeof (rawLines as HistorySnapshot).content !== 'string') {
         throw new McpError('PROTOCOL_UNSUPPORTED', 'Invalid history-OT snapshot.')
       }
       const snapshot = rawLines as HistorySnapshot
@@ -416,8 +400,8 @@ export class ProjectConnection {
         throw error instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(error.code)
           ? error
           : new McpError('OUTCOME_UNKNOWN', 'The Overleaf socket failed after the OT update was sent.', {
-            cause: error,
-          })
+              cause: error,
+            })
       }
       const [error] = reply
       if (error) {

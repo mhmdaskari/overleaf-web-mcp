@@ -90,8 +90,6 @@ describe('edits that keep characters outside the BMP in place', () => {
   })
 
   test('reports a reorder, which sends a character again', () => {
-    expect(
-      createOutsideBmpPreservingEdits('x\n\u{1F600}\u{1F601}', 'x\n\u{1F601}\u{1F600}')
-    ).toEqual({ insertedAt: 4 })
+    expect(createOutsideBmpPreservingEdits('x\n\u{1F600}\u{1F601}', 'x\n\u{1F601}\u{1F600}')).toEqual({ insertedAt: 4 })
   })
 })

@@ -43,9 +43,9 @@ describe('CLI exit codes', () => {
       expect(exitCodeForError(new McpError('TIMEOUT', 'x', { retryable: true }), operation)).toBe(5)
     }
     expect(exitCodeForError(new McpError('TIMEOUT', 'x', { retryable: true }), 'read_file')).toBe(7)
-    expect(
-      exitCodeForError(new McpError('TIMEOUT', 'x', { details: { outcome: 'not_applied' } }), 'write_file')
-    ).toBe(4)
+    expect(exitCodeForError(new McpError('TIMEOUT', 'x', { details: { outcome: 'not_applied' } }), 'write_file')).toBe(
+      4
+    )
   })
 
   test('an unknown outcome wins over every code, and never invites a re-run', () => {
@@ -60,14 +60,22 @@ describe('CLI exit codes', () => {
   test('an error saying part of a write applied exits 4, never 2 or 7, which promise nothing changed', () => {
     const created = new McpError('INVALID_ARGUMENT', 'x', { details: { created: true, line: 3 } })
     expect(exitCodeForError(created, 'create_file')).toBe(4)
-    const stored = new McpError('RATE_LIMITED', 'x', { retryable: true, details: { applied: ['compiler'], failed: 'imageName' } })
+    const stored = new McpError('RATE_LIMITED', 'x', {
+      retryable: true,
+      details: { applied: ['compiler'], failed: 'imageName' },
+    })
     expect(exitCodeForError(stored, 'update_project_settings')).toBe(4)
     // Nothing stored yet: Overleaf refused the first request, so retrying later is safe.
     const refused = new McpError('RATE_LIMITED', 'x', { retryable: true, details: { applied: [], failed: 'compiler' } })
     expect(exitCodeForError(refused, 'update_project_settings')).toBe(7)
     // Signing in again comes first, and an unknown outcome still wins.
     expect(exitCodeForError(new McpError('AUTH_EXPIRED', 'x', { details: { created: true } }), 'create_file')).toBe(3)
-    expect(exitCodeForError(new McpError('REVISION_CONFLICT', 'x', { details: { created: true, outcome: 'unknown' } }), 'create_file')).toBe(5)
+    expect(
+      exitCodeForError(
+        new McpError('REVISION_CONFLICT', 'x', { details: { created: true, outcome: 'unknown' } }),
+        'create_file'
+      )
+    ).toBe(5)
   })
 
   test('a write observed not to have applied after a lost socket exits 4', () => {

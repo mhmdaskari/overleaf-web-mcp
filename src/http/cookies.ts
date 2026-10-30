@@ -20,10 +20,7 @@ export async function assertCookieFilePermissions(path: string): Promise<Permiss
   }
   const metadata = await stat(path)
   if ((metadata.mode & 0o077) !== 0) {
-    throw new McpError(
-      'PERMISSION_DENIED',
-      `Cookie jar ${path} must be owner-only. Run: chmod 0600 ${path}`
-    )
+    throw new McpError('PERMISSION_DENIED', `Cookie jar ${path} must be owner-only. Run: chmod 0600 ${path}`)
   }
   return { permissionsUnchecked: false }
 }
@@ -55,8 +52,7 @@ export async function parseNetscapeCookies(text: string): Promise<CookieJar> {
       path,
       secure: secure === 'TRUE',
       httpOnly,
-      expires:
-        expires && expires !== '0' ? new Date(Number(expires) * 1000) : 'Infinity',
+      expires: expires && expires !== '0' ? new Date(Number(expires) * 1000) : 'Infinity',
     })
     const protocol = cookie.secure ? 'https:' : 'http:'
     await jar.setCookie(cookie, `${protocol}//${cookie.domain}${cookie.path}`)
@@ -80,10 +76,7 @@ function cookieToNetscape(cookie: Cookie): string {
    * together; a cookie that came through `mergeSetCookies` already carries an absolute `expires`.
    */
   const expiryTime = cookie.expiryTime()
-  const expires =
-    expiryTime === undefined || !Number.isFinite(expiryTime)
-      ? '0'
-      : String(Math.floor(expiryTime / 1000))
+  const expires = expiryTime === undefined || !Number.isFinite(expiryTime) ? '0' : String(Math.floor(expiryTime / 1000))
   return [
     `${prefix}${includeSubdomains ? '.' : ''}${domain}`,
     includeSubdomains ? 'TRUE' : 'FALSE',
@@ -115,9 +108,7 @@ function serializeJar(jar: CookieJar): string {
   const cookies = (serialized?.cookies ?? [])
     .map(value => Cookie.fromJSON(value))
     .filter((value): value is Cookie => value !== null)
-  return `# Netscape HTTP Cookie File\n# Updated by overleaf-web-mcp\n${cookies
-    .map(cookieToNetscape)
-    .join('\n')}\n`
+  return `# Netscape HTTP Cookie File\n# Updated by overleaf-web-mcp\n${cookies.map(cookieToNetscape).join('\n')}\n`
 }
 
 /** Persists a complete cookie jar under an advisory lock with owner-only permissions. */
@@ -137,10 +128,7 @@ export async function writeCookieJar(path: string, jar: CookieJar): Promise<void
       retries: { retries: 5, minTimeout: 50, maxTimeout: 250 },
       stale: 10_000,
     })
-    const temporary = join(
-      dirname(path),
-      `.${basename(path)}.${process.pid}.${Date.now()}.tmp`
-    )
+    const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.${Date.now()}.tmp`)
     await writeFile(temporary, serializeJar(jar), { mode: 0o600 })
     // Same-directory rename prevents readers from observing a partially written jar.
     await rename(temporary, path)
@@ -175,11 +163,9 @@ export class CookieStore {
       return new CookieStore(path, jar, permissions)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new McpError(
-          'AUTH_EXPIRED',
-          `No saved Overleaf web session was found. ${AUTH_LOGIN_INSTRUCTION}`,
-          { cause: error }
-        )
+        throw new McpError('AUTH_EXPIRED', `No saved Overleaf web session was found. ${AUTH_LOGIN_INSTRUCTION}`, {
+          cause: error,
+        })
       }
       throw error
     }
@@ -211,10 +197,7 @@ export class CookieStore {
           await this.jar.setCookie(parsed, `${protocol}//${parsed.domain}${parsed.path ?? '/'}`)
         }
       }
-      const temporary = join(
-        dirname(this.path),
-        `.${basename(this.path)}.${process.pid}.${Date.now()}.tmp`
-      )
+      const temporary = join(dirname(this.path), `.${basename(this.path)}.${process.pid}.${Date.now()}.tmp`)
       await writeFile(temporary, serializeJar(this.jar), { mode: 0o600 })
       await rename(temporary, this.path)
     } catch (error) {

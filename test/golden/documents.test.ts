@@ -68,7 +68,12 @@ describe('write_file', () => {
     trackChangesState?: boolean
     applied: number
   }> = [
-    { variant: 'untracked ShareJS', document: () => sharejs('Old placeholder.', 3), target: 'New placeholder.', applied: 1 },
+    {
+      variant: 'untracked ShareJS',
+      document: () => sharejs('Old placeholder.', 3),
+      target: 'New placeholder.',
+      applied: 1,
+    },
     {
       variant: 'tracked ShareJS',
       document: () => sharejs('Old placeholder.', 3),
@@ -76,7 +81,12 @@ describe('write_file', () => {
       writeMode: 'tracked',
       applied: 1,
     },
-    { variant: 'untracked history-OT', document: () => history('Draft sentence.', 5), target: 'Final sentence.', applied: 1 },
+    {
+      variant: 'untracked history-OT',
+      document: () => history('Draft sentence.', 5),
+      target: 'Final sentence.',
+      applied: 1,
+    },
     {
       variant: 'tracked history-OT',
       document: () => history('Draft sentence.', 5),
@@ -124,7 +134,12 @@ describe('write_file', () => {
       const localPath = join(directory, 'replacement.tex')
       await writeFile(localPath, 'Replacement placeholder.\r\n')
       const read = (await service.read_file({ projectId: PROJECT, filePath: 'main.tex' })) as { revision: string }
-      const result = await service.write_file({ projectId: PROJECT, filePath: 'main.tex', revision: read.revision, localPath })
+      const result = await service.write_file({
+        projectId: PROJECT,
+        filePath: 'main.tex',
+        revision: read.revision,
+        localPath,
+      })
       expect(visible(server, 'd1')).toBe('Replacement placeholder.\n')
       expectGolden('write_file', result)
     })
@@ -174,7 +189,10 @@ describe('create_file', () => {
   })
 
   test('tracked initial content on a history-OT document with track changes on', async () => {
-    const server = fakeOverleaf({ d1: history('Main.', 1) }, { trackChangesState: true, newDocumentProtocol: 'history-ot' })
+    const server = fakeOverleaf(
+      { d1: history('Main.', 1) },
+      { trackChangesState: true, newDocumentProtocol: 'history-ot' }
+    )
     await withService(server, async ({ service }) => {
       const result = await service.create_file({
         projectId: PROJECT,

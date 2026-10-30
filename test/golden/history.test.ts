@@ -188,7 +188,13 @@ describe('monitor_project_history golden results', () => {
               origin: { kind: 'history-resync', version: 19 },
             },
             labels: [
-              { id: 'label-below', comment: 'Below the cursor', version: 21, created_at: '2023-11-14T22:18:20.000Z', user_id: 'user-1' },
+              {
+                id: 'label-below',
+                comment: 'Below the cursor',
+                version: 21,
+                created_at: '2023-11-14T22:18:20.000Z',
+                user_id: 'user-1',
+              },
             ],
             pathnames: ['main.tex'],
             project_ops: [
