@@ -5,6 +5,20 @@ All notable changes to this project are documented here. This project follows
 shapes, and the command line's commands and exit codes may change in a minor or patch release;
 each such change is listed below.
 
+## [0.8.0] - Unreleased
+
+### Fixed
+
+- **An unconfirmed document write is reported as not applied only when the original revision was
+  the last thing seen.** When a document write from `write_file`, `write_section`, `create_file`,
+  or `sync_directory` timed out or lost its socket after sending, and a recovery read saw the
+  original revision but every later read failed until the recovery window ended, the error was `TIMEOUT` (exit 4) or `REMOTE_ERROR`
+  (exit 1) with `details.outcome: "not_applied"`, although the write could have applied after
+  that sighting. It is now `OUTCOME_UNKNOWN` (exit 5), as
+  [the safety page](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) already described
+  `not_applied`: the original revision stayed live throughout the recovery window. Comment writes
+  already worked this way.
+
 ## [0.7.1] - 2026-10-25
 
 Compile outputs on self-hosted Overleaf. No tool was added or removed, and no result shape

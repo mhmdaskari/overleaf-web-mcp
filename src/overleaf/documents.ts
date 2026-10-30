@@ -13,6 +13,7 @@ import {
   type HistorySnapshot,
 } from '../protocol/ot.js'
 import type { JoinedDocument } from '../protocol/project-connection.js'
+import { isUnchangedDocument, isUnconfirmedWriteError, notAppliedError, observeUnconfirmedWrite } from './recovery.js'
 import { resolveProjectPath, type ProjectEntity } from './tree.js'
 
 interface DocumentConnection {
@@ -231,7 +232,7 @@ export class DocumentsApi {
           }
           await safelyLeave(connection, entity.id)
           // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
-          if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
+          if (isUnconfirmedWriteError(submitError)) {
             return { before, trackChangesActive: connection.trackChangesActive, submitError }
           }
           if (submitError) throw asMcpError(submitError)
@@ -274,12 +275,9 @@ export class DocumentsApi {
     const timedOut = submitted.submitError instanceof McpError && submitted.submitError.code === 'TIMEOUT'
     const unconfirmed = timedOut ? 'timed out' : 'lost its socket'
     await this.#connections.invalidate?.(projectId)
-    const deadline = Date.now() + this.#recoveryTimeoutMs
-    let unchangedRecovery: { live: JoinedDocument; trackChangesActive: boolean } | undefined
-    let observationError: unknown
-    do {
-      try {
-        const recovery = await this.#connections.withConnection(
+    const observation = await observeUnconfirmedWrite({
+      observe: async () =>
+        await this.#connections.withConnection(
           projectId,
           async connection =>
             await connection.queue.run(async () => {
@@ -288,51 +286,38 @@ export class DocumentsApi {
               await safelyLeave(connection, entity.id)
               return { live, trackChangesActive: connection.trackChangesActive }
             })
-        )
-        observationError = undefined
-        // The intended hash proves the timed-out submission was applied.
-        if (contentHash(recovery.live.content) === contentHash(target)) {
-          return resultFor(projectId, recovery.live, recovery.trackChangesActive, writeMode, true)
-        }
-        const unchanged =
-          recovery.live.protocol === submitted.before.protocol &&
-          recovery.live.version === submitted.before.version &&
-          contentHash(recovery.live.content) === contentHash(submitted.before.content)
-        if (!unchanged) {
-          // Any third state may include concurrent work and must be reported as a conflict.
-          throw new McpError('REVISION_CONFLICT', `Live content changed after the write ${unconfirmed}.`, {
-            retryable: false,
-            details: {
-              outcome: 'unknown',
-              liveRevision: createRevision({
-                projectId,
-                docId: recovery.live.docId,
-                protocol: recovery.live.protocol,
-                otVersion: recovery.live.version,
-                content: recovery.live.content,
-              }),
-            },
-          })
-        }
-        unchangedRecovery = recovery
-      } catch (error) {
-        if (error instanceof McpError && error.code === 'REVISION_CONFLICT') throw error
-        observationError = error
-      }
-      if (Date.now() >= deadline) break
-      await new Promise<void>(resolve => setTimeout(resolve, this.#recoveryPollIntervalMs))
-    } while (Date.now() <= deadline)
-
-    if (unchangedRecovery) {
-      // Seeing the original revision through the full recovery window proves no application was observed.
-      throw new McpError(
-        timedOut ? 'TIMEOUT' : 'REMOTE_ERROR',
-        `The write ${unconfirmed} and the original revision is still live.`,
-        { retryable: false, details: { outcome: 'not_applied' } }
-      )
-    }
-    throw new McpError('OUTCOME_UNKNOWN', `Could not observe live content after the write ${unconfirmed}.`, {
-      cause: observationError,
+        ),
+      // The intended hash proves the unconfirmed submission was applied.
+      classify: recovery =>
+        contentHash(recovery.live.content) === contentHash(target)
+          ? 'target'
+          : isUnchangedDocument(recovery.live, submitted.before)
+            ? 'original'
+            : 'other',
+      timeoutMs: this.#recoveryTimeoutMs,
+      pollIntervalMs: this.#recoveryPollIntervalMs,
+      // Any third state may include concurrent work and must be reported as a conflict.
+      onOther: recovery =>
+        new McpError('REVISION_CONFLICT', `Live content changed after the write ${unconfirmed}.`, {
+          retryable: false,
+          details: {
+            outcome: 'unknown',
+            liveRevision: createRevision({
+              projectId,
+              docId: recovery.live.docId,
+              protocol: recovery.live.protocol,
+              otVersion: recovery.live.version,
+              content: recovery.live.content,
+            }),
+          },
+        }),
+      onUnobserved: cause =>
+        new McpError('OUTCOME_UNKNOWN', `Could not observe live content after the write ${unconfirmed}.`, { cause }),
     })
+    if (observation.state === 'target') {
+      return resultFor(projectId, observation.observed.live, observation.observed.trackChangesActive, writeMode, true)
+    }
+    // Seeing the original revision through the full recovery window proves no application was observed.
+    throw notAppliedError(submitted.submitError, `The write ${unconfirmed} and the original revision is still live.`)
   }
 }
