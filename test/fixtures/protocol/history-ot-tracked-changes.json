@@ -1,0 +1,459 @@
+{
+  "_source": [
+    "Hand-authored from overleaf/overleaf e039ad2, not captured live: the joinDoc acknowledgement services/real-time/app/js/WebsocketController.js:304,358 (history-ot snapshot passed through unencoded, ranges {}), raw tracked changes libraries/overleaf-editor-core/lib/file_data/tracked_change.js:42-47 and tracking_props.js:43-49. Positions are raw snapshot UTF-16 offsets; content still holds tracked-deleted text. The replacement pair is an insert followed by a delete at pos + the insert length, as ShareJS stores one. `changes` in each decision index snapshot.trackedChanges; changes are walked in ascending pos.",
+    "Wire forms: libraries/overleaf-editor-core/lib/operation/scan_op.js:337-342 (tracked retain as {r, tracking}), :417-418 (remove as -n); libraries/overleaf-editor-core/lib/file_data/clear_tracking_props.js:39 (tracking {type: 'none'}); libraries/overleaf-editor-core/lib/operation/text_operation.js:248 ({textOperation}), :295 (base length equals the raw length).",
+    "Expected snapshots: libraries/overleaf-editor-core/lib/file_data/tracked_change_list.js:239-264 (a remove drops the ranges it covers and shifts later ones), :289-342 (a tracking-none retain drops the ranges it covers), :370 (ranges merge after the operation); libraries/overleaf-editor-core/lib/file_data/string_file_data.js:50-57 (trackedChanges omitted when empty). No two remaining ranges touch with the same type and user, so none merge."
+  ],
+  "joinDocAck": "6:::3+[null,{\"content\":\"Alpha beta INSERTED gamma.\\nRemove this phrase now.\\nReplace newold here.\\nNaïve café über text 😀 end.\\n\",\"trackedChanges\":[{\"range\":{\"pos\":11,\"length\":9},\"tracking\":{\"type\":\"insert\",\"userId\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}},{\"range\":{\"pos\":33,\"length\":12},\"tracking\":{\"type\":\"delete\",\"userId\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}},{\"range\":{\"pos\":59,\"length\":3},\"tracking\":{\"type\":\"insert\",\"userId\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}},{\"range\":{\"pos\":62,\"length\":3},\"tracking\":{\"type\":\"delete\",\"userId\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}},{\"range\":{\"pos\":83,\"length\":5},\"tracking\":{\"type\":\"insert\",\"userId\":\"USER2\",\"ts\":\"2026-01-01T00:00:00.000Z\"}},{\"range\":{\"pos\":93,\"length\":3},\"tracking\":{\"type\":\"delete\",\"userId\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}}]},12,[],{},\"history-ot\",{\"canSkipLeaveDoc\":true}]",
+  "rawLength": 101,
+  "visibleContent": "Alpha beta INSERTED gamma.\nRemove now.\nReplace new here.\nNaïve café über text end.\n",
+  "decisions": [
+    {
+      "name": "accept-insert",
+      "action": "accept",
+      "changes": [
+        0
+      ],
+      "textOperation": [
+        11,
+        {
+          "r": 9,
+          "tracking": {
+            "type": "none"
+          }
+        },
+        81
+      ],
+      "expectedSnapshot": {
+        "content": "Alpha beta INSERTED gamma.\nRemove this phrase now.\nReplace newold here.\nNaïve café über text 😀 end.\n",
+        "trackedChanges": [
+          {
+            "range": {
+              "pos": 33,
+              "length": 12
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 59,
+              "length": 3
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 62,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 83,
+              "length": 5
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER2",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 93,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          }
+        ]
+      },
+      "expectedVisibleContent": "Alpha beta INSERTED gamma.\nRemove now.\nReplace new here.\nNaïve café über text end.\n",
+      "_source": "overleaf/overleaf e039ad2 services/web/frontend/js/features/review-panel/context/ranges-context.tsx:200-230 (acceptChanges: retain the gap :204, insert -> {r, tracking: none} :213, delete -> remove :218, trailing retain to the raw length :224-227)"
+    },
+    {
+      "name": "accept-delete",
+      "action": "accept",
+      "changes": [
+        1
+      ],
+      "textOperation": [
+        33,
+        -12,
+        56
+      ],
+      "expectedSnapshot": {
+        "content": "Alpha beta INSERTED gamma.\nRemove now.\nReplace newold here.\nNaïve café über text 😀 end.\n",
+        "trackedChanges": [
+          {
+            "range": {
+              "pos": 11,
+              "length": 9
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 47,
+              "length": 3
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 50,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 71,
+              "length": 5
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER2",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 81,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          }
+        ]
+      },
+      "expectedVisibleContent": "Alpha beta INSERTED gamma.\nRemove now.\nReplace new here.\nNaïve café über text end.\n",
+      "_source": "overleaf/overleaf e039ad2 services/web/frontend/js/features/review-panel/context/ranges-context.tsx:200-230 (acceptChanges: retain the gap :204, insert -> {r, tracking: none} :213, delete -> remove :218, trailing retain to the raw length :224-227)"
+    },
+    {
+      "name": "reject-insert",
+      "action": "reject",
+      "changes": [
+        0
+      ],
+      "textOperation": [
+        11,
+        -9,
+        81
+      ],
+      "expectedSnapshot": {
+        "content": "Alpha beta gamma.\nRemove this phrase now.\nReplace newold here.\nNaïve café über text 😀 end.\n",
+        "trackedChanges": [
+          {
+            "range": {
+              "pos": 24,
+              "length": 12
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 50,
+              "length": 3
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 53,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 74,
+              "length": 5
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER2",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 84,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          }
+        ]
+      },
+      "expectedVisibleContent": "Alpha beta gamma.\nRemove now.\nReplace new here.\nNaïve café über text end.\n",
+      "_source": "overleaf/overleaf e039ad2 services/web/frontend/js/features/review-panel/context/ranges-context.tsx:244-304 (rejectChanges: retain the gap :254, insert -> remove :263, delete -> {r, tracking: none} :281, trailing retain to the raw length :301)"
+    },
+    {
+      "name": "reject-delete",
+      "action": "reject",
+      "changes": [
+        1
+      ],
+      "textOperation": [
+        33,
+        {
+          "r": 12,
+          "tracking": {
+            "type": "none"
+          }
+        },
+        56
+      ],
+      "expectedSnapshot": {
+        "content": "Alpha beta INSERTED gamma.\nRemove this phrase now.\nReplace newold here.\nNaïve café über text 😀 end.\n",
+        "trackedChanges": [
+          {
+            "range": {
+              "pos": 11,
+              "length": 9
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 59,
+              "length": 3
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 62,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 83,
+              "length": 5
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER2",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 93,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          }
+        ]
+      },
+      "expectedVisibleContent": "Alpha beta INSERTED gamma.\nRemove this phrase now.\nReplace new here.\nNaïve café über text end.\n",
+      "_source": "overleaf/overleaf e039ad2 services/web/frontend/js/features/review-panel/context/ranges-context.tsx:244-304 (rejectChanges: retain the gap :254, insert -> remove :263, delete -> {r, tracking: none} :281, trailing retain to the raw length :301)"
+    },
+    {
+      "name": "accept-replacement-pair",
+      "action": "accept",
+      "changes": [
+        2,
+        3
+      ],
+      "textOperation": [
+        59,
+        {
+          "r": 3,
+          "tracking": {
+            "type": "none"
+          }
+        },
+        -3,
+        36
+      ],
+      "expectedSnapshot": {
+        "content": "Alpha beta INSERTED gamma.\nRemove this phrase now.\nReplace new here.\nNaïve café über text 😀 end.\n",
+        "trackedChanges": [
+          {
+            "range": {
+              "pos": 11,
+              "length": 9
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 33,
+              "length": 12
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 80,
+              "length": 5
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER2",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 90,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          }
+        ]
+      },
+      "expectedVisibleContent": "Alpha beta INSERTED gamma.\nRemove now.\nReplace new here.\nNaïve café über text end.\n",
+      "_source": "overleaf/overleaf e039ad2 services/web/frontend/js/features/review-panel/context/ranges-context.tsx:200-230 (acceptChanges: retain the gap :204, insert -> {r, tracking: none} :213, delete -> remove :218, trailing retain to the raw length :224-227)"
+    },
+    {
+      "name": "reject-non-ascii-and-astral",
+      "action": "reject",
+      "changes": [
+        4,
+        5
+      ],
+      "textOperation": [
+        83,
+        -5,
+        5,
+        {
+          "r": 3,
+          "tracking": {
+            "type": "none"
+          }
+        },
+        5
+      ],
+      "expectedSnapshot": {
+        "content": "Alpha beta INSERTED gamma.\nRemove this phrase now.\nReplace newold here.\nNaïve café text 😀 end.\n",
+        "trackedChanges": [
+          {
+            "range": {
+              "pos": 11,
+              "length": 9
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 33,
+              "length": 12
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 59,
+              "length": 3
+            },
+            "tracking": {
+              "type": "insert",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "range": {
+              "pos": 62,
+              "length": 3
+            },
+            "tracking": {
+              "type": "delete",
+              "userId": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          }
+        ]
+      },
+      "expectedVisibleContent": "Alpha beta INSERTED gamma.\nRemove now.\nReplace new here.\nNaïve café text 😀 end.\n",
+      "_source": "overleaf/overleaf e039ad2 services/web/frontend/js/features/review-panel/context/ranges-context.tsx:244-304 (rejectChanges: retain the gap :254, insert -> remove :263, delete -> {r, tracking: none} :281, trailing retain to the raw length :301)"
+    }
+  ]
+}

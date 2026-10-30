@@ -1,0 +1,81 @@
+{
+  "joinDocAck": "6:::1+[null,[\"Alpha beta INSERTED gamma.\",\"Remove now.\",\"Replace new here.\",\"NaÃ¯ve cafÃ© Ã¼ber text.\",\"\"],6,[],{\"changes\":[{\"id\":\"change-1\",\"op\":{\"p\":11,\"i\":\"INSERTED \"},\"metadata\":{\"user_id\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}},{\"id\":\"change-2\",\"op\":{\"p\":33,\"d\":\" this phrase\"},\"metadata\":{\"user_id\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}},{\"id\":\"change-3\",\"op\":{\"p\":47,\"i\":\"new\"},\"metadata\":{\"user_id\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}},{\"id\":\"change-4\",\"op\":{\"p\":50,\"d\":\"old\"},\"metadata\":{\"user_id\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}},{\"id\":\"change-5\",\"op\":{\"p\":68,\"i\":\"Ã¼ber \"},\"metadata\":{\"user_id\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}}],\"comments\":[{\"id\":\"thread-1\",\"op\":{\"c\":\"NaÃ¯ve cafÃ©\",\"p\":57,\"t\":\"thread-1\"},\"metadata\":{\"user_id\":\"USER\",\"ts\":\"2026-01-01T00:00:00.000Z\"}}]},\"sharejs-text-ot\",{\"canSkipLeaveDoc\":true}]",
+  "rangesIndex": [
+    {
+      "id": "DOC",
+      "ranges": {
+        "comments": [
+          {
+            "id": "thread-1",
+            "op": {
+              "c": "Naïve café",
+              "p": 57,
+              "t": "thread-1"
+            },
+            "metadata": {
+              "user_id": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "id": "change-1",
+            "op": {
+              "i": "INSERTED ",
+              "p": 11
+            },
+            "metadata": {
+              "user_id": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "id": "change-2",
+            "op": {
+              "d": " this phrase",
+              "p": 33
+            },
+            "metadata": {
+              "user_id": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "id": "change-3",
+            "op": {
+              "i": "new",
+              "p": 47
+            },
+            "metadata": {
+              "user_id": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "id": "change-4",
+            "op": {
+              "d": "old",
+              "p": 50
+            },
+            "metadata": {
+              "user_id": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "id": "change-5",
+            "op": {
+              "i": "über ",
+              "p": 68
+            },
+            "metadata": {
+              "user_id": "USER",
+              "ts": "2026-01-01T00:00:00.000Z"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
