@@ -38,6 +38,9 @@ const CALL_TIMEOUT_MS = 300_000
 const TASK_TIMEOUT_MS = 20 * 60_000
 // Overleaf refuses a compile that starts within about a second of the previous one.
 const COMPILE_GAP_MS = 2_000
+// Overleaf allows one account 45 joins of one project in a 60-second window. One interface's cold
+// and warm runs of a task stay under it; the seeding sync and a second interface would not.
+const JOIN_WINDOW_MS = 61_000
 
 const INTERFACES = ['mcp', 'cli', 'sdk'] as const
 type InterfaceName = (typeof INTERFACES)[number]
@@ -974,6 +977,8 @@ describe.skipIf(!enabled)('one task set through MCP, the command line, and the S
         const results: Partial<Record<InterfaceName, Partial<Record<Phase, RunRecord>>>> = {}
         report.tasks[task.name] = results
         for (const which of INTERFACES) {
+          // Outside the timed phases, so the wait is in no measurement.
+          await new Promise(resolve => setTimeout(resolve, JOIN_WINDOW_MS))
           const driver = driverFor(which)
           const phases: Partial<Record<Phase, RunRecord>> = {}
           results[which] = phases

@@ -15,7 +15,7 @@ unexpected shape surfaces as `PROTOCOL_UNSUPPORTED` rather than a parse exceptio
 | Method and route | Sent | Read | Notes |
 | --- | --- | --- | --- |
 | `GET /project` | session cookie | `<meta name="ol-csrfToken">`, `ol-user_id`, `ol-maxDocLength` from the HTML | Runs once at startup. A missing CSRF token means the session expired (`AUTH_EXPIRED`). |
-| `GET /socket.io/1/?...` and `WS /socket.io/1/websocket/:sessionId` | session cookie, `projectId` | Socket.IO 0.9 handshake, then the `joinProject` payload: `project.rootFolder`, `rootDoc_id`, `compiler`, `imageName`, `spellCheckLanguage`, `trackChangesState`, `features.trackChanges`, `features.trackChangesVisible`, `permissionsLevel`, `protocolVersion` | One cached socket per project; document text goes over this channel as OT. |
+| `GET /socket.io/1/?...` and `WS /socket.io/1/websocket/:sessionId` | session cookie, `projectId` | Socket.IO 0.9 handshake, then the `joinProject` payload: `project.rootFolder`, `rootDoc_id`, `compiler`, `imageName`, `spellCheckLanguage`, `trackChangesState`, `features.trackChanges`, `features.trackChangesVisible`, `permissionsLevel`, `protocolVersion` | One cached socket per project; document text goes over this channel as OT. Each join counts against web's join-project limiter: 45 a minute for one user on one project. Past it the socket sends `connectionRejected` `{ message: "rate-limit hit when joining project", code: "TooManyRequests" }` (captured live), reported as `RATE_LIMITED` with `details.reason: "join_rate_limited"`. |
 
 ## Projects
 

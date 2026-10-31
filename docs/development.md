@@ -111,9 +111,11 @@ named `mcp-cli-<time>`. `test/live/compare-interfaces.test.ts` creates a throwaw
 `mcp-compare-<time>`, runs four tasks on it (revise one section, sync figures and sources, diagnose
 a failed build, and resolve a review task: a comment thread, then a tracked change written and
 rejected) through a spawned `serve`, `node dist/cli.js`, and the SDK, each cold and warm, then
-trashes it. Every task must succeed through every interface, with the same outcome. It writes a JSON
-report to `OVERLEAF_LIVE_COMPARE_REPORT`, by default a file in the system temp folder whose path the
-test prints.
+trashes it. Every task must succeed through every interface, with the same outcome. Before each
+interface's runs it waits a minute, untimed, because Overleaf allows one account 45 joins of one
+project a minute, so the whole suite takes about a quarter of an hour. It writes a JSON report to
+`OVERLEAF_LIVE_COMPARE_REPORT`, by default a file in the system temp folder whose path the test
+prints.
 
 None of these tests deletes a project permanently; remove the trashed project by hand from the
 web UI's Trashed view. Feature availability depends on the deployment and account. Keep request
