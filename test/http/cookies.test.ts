@@ -29,12 +29,8 @@ describe('Netscape cookie jars', () => {
 #HttpOnly_.overleaf.test\tTRUE\t/\tTRUE\t2147483647\tcsrf\ttoken
 `)
 
-    expect(await jar.getCookieString('https://www.overleaf.test/project')).toContain(
-      'overleaf.sid=session'
-    )
-    expect(await jar.getCookieString('https://www.overleaf.test/project')).toContain(
-      'csrf=token'
-    )
+    expect(await jar.getCookieString('https://www.overleaf.test/project')).toContain('overleaf.sid=session')
+    expect(await jar.getCookieString('https://www.overleaf.test/project')).toContain('csrf=token')
   })
 
   test('rejects group/world-readable files on POSIX', async () => {
@@ -62,15 +58,12 @@ describe('Netscape cookie jars', () => {
     const store = await CookieStore.load(path)
     const liveJar = store.jar
 
-    await store.mergeSetCookies(
-      'https://overleaf.test/project',
-      ['overleaf.sid=new; Domain=overleaf.test; Path=/; Secure']
-    )
+    await store.mergeSetCookies('https://overleaf.test/project', [
+      'overleaf.sid=new; Domain=overleaf.test; Path=/; Secure',
+    ])
 
     expect(store.jar).toBe(liveJar)
-    expect(await liveJar.getCookieString('https://overleaf.test/project')).toContain(
-      'overleaf.sid=new'
-    )
+    expect(await liveJar.getCookieString('https://overleaf.test/project')).toContain('overleaf.sid=new')
     expect(await readFile(path, 'utf8')).toContain('overleaf.sid\tnew')
   })
 
@@ -90,9 +83,7 @@ describe('Netscape cookie jars', () => {
       expect((await stat(path)).mode & 0o777).toBe(0o600)
     }
     const loaded = await CookieStore.load(path)
-    expect(await loaded.jar.getCookieString('https://overleaf.test/project')).toContain(
-      'overleaf_session2=session'
-    )
+    expect(await loaded.jar.getCookieString('https://overleaf.test/project')).toContain('overleaf_session2=session')
   })
 
   test('writes domain cookies with the subdomain flag other Netscape readers rely on', async () => {
@@ -112,9 +103,7 @@ describe('Netscape cookie jars', () => {
     expect(lines).toContain('#HttpOnly_.overleaf.test\tTRUE\t/\tTRUE\t0\toverleaf_session2\tsession')
     expect(lines).toContain('www.overleaf.test\tFALSE\t/\tTRUE\t0\tbalancer\thost')
     const loaded = await CookieStore.load(path)
-    expect(await loaded.jar.getCookieString('https://www.overleaf.test/project')).toContain(
-      'overleaf_session2=session'
-    )
+    expect(await loaded.jar.getCookieString('https://www.overleaf.test/project')).toContain('overleaf_session2=session')
   })
 
   test('keeps a Max-Age deadline across a write and a reload', async () => {
@@ -173,9 +162,7 @@ describe('Netscape cookie jars', () => {
       'overleaf_session2=far; Domain=.overleaf.test; Path=/; Secure; HttpOnly; Max-Age=99999999999999999999',
     ])
 
-    expect(await store.sessionExpiresAt('https://www.overleaf.test/project')).toBe(
-      new Date(8.64e15).toISOString()
-    )
+    expect(await store.sessionExpiresAt('https://www.overleaf.test/project')).toBe(new Date(8.64e15).toISOString())
     expect(await readFile(path, 'utf8')).toContain('\toverleaf_session2\tfar')
   })
 
@@ -195,9 +182,7 @@ describe('Netscape cookie jars', () => {
     )
     const store = await CookieStore.load(path)
 
-    expect(await store.sessionExpiresAt('https://www.overleaf.test/project')).toBe(
-      '2030-01-01T00:00:00.000Z'
-    )
+    expect(await store.sessionExpiresAt('https://www.overleaf.test/project')).toBe('2030-01-01T00:00:00.000Z')
     // Nothing is sent to an unrelated host, so there is no deadline to report.
     expect(await store.sessionExpiresAt('https://elsewhere.test/')).toBeUndefined()
   })
@@ -205,11 +190,9 @@ describe('Netscape cookie jars', () => {
   test('reports no deadline when every cookie is a session cookie', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'overleaf-cookie-session-only-'))
     const path = join(directory, 'cookies.txt')
-    await writeFile(
-      path,
-      '# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t0\toverleaf.sid\tsession\n',
-      { mode: 0o600 }
-    )
+    await writeFile(path, '# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t0\toverleaf.sid\tsession\n', {
+      mode: 0o600,
+    })
     const store = await CookieStore.load(path)
 
     expect(await store.sessionExpiresAt('https://www.overleaf.test/project')).toBeUndefined()

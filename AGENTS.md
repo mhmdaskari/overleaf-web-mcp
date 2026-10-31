@@ -29,11 +29,12 @@ operation command never loads it either.
 
 ```bash
 npm install
-npm run check      # tsc --noEmit
-npm run lint       # eslint
-npm test           # vitest, no network needed
-npm run build      # emits dist/
-npm pack --dry-run # verifies the published file list, the three skills/*/SKILL.md included
+npm run check        # tsc --noEmit
+npm run lint         # eslint
+npm run format:check # prettier; npm run format rewrites the files
+npm test             # vitest, no network needed
+npm run build        # emits dist/
+npm pack --dry-run   # verifies the published file list, the three skills/*/SKILL.md included
 ```
 
 CI runs all of these on Node 20 and 24 for every push and pull request. For the docs site,
@@ -147,5 +148,7 @@ CI runs all of these on Node 20 and 24 for every push and pull request. For the 
 
 - Commit subjects use a conventional prefix (`feat:`, `fix:`, `docs:`, `ci:`, `chore:`) and plain
   wording. No attribution trailers.
+- Prettier formats the TypeScript and JavaScript (`.prettierrc.json`); run `npm run format` before
+  committing. A pure reformat is listed in `.git-blame-ignore-revs`.
 - Prefer small, verified changes. Comment the reason for a decision only where the code alone
   does not make it obvious.

@@ -2,12 +2,7 @@ import { asMcpError, McpError } from '../core/errors.js'
 import { assertUpdateSize } from '../core/limits.js'
 import { AccessPolicy, assertPathSafeId } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
-import {
-  assertRevisionMatches,
-  contentHash,
-  createRevision,
-  type OtProtocol,
-} from '../core/revision.js'
+import { assertRevisionMatches, contentHash, createRevision, type OtProtocol } from '../core/revision.js'
 import { lineColumnToOffset, normalizeLf, offsetToLineColumn, type LineColumn } from '../core/text.js'
 import {
   buildCommentOperation,
@@ -37,10 +32,7 @@ interface CommentConnection {
 }
 
 interface CommentConnections {
-  withConnection<T>(
-    projectId: string,
-    operation: (connection: CommentConnection) => Promise<T>
-  ): Promise<T>
+  withConnection<T>(projectId: string, operation: (connection: CommentConnection) => Promise<T>): Promise<T>
   invalidate(projectId: string): Promise<void>
 }
 
@@ -162,15 +154,17 @@ function rangesFromDocument(document: JoinedDocument): LocatedRange[] {
       if (!range) return []
       const start = snapshotToVisibleOffset(snapshot, range.pos)
       const end = snapshotToVisibleOffset(snapshot, range.pos + range.length)
-      return [{
-        threadId: comment.id,
-        docId: document.docId,
-        start,
-        end,
-        quotedText: document.content.slice(start, end),
-        // Overleaf leaves resolved out of an open comment's snapshot entry.
-        resolved: comment.resolved === true,
-      }]
+      return [
+        {
+          threadId: comment.id,
+          docId: document.docId,
+          start,
+          end,
+          quotedText: document.content.slice(start, end),
+          // Overleaf leaves resolved out of an open comment's snapshot entry.
+          resolved: comment.resolved === true,
+        },
+      ]
     })
   }
   const comments = (document.ranges as { comments?: unknown[] } | undefined)?.comments ?? []
@@ -234,9 +228,8 @@ function mapThread(id: string, thread: ThreadData): CommentThread {
 
 function authorMatches(thread: CommentThread, filter: string): boolean {
   const needle = filter.toLocaleLowerCase()
-  return thread.messages.some(({ author }) =>
-    author !== null &&
-    (author.id === filter || author.displayName.toLocaleLowerCase().includes(needle))
+  return thread.messages.some(
+    ({ author }) => author !== null && (author.id === filter || author.displayName.toLocaleLowerCase().includes(needle))
   )
 }
 
@@ -290,7 +283,7 @@ export class CommentsApi {
   async getThreads(projectId: string): Promise<ThreadsResponse> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect('overleaf-read')
-    return await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/threads`) as ThreadsResponse
+    return (await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/threads`)) as ThreadsResponse
   }
 
   async listComments(
@@ -312,14 +305,9 @@ export class CommentsApi {
     if (!options.filePath) {
       // The project index selects relevant documents; its absence must never trigger a join-all scan.
       try {
-        indexedRanges = projectRanges(
-          await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/ranges`)
-        )
+        indexedRanges = projectRanges(await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/ranges`))
       } catch (error) {
-        if (
-          error instanceof McpError &&
-          ['NOT_FOUND', 'REMOTE_ERROR', 'PROTOCOL_UNSUPPORTED'].includes(error.code)
-        ) {
+        if (error instanceof McpError && ['NOT_FOUND', 'REMOTE_ERROR', 'PROTOCOL_UNSUPPORTED'].includes(error.code)) {
           positionsUnavailable = true
         } else {
           throw error
@@ -334,61 +322,59 @@ export class CommentsApi {
       }
     }
 
-    return await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(async () => {
-        const tree = connection.getTree()
-        const documentsById = new Map<string, JoinedDocument>()
-        if (options.filePath) {
-          const entity = resolveProjectPath(tree, options.filePath, 'doc')
-          const document = await connection.joinDocument(entity.id)
-          indexedRanges = rangesFromDocument(document)
-          documentsById.set(entity.id, document)
-          await leaveQuietly(connection, entity.id)
-        }
+    return await this.#connections.withConnection(
+      projectId,
+      async connection =>
+        await connection.queue.run(async () => {
+          const tree = connection.getTree()
+          const documentsById = new Map<string, JoinedDocument>()
+          if (options.filePath) {
+            const entity = resolveProjectPath(tree, options.filePath, 'doc')
+            const document = await connection.joinDocument(entity.id)
+            indexedRanges = rangesFromDocument(document)
+            documentsById.set(entity.id, document)
+            await leaveQuietly(connection, entity.id)
+          }
 
-        const filteredIds = new Set(filtered.map(([id]) => id))
-        const documentIds = [...new Set(
-          indexedRanges
-            .filter(range => filteredIds.has(range.threadId))
-            .map(range => range.docId)
-        )]
-        const liveByThread = new Map<string, { range: LocatedRange; document: JoinedDocument }>()
-        for (const docId of documentIds) {
-          const cached = documentsById.get(docId)
-          const document = cached ?? await connection.joinDocument(docId)
-          for (const range of rangesFromDocument(document)) {
-            if (filteredIds.has(range.threadId)) liveByThread.set(range.threadId, { range, document })
+          const filteredIds = new Set(filtered.map(([id]) => id))
+          const documentIds = [
+            ...new Set(indexedRanges.filter(range => filteredIds.has(range.threadId)).map(range => range.docId)),
+          ]
+          const liveByThread = new Map<string, { range: LocatedRange; document: JoinedDocument }>()
+          for (const docId of documentIds) {
+            const cached = documentsById.get(docId)
+            const document = cached ?? (await connection.joinDocument(docId))
+            for (const range of rangesFromDocument(document)) {
+              if (filteredIds.has(range.threadId)) liveByThread.set(range.threadId, { range, document })
+            }
+            if (!cached) await leaveQuietly(connection, docId)
           }
-          if (!cached) await leaveQuietly(connection, docId)
-        }
 
-        const pathById = new Map(tree.map(entity => [entity.id, entity.path]))
-        const listed: ListedComment[] = []
-        for (const [id, thread] of filtered) {
-          const live = liveByThread.get(id)
-          const fallback = indexedRanges.find(range => range.threadId === id)
-          const range = live?.range ?? fallback
-          if (options.filePath && range?.docId !== resolveProjectPath(tree, options.filePath, 'doc').id) {
-            continue
+          const pathById = new Map(tree.map(entity => [entity.id, entity.path]))
+          const listed: ListedComment[] = []
+          for (const [id, thread] of filtered) {
+            const live = liveByThread.get(id)
+            const fallback = indexedRanges.find(range => range.threadId === id)
+            const range = live?.range ?? fallback
+            if (options.filePath && range?.docId !== resolveProjectPath(tree, options.filePath, 'doc').id) {
+              continue
+            }
+            if (!range || !live) {
+              listed.push({ ...thread, unlocated: true })
+              continue
+            }
+            const start = range.start
+            const end = range.end
+            listed.push({
+              ...thread,
+              ...(pathById.get(range.docId) === undefined ? {} : { filePath: pathById.get(range.docId)! }),
+              start: offsetToLineColumn(live.document.content, start),
+              end: offsetToLineColumn(live.document.content, end),
+              quotedText: live.document.content.slice(start, end),
+            })
           }
-          if (!range || !live) {
-            listed.push({ ...thread, unlocated: true })
-            continue
-          }
-          const start = range.start
-          const end = range.end
-          listed.push({
-            ...thread,
-            ...(pathById.get(range.docId) === undefined
-              ? {}
-              : { filePath: pathById.get(range.docId)! }),
-            start: offsetToLineColumn(live.document.content, start),
-            end: offsetToLineColumn(live.document.content, end),
-            quotedText: live.document.content.slice(start, end),
-          })
-        }
-        return { threads: listed, positionsUnavailable: false }
-      })
+          return { threads: listed, positionsUnavailable: false }
+        })
     )
   }
 
@@ -419,12 +405,12 @@ export class CommentsApi {
     const started = this.#now()
     // A reply is identified as the one new message in the thread from this account with this content.
     const created = (thread: ThreadData | undefined): ThreadMessage[] =>
-      (thread?.messages ?? []).filter(message =>
-        typeof message.id === 'string' &&
-        !earlier.has(message.id) &&
-        message.content === normalized &&
-        (this.#currentUserId === undefined ||
-          mapAuthor(message.user_id, message.user)?.id === this.#currentUserId)
+      (thread?.messages ?? []).filter(
+        message =>
+          typeof message.id === 'string' &&
+          !earlier.has(message.id) &&
+          message.content === normalized &&
+          (this.#currentUserId === undefined || mapAuthor(message.user_id, message.user)?.id === this.#currentUserId)
       )
     // Once the reply was sent, a read-back that fails leaves its outcome unknown: a retryable
     // error from that read would invite posting the reply twice.
@@ -440,20 +426,24 @@ export class CommentsApi {
       }
     }
     try {
-      await this.#http.postJson(`/project/${encodeURIComponent(projectId)}/thread/${encodeURIComponent(threadId)}/messages`, {
-        content: normalized,
-      })
+      await this.#http.postJson(
+        `/project/${encodeURIComponent(projectId)}/thread/${encodeURIComponent(threadId)}/messages`,
+        {
+          content: normalized,
+        }
+      )
     } catch (error) {
       if (!(error instanceof McpError) || !['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(error.code)) {
         throw error
       }
       // A timed-out POST is accepted only when author, content, and request window identify one reply.
-      const matched = this.#currentUserId === undefined
-        ? []
-        : created(await readBack()).filter(message => {
-          const timestamp = new Date(message.timestamp ?? 0).getTime()
-          return timestamp >= started - 1_000 && timestamp <= this.#now() + 60_000
-        })
+      const matched =
+        this.#currentUserId === undefined
+          ? []
+          : created(await readBack()).filter(message => {
+              const timestamp = new Date(message.timestamp ?? 0).getTime()
+              return timestamp >= started - 1_000 && timestamp <= this.#now() + 60_000
+            })
       if (matched.length === 1) {
         return { threadId, message: mapMessage(matched[0]!), ...disclosure, recoveredAfterTimeout: true }
       }
@@ -503,122 +493,117 @@ export class CommentsApi {
     assertPathSafeId(threadId, 'threadId')
     const project = encodeURIComponent(input.projectId)
 
-    const submit = await this.#connections.withConnection(input.projectId, async connection =>
-      await connection.queue.run(async () => {
-        const entity = resolveProjectPath(connection.getTree(), input.filePath, 'doc')
-        const before = await connection.joinDocument(entity.id)
-        assertRevisionMatches(input.revision, {
-          projectId: input.projectId,
-          docId: entity.id,
-          protocol: before.protocol,
-          otVersion: before.version,
-          content: before.content,
-        })
-        const visibleStart = lineColumnToOffset(before.content, input.start)
-        const visibleEnd = lineColumnToOffset(before.content, input.end)
-        if (visibleEnd <= visibleStart) {
-          throw new McpError('INVALID_ARGUMENT', 'Comment range must not be empty.')
-        }
-        if (before.content.slice(visibleStart, visibleEnd) !== expectedText) {
-          throw new McpError('REVISION_CONFLICT', 'expectedText does not match the live selection.')
-        }
+    const submit = await this.#connections.withConnection(
+      input.projectId,
+      async connection =>
+        await connection.queue.run(async () => {
+          const entity = resolveProjectPath(connection.getTree(), input.filePath, 'doc')
+          const before = await connection.joinDocument(entity.id)
+          assertRevisionMatches(input.revision, {
+            projectId: input.projectId,
+            docId: entity.id,
+            protocol: before.protocol,
+            otVersion: before.version,
+            content: before.content,
+          })
+          const visibleStart = lineColumnToOffset(before.content, input.start)
+          const visibleEnd = lineColumnToOffset(before.content, input.end)
+          if (visibleEnd <= visibleStart) {
+            throw new McpError('INVALID_ARGUMENT', 'Comment range must not be empty.')
+          }
+          if (before.content.slice(visibleStart, visibleEnd) !== expectedText) {
+            throw new McpError('REVISION_CONFLICT', 'expectedText does not match the live selection.')
+          }
 
-        // Overleaf creates the REST thread first; a separate OT update anchors it to the document.
-        try {
-          await this.#http.postJson(
-            `/project/${project}/thread/${encodeURIComponent(threadId)}/messages`,
-            { content: messageContent }
-          )
-        } catch (error) {
-          if (!(error instanceof McpError) || !['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(error.code)) {
-            throw asMcpError(error)
-          }
-          // A failed read-back cannot tell whether the thread was created, so it is not retryable either.
-          const thread = await this.getThreads(input.projectId).then(
-            threads => threads[threadId],
-            () => undefined
-          )
-          const created = thread?.messages?.some(message => message.content === messageContent)
-          if (!created) {
-            throw new McpError('OUTCOME_UNKNOWN', 'Could not confirm creation of the comment thread.', {
-              details: { threadId },
-            })
-          }
-        }
-
-        let start = visibleStart
-        let end = visibleEnd
-        if (before.protocol === 'history-ot') {
-          const snapshot = before.rawSnapshot as HistorySnapshot
-          start = visibleToSnapshotOffset(snapshot, visibleStart)
-          end = visibleToSnapshotOffset(snapshot, visibleEnd)
-        }
-        const operation = buildCommentOperation(
-          before.protocol,
-          threadId,
-          start,
-          end,
-          expectedText
-        )
-        const update = makeUpdate(entity.id, before.version, operation, before.protocol)
-        assertUpdateSize(update, this.#maxUpdateChars)
-        let submitError: unknown
-        try {
-          await connection.submitUpdate(entity.id, update)
-        } catch (error) {
-          submitError = error
-        }
-        await leaveQuietly(connection, entity.id)
-        // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
-        if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
-          return {
-            entity,
-            before,
-            visibleStart,
-            visibleEnd,
-            trackChangesActive: connection.trackChangesActive,
-            submitError,
-          }
-        }
-        if (submitError) {
-          // A definite OT failure proves no attachment applied, so deleting the orphan is safe.
+          // Overleaf creates the REST thread first; a separate OT update anchors it to the document.
           try {
-            await this.#http.deleteJson(
-              `/project/${project}/doc/${encodeURIComponent(entity.id)}/thread/${encodeURIComponent(threadId)}`
-            )
-          } catch (cleanupError) {
-            throw new McpError('PARTIAL_CLEANUP', 'Comment attachment failed and orphan cleanup also failed.', {
-              cause: cleanupError,
-              details: { threadId },
+            await this.#http.postJson(`/project/${project}/thread/${encodeURIComponent(threadId)}/messages`, {
+              content: messageContent,
             })
+          } catch (error) {
+            if (!(error instanceof McpError) || !['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(error.code)) {
+              throw asMcpError(error)
+            }
+            // A failed read-back cannot tell whether the thread was created, so it is not retryable either.
+            const thread = await this.getThreads(input.projectId).then(
+              threads => threads[threadId],
+              () => undefined
+            )
+            const created = thread?.messages?.some(message => message.content === messageContent)
+            if (!created) {
+              throw new McpError('OUTCOME_UNKNOWN', 'Could not confirm creation of the comment thread.', {
+                details: { threadId },
+              })
+            }
           }
-          throw asMcpError(submitError)
-        }
-        let live: JoinedDocument
-        try {
-          live = await connection.joinDocument(entity.id)
-        } catch (error) {
-          // The attachment applied, so a failed verification read is settled by observation, never a resend.
+
+          let start = visibleStart
+          let end = visibleEnd
+          if (before.protocol === 'history-ot') {
+            const snapshot = before.rawSnapshot as HistorySnapshot
+            start = visibleToSnapshotOffset(snapshot, visibleStart)
+            end = visibleToSnapshotOffset(snapshot, visibleEnd)
+          }
+          const operation = buildCommentOperation(before.protocol, threadId, start, end, expectedText)
+          const update = makeUpdate(entity.id, before.version, operation, before.protocol)
+          assertUpdateSize(update, this.#maxUpdateChars)
+          let submitError: unknown
+          try {
+            await connection.submitUpdate(entity.id, update)
+          } catch (error) {
+            submitError = error
+          }
+          await leaveQuietly(connection, entity.id)
+          // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
+          if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
+            return {
+              entity,
+              before,
+              visibleStart,
+              visibleEnd,
+              trackChangesActive: connection.trackChangesActive,
+              submitError,
+            }
+          }
+          if (submitError) {
+            // A definite OT failure proves no attachment applied, so deleting the orphan is safe.
+            try {
+              await this.#http.deleteJson(
+                `/project/${project}/doc/${encodeURIComponent(entity.id)}/thread/${encodeURIComponent(threadId)}`
+              )
+            } catch (cleanupError) {
+              throw new McpError('PARTIAL_CLEANUP', 'Comment attachment failed and orphan cleanup also failed.', {
+                cause: cleanupError,
+                details: { threadId },
+              })
+            }
+            throw asMcpError(submitError)
+          }
+          let live: JoinedDocument
+          try {
+            live = await connection.joinDocument(entity.id)
+          } catch (error) {
+            // The attachment applied, so a failed verification read is settled by observation, never a resend.
+            return {
+              entity,
+              before,
+              visibleStart,
+              visibleEnd,
+              trackChangesActive: connection.trackChangesActive,
+              submitError: error,
+              confirmed: true,
+            }
+          }
+          await leaveQuietly(connection, entity.id)
           return {
             entity,
             before,
             visibleStart,
             visibleEnd,
+            live,
             trackChangesActive: connection.trackChangesActive,
-            submitError: error,
-            confirmed: true,
           }
-        }
-        await leaveQuietly(connection, entity.id)
-        return {
-          entity,
-          before,
-          visibleStart,
-          visibleEnd,
-          live,
-          trackChangesActive: connection.trackChangesActive,
-        }
-      })
+        })
     )
 
     let live = submit.live
@@ -633,13 +618,15 @@ export class CommentsApi {
       let observationError: unknown
       do {
         try {
-          live = await this.#connections.withConnection(input.projectId, async connection =>
-            await connection.queue.run(async () => {
-              const entity = resolveProjectPath(connection.getTree(), input.filePath, 'doc')
-              const document = await connection.joinDocument(entity.id)
-              await leaveQuietly(connection, entity.id)
-              return document
-            })
+          live = await this.#connections.withConnection(
+            input.projectId,
+            async connection =>
+              await connection.queue.run(async () => {
+                const entity = resolveProjectPath(connection.getTree(), input.filePath, 'doc')
+                const document = await connection.joinDocument(entity.id)
+                await leaveQuietly(connection, entity.id)
+                return document
+              })
           )
           observationError = undefined
           const range = attachment(live, threadId)
@@ -673,20 +660,15 @@ export class CommentsApi {
     }
 
     const verifiedRange = attachment(live, threadId)
-    if (
-      verifiedRange?.start !== submit.visibleStart ||
-      verifiedRange.end !== submit.visibleEnd
-    ) {
+    if (verifiedRange?.start !== submit.visibleStart || verifiedRange.end !== submit.visibleEnd) {
       const unchanged =
         live.protocol === submit.before.protocol &&
         live.version === submit.before.version &&
         contentHash(live.content) === contentHash(submit.before.content)
       if (confirmed || !recoveredAfterTimeout || !unchanged) {
-        throw new McpError(
-          'OUTCOME_UNKNOWN',
-          'The comment thread exists but its exact range could not be verified.',
-          { details: { threadId } }
-        )
+        throw new McpError('OUTCOME_UNKNOWN', 'The comment thread exists but its exact range could not be verified.', {
+          details: { threadId },
+        })
       }
       // Cleanup is permitted only after the unchanged document proves the range was not attached.
       try {
@@ -746,73 +728,72 @@ export class CommentsApi {
     // The thread is read afterwards to confirm the status, so that read is allowed first.
     this.#policy.assertEffect('overleaf-write', 'overleaf-read')
     const resolved = input.status === 'resolved'
-    const submission = await this.#connections.withConnection(input.projectId, async connection =>
-      await connection.queue.run(async () => {
-        const entity = resolveProjectPath(connection.getTree(), input.filePath, 'doc')
-        const before = await connection.joinDocument(entity.id)
-        assertRevisionMatches(input.revision, {
-          projectId: input.projectId,
-          docId: entity.id,
-          protocol: before.protocol,
-          otVersion: before.version,
-          content: before.content,
-        })
-        if (!anchoredIn(before, input.threadId)) {
-          await leaveQuietly(connection, entity.id)
-          throw new McpError('NOT_FOUND', 'The comment thread is not anchored in filePath.', {
-            details: { threadId: input.threadId },
+    const submission = await this.#connections.withConnection(
+      input.projectId,
+      async connection =>
+        await connection.queue.run(async () => {
+          const entity = resolveProjectPath(connection.getTree(), input.filePath, 'doc')
+          const before = await connection.joinDocument(entity.id)
+          assertRevisionMatches(input.revision, {
+            projectId: input.projectId,
+            docId: entity.id,
+            protocol: before.protocol,
+            otVersion: before.version,
+            content: before.content,
           })
-        }
-        let submitError: unknown
-        try {
-          // History-OT stores status in its snapshot; ShareJS exposes dedicated REST actions.
-          if (before.protocol === 'history-ot') {
-            const update = makeUpdate(
-              entity.id,
-              before.version,
-              buildStatusOperation(before.protocol, input.threadId, resolved),
-              before.protocol
-            )
-            assertUpdateSize(update, this.#maxUpdateChars)
-            await connection.submitUpdate(entity.id, update)
-          } else {
-            await this.#http.postJson(
-              `/project/${encodeURIComponent(input.projectId)}/doc/${encodeURIComponent(entity.id)}/thread/${encodeURIComponent(input.threadId)}/${resolved ? 'resolve' : 'reopen'}`,
-              {}
-            )
+          if (!anchoredIn(before, input.threadId)) {
+            await leaveQuietly(connection, entity.id)
+            throw new McpError('NOT_FOUND', 'The comment thread is not anchored in filePath.', {
+              details: { threadId: input.threadId },
+            })
           }
-        } catch (error) {
-          submitError = error
-        }
-        await leaveQuietly(connection, entity.id)
-        if (
-          submitError instanceof McpError &&
-          ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)
-        ) {
-          return {
-            before,
-            entity,
-            trackChangesActive: connection.trackChangesActive,
-            submitError,
+          let submitError: unknown
+          try {
+            // History-OT stores status in its snapshot; ShareJS exposes dedicated REST actions.
+            if (before.protocol === 'history-ot') {
+              const update = makeUpdate(
+                entity.id,
+                before.version,
+                buildStatusOperation(before.protocol, input.threadId, resolved),
+                before.protocol
+              )
+              assertUpdateSize(update, this.#maxUpdateChars)
+              await connection.submitUpdate(entity.id, update)
+            } else {
+              await this.#http.postJson(
+                `/project/${encodeURIComponent(input.projectId)}/doc/${encodeURIComponent(entity.id)}/thread/${encodeURIComponent(input.threadId)}/${resolved ? 'resolve' : 'reopen'}`,
+                {}
+              )
+            }
+          } catch (error) {
+            submitError = error
           }
-        }
-        if (submitError) throw asMcpError(submitError)
-        let live: JoinedDocument
-        try {
-          live = await connection.joinDocument(entity.id)
-        } catch (error) {
-          // The change applied, so a failed verification read is settled by observation, never a resend.
-          return {
-            before,
-            entity,
-            trackChangesActive: connection.trackChangesActive,
-            submitError: error,
-            confirmed: true,
+          await leaveQuietly(connection, entity.id)
+          if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
+            return {
+              before,
+              entity,
+              trackChangesActive: connection.trackChangesActive,
+              submitError,
+            }
           }
-        }
-        await leaveQuietly(connection, entity.id)
-        return { before, entity, live, trackChangesActive: connection.trackChangesActive }
-      })
+          if (submitError) throw asMcpError(submitError)
+          let live: JoinedDocument
+          try {
+            live = await connection.joinDocument(entity.id)
+          } catch (error) {
+            // The change applied, so a failed verification read is settled by observation, never a resend.
+            return {
+              before,
+              entity,
+              trackChangesActive: connection.trackChangesActive,
+              submitError: error,
+              confirmed: true,
+            }
+          }
+          await leaveQuietly(connection, entity.id)
+          return { before, entity, live, trackChangesActive: connection.trackChangesActive }
+        })
     )
 
     let live = submission.live
@@ -827,20 +808,19 @@ export class CommentsApi {
       let observationError: unknown
       do {
         try {
-          live = await this.#connections.withConnection(input.projectId, async connection =>
-            await connection.queue.run(async () => {
-              const entity = resolveProjectPath(connection.getTree(), input.filePath, 'doc')
-              const document = await connection.joinDocument(entity.id)
-              await leaveQuietly(connection, entity.id)
-              return document
-            })
+          live = await this.#connections.withConnection(
+            input.projectId,
+            async connection =>
+              await connection.queue.run(async () => {
+                const entity = resolveProjectPath(connection.getTree(), input.filePath, 'doc')
+                const document = await connection.joinDocument(entity.id)
+                await leaveQuietly(connection, entity.id)
+                return document
+              })
           )
           observationError = undefined
           if (live.protocol !== submission.before.protocol) {
-            throw new McpError(
-              'PROTOCOL_UNSUPPORTED',
-              'Document protocol changed during comment-status recovery.'
-            )
+            throw new McpError('PROTOCOL_UNSUPPORTED', 'Document protocol changed during comment-status recovery.')
           }
           if (await this.#statusMatches(input.projectId, live, input.threadId, resolved)) {
             matched = true
@@ -907,8 +887,7 @@ export class CommentsApi {
   ): Promise<boolean> {
     if (document.protocol === 'history-ot') {
       // The snapshot holds the status even for a comment whose anchored text was deleted.
-      const comment = ((document.rawSnapshot as HistorySnapshot).comments ?? [])
-        .find(entry => entry.id === threadId)
+      const comment = ((document.rawSnapshot as HistorySnapshot).comments ?? []).find(entry => entry.id === threadId)
       // Overleaf writes resolved: true only for a resolved comment and leaves the key out for an open one.
       if (comment) return (comment.resolved === true) === resolved
     }

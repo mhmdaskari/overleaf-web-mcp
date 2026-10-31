@@ -57,12 +57,7 @@ export class CdpClient {
     return new CdpClient(socket)
   }
 
-  send<T>(
-    method: string,
-    params: Record<string, unknown> = {},
-    sessionId?: string,
-    timeoutMs = 5_000
-  ): Promise<T> {
+  send<T>(method: string, params: Record<string, unknown> = {}, sessionId?: string, timeoutMs = 5_000): Promise<T> {
     if (this.#closed || this.#socket.readyState !== WebSocket.OPEN) {
       return Promise.reject(new McpError('OUTCOME_UNKNOWN', 'Chrome login connection is closed.'))
     }

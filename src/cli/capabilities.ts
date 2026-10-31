@@ -67,9 +67,21 @@ export function buildCapabilities(config: AppConfig, lookup?: ProjectLookup): Ca
     },
     project:
       lookup === undefined
-        ? { projectId: 'unknown', allowedByPolicy: 'unknown', accessLevel: 'unknown', archived: 'unknown', trashed: 'unknown' }
+        ? {
+            projectId: 'unknown',
+            allowedByPolicy: 'unknown',
+            accessLevel: 'unknown',
+            archived: 'unknown',
+            trashed: 'unknown',
+          }
         : 'denied' in lookup
-          ? { projectId: lookup.projectId, allowedByPolicy: false, accessLevel: 'unknown', archived: 'unknown', trashed: 'unknown' }
+          ? {
+              projectId: lookup.projectId,
+              allowedByPolicy: false,
+              accessLevel: 'unknown',
+              archived: 'unknown',
+              trashed: 'unknown',
+            }
           : {
               projectId: lookup.projectId,
               allowedByPolicy: true,

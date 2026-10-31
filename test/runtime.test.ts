@@ -61,9 +61,7 @@ describe('runtime bootstrap', () => {
           )
         }
         if (url.endsWith('/project')) {
-          return new Response(
-            '<meta name="ol-csrfToken" content="csrf"><meta name="ol-user_id" content="user">'
-          )
+          return new Response('<meta name="ol-csrfToken" content="csrf"><meta name="ol-user_id" content="user">')
         }
         throw new Error(`unexpected URL ${url}`)
       },
@@ -87,21 +85,15 @@ describe('runtime bootstrap', () => {
 
     await runtime.createFile('project', 'chapter.tex', 'Tracked content', 'tracked')
 
-    expect(documents.writeFile).toHaveBeenCalledWith(
-      'project',
-      'chapter.tex',
-      'revision',
-      'Tracked content',
-      'tracked'
-    )
+    expect(documents.writeFile).toHaveBeenCalledWith('project', 'chapter.tex', 'revision', 'Tracked content', 'tracked')
   })
 
   test('rejects tracked empty file creation before creating an entity', async () => {
     const { runtime, entities } = runtimeWithWrites()
 
-    await expect(
-      runtime.createFile('project', 'chapter.tex', '', 'tracked')
-    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(runtime.createFile('project', 'chapter.tex', '', 'tracked')).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
     expect(entities.createEmptyFile).not.toHaveBeenCalled()
   })
 
@@ -141,9 +133,9 @@ describe('runtime bootstrap', () => {
   test('rejects tracked file creation without a user identity before creating an entity', async () => {
     const { runtime, entities } = runtimeWithWrites(null)
 
-    await expect(
-      runtime.createFile('project', 'chapter.tex', 'Tracked content', 'tracked')
-    ).rejects.toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
+    await expect(runtime.createFile('project', 'chapter.tex', 'Tracked content', 'tracked')).rejects.toMatchObject({
+      code: 'PROTOCOL_UNSUPPORTED',
+    })
     expect(entities.createEmptyFile).not.toHaveBeenCalled()
   })
 })
@@ -246,11 +238,7 @@ describe('folder sync through the real runtime', () => {
         confirmDeleteCount: 2,
       })
       expect(result).toMatchObject({ status: 'complete', failed: [], remaining: [] })
-      expect(requests).toEqual([
-        'POST /project/p/upload',
-        'DELETE /project/p/file/f1',
-        'DELETE /project/p/folder/fs',
-      ])
+      expect(requests).toEqual(['POST /project/p/upload', 'DELETE /project/p/file/f1', 'DELETE /project/p/folder/fs'])
       // Every decision is made from a freshly joined tree, never a cached one.
       expect(joins).toBeGreaterThan(3)
 
@@ -330,7 +318,11 @@ describe('folder sync through the real runtime', () => {
         writeMode: 'tracked',
       })
       expect(result.failed).toHaveLength(1)
-      expect(result.failed[0]).toMatchObject({ action: 'create', errorCode: 'REMOTE_ERROR', details: { created: true } })
+      expect(result.failed[0]).toMatchObject({
+        action: 'create',
+        errorCode: 'REMOTE_ERROR',
+        details: { created: true },
+      })
       expect(result.failed[0]!.message).toContain('planToken')
       expect(result.failed[0]!.message).not.toContain('read_file')
       expect(result.planToken).toBeDefined()

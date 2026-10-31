@@ -130,7 +130,12 @@ function rejectAll(fake: FakeRuntime, error: McpError): FakeRuntime {
 }
 
 function callCommand(name: OperationName, input: Record<string, unknown> = INPUTS[name]) {
-  return { kind: 'call' as const, tool: name, request: { from: 'json' as const, text: JSON.stringify(input) }, progress: false }
+  return {
+    kind: 'call' as const,
+    tool: name,
+    request: { from: 'json' as const, text: JSON.stringify(input) },
+    progress: false,
+  }
 }
 
 /** Runs `call <name>` through `runOperationCommand` on a fake runtime. */
@@ -183,15 +188,18 @@ describe('operation command framing', () => {
     expect(Object.keys(EXIT_TABLE).sort()).toEqual([...ERROR_CODES].sort())
   })
 
-  test.each(OPERATION_NAMES.map(name => [name]))('call %s prints its result as one JSON value and exits 0', async name => {
-    const fake = fakeServiceRuntime()
-    const run = await runCall(name, fake)
-    expect(run.exitCode).toBe(0)
-    expect(expectResult(run)).toEqual(OUTPUTS[name])
-    expect(run.createRuntime).toHaveBeenCalledTimes(1)
-    expect(fake.close).toHaveBeenCalledTimes(1)
-    expect(run.readStdin).not.toHaveBeenCalled()
-  })
+  test.each(OPERATION_NAMES.map(name => [name]))(
+    'call %s prints its result as one JSON value and exits 0',
+    async name => {
+      const fake = fakeServiceRuntime()
+      const run = await runCall(name, fake)
+      expect(run.exitCode).toBe(0)
+      expect(expectResult(run)).toEqual(OUTPUTS[name])
+      expect(run.createRuntime).toHaveBeenCalledTimes(1)
+      expect(fake.close).toHaveBeenCalledTimes(1)
+      expect(run.readStdin).not.toHaveBeenCalled()
+    }
+  )
 
   test.each(ERROR_CODES.map(code => [code]))(
     '%s leaves stdout empty, prints one error line, and exits by the table',
@@ -236,7 +244,12 @@ describe('operation command framing', () => {
     const expired = vi.fn(async () => {
       throw new McpError('AUTH_EXPIRED', 'Sign in again.')
     })
-    expect(await runCommandLine(['call', 'write_file', '--json', JSON.stringify(INPUTS.write_file)], recorded.io, { env: {}, createRuntime: expired })).toBe(3)
+    expect(
+      await runCommandLine(['call', 'write_file', '--json', JSON.stringify(INPUTS.write_file)], recorded.io, {
+        env: {},
+        createRuntime: expired,
+      })
+    ).toBe(3)
   })
 
   test('a timed-out write known not to have applied exits 4, and an unknown outcome 5', async () => {
@@ -374,7 +387,10 @@ describe('call request sources', () => {
       ['auth_status', { verbose: true }, ['verbose']],
     ]
     for (const [name, input, unknownKeys] of cases) {
-      for (const argv of [['call', name, '--json', JSON.stringify(input)], ['call', name, '--request', '-']]) {
+      for (const argv of [
+        ['call', name, '--json', JSON.stringify(input)],
+        ['call', name, '--request', '-'],
+      ]) {
         const fake = fakeServiceRuntime()
         const run = await cli(argv, { runtime: fake, stdin: JSON.stringify(input) })
         expect(run.exitCode, name).toBe(2)
@@ -414,7 +430,13 @@ function noDeletes(fetches: string[]): void {
 
 describe('safety checks with a real runtime', () => {
   test('files write with a stale revision exits 4 and never applies an update', async () => {
-    const stale = createRevision({ projectId: 'p', docId: 'd1', protocol: 'sharejs', otVersion: 3, content: 'other text' })
+    const stale = createRevision({
+      projectId: 'p',
+      docId: 'd1',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: 'other text',
+    })
     const live = await realRuntime()
     const run = await cli(['files', 'write', 'p', 'main.tex', '--revision', stale, '--stdin'], {
       runtime: live.runtime,
@@ -546,7 +568,11 @@ describe('a write that was sent never exits as if nothing changed', () => {
     const run = await cli(['call', 'reply_to_comment', '--json', request], { runtime: live.runtime })
     expect(run.exitCode).toBe(5)
     expect(expectError(run)).toMatchObject({ code: 'OUTCOME_UNKNOWN', retryable: false, details: { threadId: 't' } })
-    expect(live.fetches).toEqual(['GET /project/p/threads', 'POST /project/p/thread/t/messages', 'GET /project/p/threads'])
+    expect(live.fetches).toEqual([
+      'GET /project/p/threads',
+      'POST /project/p/thread/t/messages',
+      'GET /project/p/threads',
+    ])
     expect(live.close).toHaveBeenCalledTimes(1)
   })
 
@@ -558,7 +584,12 @@ describe('a write that was sent never exits as if nothing changed', () => {
       }
       throw new Error(`unexpected ${init?.method ?? 'GET'} ${url.pathname}`)
     }
-    const argv = ['call', 'update_project_settings', '--json', JSON.stringify({ projectId: 'p', compiler: 'xelatex', imageName: 'texlive-full:2025.1' })]
+    const argv = [
+      'call',
+      'update_project_settings',
+      '--json',
+      JSON.stringify({ projectId: 'p', compiler: 'xelatex', imageName: 'texlive-full:2025.1' }),
+    ]
 
     const partly = await realRuntime({ fetcher: settings([204, 429]) })
     const run = await cli(argv, { runtime: partly.runtime })
@@ -597,13 +628,17 @@ describe('compile run --download', () => {
     expect(fake.close).toHaveBeenCalledTimes(1)
 
     const overwriting = fakeServiceRuntime()
-    expect((await cli(['compile', 'run', 'p', '--download', pdf, '--overwrite'], { runtime: overwriting })).exitCode).toBe(0)
+    expect(
+      (await cli(['compile', 'run', 'p', '--download', pdf, '--overwrite'], { runtime: overwriting })).exitCode
+    ).toBe(0)
     expect(overwriting.compile.downloadCompileOutput.mock.calls[0]![2]).toMatchObject({ overwrite: true })
   })
 
   test('a failed download after the compile prints a partial result and exits 6', async () => {
     const fake = fakeServiceRuntime()
-    const failure = new McpError('CONFIRMATION_MISMATCH', 'The file exists; pass overwrite.', { details: { kind: 'exists' } })
+    const failure = new McpError('CONFIRMATION_MISMATCH', 'The file exists; pass overwrite.', {
+      details: { kind: 'exists' },
+    })
     fake.compile.downloadCompileOutput.mockRejectedValueOnce(failure)
     const run = await cli(['compile', 'run', 'p', '--download', join(await temporaryFolder(), 'paper.pdf')], {
       runtime: fake,
@@ -636,7 +671,11 @@ describe('compile run --download', () => {
 
   test('a LaTeX failure is still a result, and --overwrite needs --download', async () => {
     const fake = fakeServiceRuntime()
-    const failed = { ...OUTPUTS.compile_project, status: 'failure', summary: { ...OUTPUTS.compile_project.summary, builtCleanly: false } }
+    const failed = {
+      ...OUTPUTS.compile_project,
+      status: 'failure',
+      summary: { ...OUTPUTS.compile_project.summary, builtCleanly: false },
+    }
     fake.compile.compileProject.mockResolvedValueOnce(failed)
     const run = await cli(['compile', 'run', 'p'], { runtime: fake })
     expect(run.exitCode).toBe(0)

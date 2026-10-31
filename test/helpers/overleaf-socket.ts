@@ -36,9 +36,9 @@ export class FakeOverleafSocket extends EventEmitter {
     const { name, args } = JSON.parse(match[2]!) as { name: string; args: unknown[] }
     this.events.push(name)
     if (name === 'joinDoc') {
-      const lines = this.document.rawLines ?? this.document.content
-        .split('\n')
-        .map(line => Buffer.from(line, 'utf8').toString('latin1'))
+      const lines =
+        this.document.rawLines ??
+        this.document.content.split('\n').map(line => Buffer.from(line, 'utf8').toString('latin1'))
       this.ack(ackId, [null, lines, this.document.version, [], {}, 'sharejs-text-ot'])
     } else if (name === 'leaveDoc') {
       this.ack(ackId, [null])

@@ -27,10 +27,7 @@ export function decodeUtf8Text(bytes: Uint8Array): string | undefined {
 function decodeUtf8(bytes: Uint8Array, localPath: string): string {
   const decoded = decodeUtf8Text(bytes)
   if (decoded === undefined) {
-    throw new McpError(
-      'INVALID_ARGUMENT',
-      `${localPath} is not valid UTF-8 text. Use upload_file for binary content.`
-    )
+    throw new McpError('INVALID_ARGUMENT', `${localPath} is not valid UTF-8 text. Use upload_file for binary content.`)
   }
   return decoded
 }
@@ -50,10 +47,7 @@ export async function resolveTextContent(
   const hasContent = source.content !== undefined
   const hasLocalPath = source.localPath !== undefined && source.localPath !== ''
   if (hasContent && hasLocalPath) {
-    throw new McpError(
-      'INVALID_ARGUMENT',
-      'Provide either content or localPath, not both.'
-    )
+    throw new McpError('INVALID_ARGUMENT', 'Provide either content or localPath, not both.')
   }
   if (!hasContent && !hasLocalPath) {
     throw new McpError('INVALID_ARGUMENT', 'Provide either content or localPath.')

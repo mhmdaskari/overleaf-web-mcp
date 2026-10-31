@@ -113,10 +113,7 @@ export async function replaceFileAtomically(path: string, bytes: Uint8Array, mod
  * folder that cannot be written fails before anything is sent. Whether the destination exists is
  * checked again when the file is put in place, so a file that appears meanwhile is not replaced.
  */
-export async function prepareLocalDownload(
-  localPath: string,
-  overwrite: boolean
-): Promise<LocalDownloadTarget> {
+export async function prepareLocalDownload(localPath: string, overwrite: boolean): Promise<LocalDownloadTarget> {
   const path = resolve(localPath)
   const folder = await stat(dirname(path)).catch(() => undefined)
   if (folder === undefined || !folder.isDirectory()) {

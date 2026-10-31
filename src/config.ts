@@ -32,11 +32,7 @@ export interface AppConfig {
   allowedEffects?: Effect[]
 }
 
-function positiveInteger(
-  env: NodeJS.ProcessEnv,
-  name: string,
-  fallback: number
-): number {
+function positiveInteger(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
   const raw = env[name]
   if (raw === undefined || raw === '') return fallback
   const parsed = Number(raw)
@@ -83,10 +79,7 @@ export interface ConfigContext {
   homeDir?: string
 }
 
-export function readConfig(
-  env: NodeJS.ProcessEnv = process.env,
-  context: ConfigContext = {}
-): AppConfig {
+export function readConfig(env: NodeJS.ProcessEnv = process.env, context: ConfigContext = {}): AppConfig {
   const authPaths = resolveAuthPaths({ env, ...context })
   const cookieJarFile = env.OVERLEAF_COOKIE_JAR_FILE ?? authPaths.cookieJarFile
 
@@ -117,12 +110,8 @@ export function readConfig(
     baseUrl: baseUrl.href.replace(/\/$/u, ''),
     cookieJarFile,
     ...(env.OVERLEAF_BROWSER_PATH ? { browserPath: env.OVERLEAF_BROWSER_PATH } : {}),
-    browserProfileDir:
-      env.OVERLEAF_BROWSER_PROFILE_DIR ?? authPaths.browserProfileDir,
-    loginTimeoutMs: Math.min(
-      positiveInteger(env, 'OVERLEAF_LOGIN_TIMEOUT_MS', 5 * 60_000),
-      15 * 60_000
-    ),
+    browserProfileDir: env.OVERLEAF_BROWSER_PROFILE_DIR ?? authPaths.browserProfileDir,
+    loginTimeoutMs: Math.min(positiveInteger(env, 'OVERLEAF_LOGIN_TIMEOUT_MS', 5 * 60_000), 15 * 60_000),
     maxDocLength: positiveInteger(env, 'OVERLEAF_MAX_DOC_LENGTH', 2 * 1024 * 1024),
     maxUpdateChars: positiveInteger(env, 'OVERLEAF_MAX_UPDATE_CHARS', 7 * 1024 * 1024),
     socketCacheSize: positiveInteger(env, 'OVERLEAF_SOCKET_CACHE_SIZE', 2),
@@ -130,10 +119,7 @@ export function readConfig(
     requestTimeoutMs: positiveInteger(env, 'OVERLEAF_REQUEST_TIMEOUT_MS', 30_000),
     applyTimeoutMs: positiveInteger(env, 'OVERLEAF_APPLY_TIMEOUT_MS', 30_000),
     recoveryTimeoutMs: positiveInteger(env, 'OVERLEAF_RECOVERY_TIMEOUT_MS', 30_000),
-    compileTimeoutMs: Math.min(
-      positiveInteger(env, 'OVERLEAF_COMPILE_TIMEOUT_MS', 120_000),
-      15 * 60_000
-    ),
+    compileTimeoutMs: Math.min(positiveInteger(env, 'OVERLEAF_COMPILE_TIMEOUT_MS', 120_000), 15 * 60_000),
     supportedProtocolVersions,
     ...(proxyUrl === undefined ? {} : { proxyUrl }),
     ...(allowedProjects === undefined ? {} : { allowedProjects }),

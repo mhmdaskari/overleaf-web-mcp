@@ -27,8 +27,16 @@ export default tseslint.config(
       'no-console': 'error',
       'no-restricted-properties': [
         'error',
-        { object: 'process', property: 'stdout', message: 'Only src/cli.ts and src/server.ts use the process streams.' },
-        { object: 'process', property: 'stderr', message: 'Only src/cli.ts and src/server.ts use the process streams.' },
+        {
+          object: 'process',
+          property: 'stdout',
+          message: 'Only src/cli.ts and src/server.ts use the process streams.',
+        },
+        {
+          object: 'process',
+          property: 'stderr',
+          message: 'Only src/cli.ts and src/server.ts use the process streams.',
+        },
       ],
     },
   },

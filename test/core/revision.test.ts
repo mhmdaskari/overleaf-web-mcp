@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import {
-  createRevision,
-  decodeRevision,
-  validateRevision,
-} from '../../src/core/revision.js'
+import { createRevision, decodeRevision, validateRevision } from '../../src/core/revision.js'
 
 describe('opaque revisions', () => {
   test('round-trips project, document, protocol, version, and content hash', () => {

@@ -65,13 +65,19 @@ function runtimeWithPlanProgress() {
     conflicts: [],
     ignored: { count: 1, entries: [{ localPath: 'main.aux', matchedPattern: '*.aux' }] },
   }
-  runtime.sync.planSync.mockImplementation(async (_id: string, _path: string, options: {
-    onProgress?: (progress: number, total: number, message: string) => Promise<void>
-  }) => {
-    await options.onProgress?.(1, 2, 'Read 1 of 2 documents')
-    await options.onProgress?.(2, 2, 'Read 2 of 2 documents')
-    return plan
-  })
+  runtime.sync.planSync.mockImplementation(
+    async (
+      _id: string,
+      _path: string,
+      options: {
+        onProgress?: (progress: number, total: number, message: string) => Promise<void>
+      }
+    ) => {
+      await options.onProgress?.(1, 2, 'Read 1 of 2 documents')
+      await options.onProgress?.(2, 2, 'Read 2 of 2 documents')
+      return plan
+    }
+  )
   return { runtime, plan }
 }
 
@@ -102,13 +108,14 @@ describe('MCP server', () => {
 
     expect(result.tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
     // Parameter descriptions survive the schema conversion the SDK performs.
-    expect(result.tools.find(tool => tool.name === 'list_projects')?.inputSchema.properties?.query)
-      .toMatchObject({ description: 'Case-insensitive substring of the project name' })
+    expect(result.tools.find(tool => tool.name === 'list_projects')?.inputSchema.properties?.query).toMatchObject({
+      description: 'Case-insensitive substring of the project name',
+    })
     await client.close()
     await server.close()
   })
 
-  test('serves the latest build\'s log and PDF as read-only resources', async () => {
+  test("serves the latest build's log and PDF as read-only resources", async () => {
     const runtime = fakeRuntime()
     runtime.compile.readCompileOutput.mockImplementation(async (_projectId: string, file: string) => ({
       bytes: new TextEncoder().encode(file === 'output.pdf' ? '%PDF-1.5' : 'This is pdfTeX'),
@@ -182,12 +189,14 @@ describe('MCP server', () => {
         {
           id: 't1',
           status: 'open',
-          messages: [{
-            id: 'm1',
-            author: { id: 'u1', displayName: 'Ada Lovelace' },
-            content: 'Please revise',
-            timestamp: '2026-01-01T00:00:00.000Z',
-          }],
+          messages: [
+            {
+              id: 'm1',
+              author: { id: 'u1', displayName: 'Ada Lovelace' },
+              content: 'Please revise',
+              timestamp: '2026-01-01T00:00:00.000Z',
+            },
+          ],
           filePath: 'main.tex',
           start: { line: 2, column: 1 },
           end: { line: 2, column: 3 },
@@ -304,7 +313,20 @@ describe('MCP server', () => {
 
     expect(instructions).toBe(SERVER_INSTRUCTIONS)
     // The contract an assistant must know without reading the docs.
-    for (const term of ['read_file', 'revision', 'REVISION_CONFLICT', 'upload_file', 'confirmPath', 'confirmName', 'manage_project', 'plan_sync', 'planToken', 'confirmDeleteCount', 'REMOTE_DRIFT', 'AUTH_EXPIRED']) {
+    for (const term of [
+      'read_file',
+      'revision',
+      'REVISION_CONFLICT',
+      'upload_file',
+      'confirmPath',
+      'confirmName',
+      'manage_project',
+      'plan_sync',
+      'planToken',
+      'confirmDeleteCount',
+      'REMOTE_DRIFT',
+      'AUTH_EXPIRED',
+    ]) {
       expect(instructions).toContain(term)
     }
     // Instructions ride along on every session; keep them short enough to be read.
@@ -327,10 +349,7 @@ describe('protocol eras', () => {
     'serves a client on protocol %s through initialize',
     async version => {
       const { clientTransport, connection } = served()
-      const client = new Client(
-        { name: 'legacy-client', version: '1.0.0' },
-        { supportedProtocolVersions: [version] }
-      )
+      const client = new Client({ name: 'legacy-client', version: '1.0.0' }, { supportedProtocolVersions: [version] })
       await client.connect(clientTransport)
 
       expect(client.getProtocolEra()).toBe('legacy')
@@ -477,13 +496,21 @@ describe('stdio lifecycle', () => {
     const close = vi.fn(async () => undefined)
     const exit = vi.fn()
     const server = runStdioServer({ ...runtime, close }, { input, output, exit, stdinCloseGraceMs })
-    const send = (message: Record<string, unknown>) => input.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
+    const send = (message: Record<string, unknown>) =>
+      input.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
     const reply = async (id: number) => {
       await vi.waitFor(() => expect(lines.some(line => (JSON.parse(line) as { id?: unknown }).id === id)).toBe(true))
-      return JSON.parse(lines.find(line => (JSON.parse(line) as { id?: unknown }).id === id)!) as Record<string, unknown>
+      return JSON.parse(lines.find(line => (JSON.parse(line) as { id?: unknown }).id === id)!) as Record<
+        string,
+        unknown
+      >
     }
     const initialize = async () => {
-      send({ id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'pipe', version: '0' } } })
+      send({
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'pipe', version: '0' } },
+      })
       await reply(1)
       send({ method: 'notifications/initialized' })
     }
@@ -520,7 +547,11 @@ describe('stdio lifecycle', () => {
     const { runtime, running, release } = runtimeWithSlowPlan()
     const { input, close, exit, send, initialize } = stdio(runtime)
     await initialize()
-    send({ id: 2, method: 'tools/call', params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } } })
+    send({
+      id: 2,
+      method: 'tools/call',
+      params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } },
+    })
     await running
     input.end()
 
@@ -535,7 +566,11 @@ describe('stdio lifecycle', () => {
     const { runtime, running } = runtimeWithSlowPlan()
     const { input, close, exit, send, initialize } = stdio(runtime, 30)
     await initialize()
-    send({ id: 2, method: 'tools/call', params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } } })
+    send({
+      id: 2,
+      method: 'tools/call',
+      params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } },
+    })
     await running
     input.end()
 
@@ -547,7 +582,11 @@ describe('stdio lifecycle', () => {
     const { runtime, running } = runtimeWithSlowPlan()
     const { close, exit, send, server, initialize } = stdio(runtime)
     await initialize()
-    send({ id: 2, method: 'tools/call', params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } } })
+    send({
+      id: 2,
+      method: 'tools/call',
+      params: { name: 'plan_sync', arguments: { projectId: 'p', localFolderPath: '/w' } },
+    })
     await running
 
     await server.shutdown()

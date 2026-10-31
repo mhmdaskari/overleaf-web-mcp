@@ -74,7 +74,12 @@ function uploadFailure(error: unknown): McpError {
  * described, left out when it described none. Tree operations are never tracked changes.
  */
 export type ManagedEntity =
-  | { action: 'create_folder'; created?: { _id: string; name: string }; trackChangesActive: boolean; writeMode: 'untracked' }
+  | {
+      action: 'create_folder'
+      created?: { _id: string; name: string }
+      trackChangesActive: boolean
+      writeMode: 'untracked'
+    }
   | { action: 'rename' | 'move' | 'delete'; id: string; trackChangesActive: boolean; writeMode: 'untracked' }
 
 /** A created folder as Overleaf reports it, reduced to the two fields a caller needs. */
@@ -193,36 +198,40 @@ export class EntitiesApi {
   async getProjectTree(projectId: string): Promise<ProjectTree> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect('overleaf-read')
-    return await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(() => {
-        const entities = connection.getTree()
-        const rootDocPath =
-          connection.rootDocId === undefined
-            ? undefined
-            : entities.find(entity => entity.id === connection.rootDocId)?.path
-        return {
-          entities,
-          ...(rootDocPath === undefined ? {} : { rootDocPath }),
-          ...(connection.compiler === undefined ? {} : { compiler: connection.compiler }),
-          ...(connection.imageName === undefined ? {} : { imageName: connection.imageName }),
-          ...(connection.spellCheckLanguage === undefined
-            ? {}
-            : { spellCheckLanguage: connection.spellCheckLanguage }),
-          trackChangesActive: connection.trackChangesActive,
-          hashNote: TREE_HASH_NOTE,
-        }
-      })
+    return await this.#connections.withConnection(
+      projectId,
+      async connection =>
+        await connection.queue.run(() => {
+          const entities = connection.getTree()
+          const rootDocPath =
+            connection.rootDocId === undefined
+              ? undefined
+              : entities.find(entity => entity.id === connection.rootDocId)?.path
+          return {
+            entities,
+            ...(rootDocPath === undefined ? {} : { rootDocPath }),
+            ...(connection.compiler === undefined ? {} : { compiler: connection.compiler }),
+            ...(connection.imageName === undefined ? {} : { imageName: connection.imageName }),
+            ...(connection.spellCheckLanguage === undefined
+              ? {}
+              : { spellCheckLanguage: connection.spellCheckLanguage }),
+            trackChangesActive: connection.trackChangesActive,
+            hashNote: TREE_HASH_NOTE,
+          }
+        })
     )
   }
 
   /** Resolves the project's configured root document, used when a compile names no root. */
   async getRootDocument(projectId: string): Promise<ProjectEntity | undefined> {
     this.#policy.assertProject(projectId)
-    return await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(() => {
-        if (connection.rootDocId === undefined) return undefined
-        return connection.getTree().find(entity => entity.id === connection.rootDocId)
-      })
+    return await this.#connections.withConnection(
+      projectId,
+      async connection =>
+        await connection.queue.run(() => {
+          if (connection.rootDocId === undefined) return undefined
+          return connection.getTree().find(entity => entity.id === connection.rootDocId)
+        })
     )
   }
 
@@ -232,14 +241,16 @@ export class EntitiesApi {
     const normalized = normalizeProjectPath(filePath)
     const name = posix.basename(normalized)
     validateName(name)
-    const created = await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(async () => {
-        const parentFolderId = resolveFolderId(connection, parentPath(normalized))
-        return await this.#http.postJson(`/project/${encodeURIComponent(projectId)}/doc`, {
-          parent_folder_id: parentFolderId,
-          name,
+    const created = await this.#connections.withConnection(
+      projectId,
+      async connection =>
+        await connection.queue.run(async () => {
+          const parentFolderId = resolveFolderId(connection, parentPath(normalized))
+          return await this.#http.postJson(`/project/${encodeURIComponent(projectId)}/doc`, {
+            parent_folder_id: parentFolderId,
+            name,
+          })
         })
-      })
     )
     await this.#connections.invalidate(projectId)
     return created
@@ -250,78 +261,80 @@ export class EntitiesApi {
     this.#policy.assertEffect(input.action === 'delete' ? 'overleaf-delete' : 'overleaf-write')
     const normalized = normalizeProjectPath(input.path)
     const project = encodeURIComponent(projectId)
-    const result = await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(async (): Promise<ManagedEntity> => {
-        if (input.action === 'create_folder') {
-          const name = posix.basename(normalized)
-          validateName(name)
-          const parentFolderId = resolveFolderId(connection, parentPath(normalized))
-          // Joined again, since a trailing slash survives normalizing and no tree path ends in one.
-          assertPathFree(connection, posix.join(parentPath(normalized), name))
-          const created = await this.#http.postJson(`/project/${project}/folder`, {
-            parent_folder_id: parentFolderId,
-            name,
-          })
-          const folder = createdFolder(created)
-          return {
-            action: input.action,
-            ...(folder === undefined ? {} : { created: folder }),
-            trackChangesActive: connection.trackChangesActive,
-            writeMode: 'untracked',
+    const result = await this.#connections.withConnection(
+      projectId,
+      async connection =>
+        await connection.queue.run(async (): Promise<ManagedEntity> => {
+          if (input.action === 'create_folder') {
+            const name = posix.basename(normalized)
+            validateName(name)
+            const parentFolderId = resolveFolderId(connection, parentPath(normalized))
+            // Joined again, since a trailing slash survives normalizing and no tree path ends in one.
+            assertPathFree(connection, posix.join(parentPath(normalized), name))
+            const created = await this.#http.postJson(`/project/${project}/folder`, {
+              parent_folder_id: parentFolderId,
+              name,
+            })
+            const folder = createdFolder(created)
+            return {
+              action: input.action,
+              ...(folder === undefined ? {} : { created: folder }),
+              trackChangesActive: connection.trackChangesActive,
+              writeMode: 'untracked',
+            }
           }
-        }
 
-        const entity = resolveProjectPath(connection.getTree(), normalized)
-        const route = `/project/${project}/${endpointType(entity)}/${encodeURIComponent(entity.id)}`
-        if (input.action === 'rename') {
-          validateName(input.newName)
-          assertPathFree(connection, posix.join(parentPath(normalized), input.newName))
-          await this.#http.postJson(`${route}/rename`, {
-            name: input.newName,
-          })
-          return {
-            action: input.action,
-            id: entity.id,
-            trackChangesActive: connection.trackChangesActive,
-            writeMode: 'untracked',
+          const entity = resolveProjectPath(connection.getTree(), normalized)
+          const route = `/project/${project}/${endpointType(entity)}/${encodeURIComponent(entity.id)}`
+          if (input.action === 'rename') {
+            validateName(input.newName)
+            assertPathFree(connection, posix.join(parentPath(normalized), input.newName))
+            await this.#http.postJson(`${route}/rename`, {
+              name: input.newName,
+            })
+            return {
+              action: input.action,
+              id: entity.id,
+              trackChangesActive: connection.trackChangesActive,
+              writeMode: 'untracked',
+            }
           }
-        }
-        if (input.action === 'move') {
-          const destination =
-            input.destinationFolderPath === '' ? '' : normalizeProjectPath(input.destinationFolderPath)
-          const folderId = resolveFolderId(connection, destination)
-          if (entity.type === 'folder' && (destination === normalized || destination.startsWith(`${normalized}/`))) {
+          if (input.action === 'move') {
+            const destination =
+              input.destinationFolderPath === '' ? '' : normalizeProjectPath(input.destinationFolderPath)
+            const folderId = resolveFolderId(connection, destination)
+            if (entity.type === 'folder' && (destination === normalized || destination.startsWith(`${normalized}/`))) {
+              throw new McpError(
+                'INVALID_ARGUMENT',
+                `${normalized} cannot be moved into itself or one of its own folders. Nothing was changed.`
+              )
+            }
+            // Moving into the folder that already holds it collides with itself, as Overleaf also judges it.
+            assertPathFree(connection, destination === '' ? entity.name : `${destination}/${entity.name}`)
+            await this.#http.postJson(`${route}/move`, {
+              folder_id: folderId,
+            })
+            return {
+              action: input.action,
+              id: entity.id,
+              trackChangesActive: connection.trackChangesActive,
+              writeMode: 'untracked',
+            }
+          }
+          if (normalizeProjectPath(input.confirmPath) !== normalized || input.confirmPath !== input.path) {
             throw new McpError(
-              'INVALID_ARGUMENT',
-              `${normalized} cannot be moved into itself or one of its own folders. Nothing was changed.`
+              'CONFIRMATION_MISMATCH',
+              'confirmPath must exactly match path before an entity can be deleted.'
             )
           }
-          // Moving into the folder that already holds it collides with itself, as Overleaf also judges it.
-          assertPathFree(connection, destination === '' ? entity.name : `${destination}/${entity.name}`)
-          await this.#http.postJson(`${route}/move`, {
-            folder_id: folderId,
-          })
+          await this.#http.deleteJson(route)
           return {
             action: input.action,
             id: entity.id,
             trackChangesActive: connection.trackChangesActive,
             writeMode: 'untracked',
           }
-        }
-        if (normalizeProjectPath(input.confirmPath) !== normalized || input.confirmPath !== input.path) {
-          throw new McpError(
-            'CONFIRMATION_MISMATCH',
-            'confirmPath must exactly match path before an entity can be deleted.'
-          )
-        }
-        await this.#http.deleteJson(route)
-        return {
-          action: input.action,
-          id: entity.id,
-          trackChangesActive: connection.trackChangesActive,
-          writeMode: 'untracked',
-        }
-      })
+        })
     )
     await this.#connections.invalidate(projectId)
     return result
@@ -373,59 +386,56 @@ export class EntitiesApi {
     const path = folderPath === '' ? name : normalizeProjectPath(posix.join(folderPath, name))
     const localHash = gitBlobHash(bytes)
 
-    const result = await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(async () => {
-        const folderId = resolveFolderId(connection, folderPath)
-        // Captured before the upload, because afterwards the entity always exists.
-        const existing = connection.getTree().find(entity => entity.path === path)
-        if (existing !== undefined && options.ifExists === 'skip') {
-          if (existing.type === 'folder') {
-            throw new McpError('INVALID_ARGUMENT', `The project holds a folder at ${path}.`)
+    const result = await this.#connections.withConnection(
+      projectId,
+      async connection =>
+        await connection.queue.run(async () => {
+          const folderId = resolveFolderId(connection, folderPath)
+          // Captured before the upload, because afterwards the entity always exists.
+          const existing = connection.getTree().find(entity => entity.path === path)
+          if (existing !== undefined && options.ifExists === 'skip') {
+            if (existing.type === 'folder') {
+              throw new McpError('INVALID_ARGUMENT', `The project holds a folder at ${path}.`)
+            }
+            const skipped: SkippedUpload = { path, skipped: true, entityId: existing.id, entityType: existing.type }
+            return skipped
           }
-          const skipped: SkippedUpload = { path, skipped: true, entityId: existing.id, entityType: existing.type }
-          return skipped
-        }
-        this.#checkReplacement(path, existing, options)
-        const replaced = existing !== undefined
-        const form = new FormData()
-        form.append('qqfile', new Blob([bytes]), name)
-        form.append('name', name)
-        let raw: unknown
-        try {
-          raw = await this.#http.postForm(
-            `/project/${encodeURIComponent(projectId)}/upload?folder_id=${encodeURIComponent(folderId)}`,
-            form
-          )
-        } catch (error) {
-          // Every Overleaf upload rejection is a 422 carrying a machine-readable code.
-          if (
-            error instanceof McpError &&
-            (error.details as { status?: number } | undefined)?.status === 422
-          ) {
-            throw uploadFailure((error.details as { overleafError?: string }).overleafError)
+          this.#checkReplacement(path, existing, options)
+          const replaced = existing !== undefined
+          const form = new FormData()
+          form.append('qqfile', new Blob([bytes]), name)
+          form.append('name', name)
+          let raw: unknown
+          try {
+            raw = await this.#http.postForm(
+              `/project/${encodeURIComponent(projectId)}/upload?folder_id=${encodeURIComponent(folderId)}`,
+              form
+            )
+          } catch (error) {
+            // Every Overleaf upload rejection is a 422 carrying a machine-readable code.
+            if (error instanceof McpError && (error.details as { status?: number } | undefined)?.status === 422) {
+              throw uploadFailure((error.details as { overleafError?: string }).overleafError)
+            }
+            throw error
           }
-          throw error
-        }
-        const body = parseUploadResponse(raw)
-        if (body.success === false) throw uploadFailure(body.error)
-        const entityType = body.entity_type === 'doc' || body.entity_type === 'file' ? body.entity_type : undefined
-        // Only binary file entities have a hash; Overleaf stores none for documents.
-        const hash =
-          body.hash ?? (entityType === undefined || entityType === 'file' ? localHash : undefined)
-        // Only a document replacing a document goes through Overleaf's diff, which tracks it.
-        const tracked =
-          existing?.type === 'doc' && (entityType ?? 'doc') === 'doc' && connection.trackChangesActive
-        const uploaded: UploadedFile = {
-          ...(typeof body.entity_id === 'string' ? { entityId: body.entity_id } : {}),
-          ...(entityType === undefined ? {} : { entityType }),
-          path,
-          replaced,
-          ...(hash === undefined ? {} : { hash }),
-          trackChangesActive: connection.trackChangesActive,
-          writeMode: tracked ? 'tracked' : 'untracked',
-        }
-        return uploaded
-      })
+          const body = parseUploadResponse(raw)
+          if (body.success === false) throw uploadFailure(body.error)
+          const entityType = body.entity_type === 'doc' || body.entity_type === 'file' ? body.entity_type : undefined
+          // Only binary file entities have a hash; Overleaf stores none for documents.
+          const hash = body.hash ?? (entityType === undefined || entityType === 'file' ? localHash : undefined)
+          // Only a document replacing a document goes through Overleaf's diff, which tracks it.
+          const tracked = existing?.type === 'doc' && (entityType ?? 'doc') === 'doc' && connection.trackChangesActive
+          const uploaded: UploadedFile = {
+            ...(typeof body.entity_id === 'string' ? { entityId: body.entity_id } : {}),
+            ...(entityType === undefined ? {} : { entityType }),
+            path,
+            replaced,
+            ...(hash === undefined ? {} : { hash }),
+            trackChangesActive: connection.trackChangesActive,
+            writeMode: tracked ? 'tracked' : 'untracked',
+          }
+          return uploaded
+        })
     )
     await this.#connections.invalidate(projectId)
     return result
@@ -498,11 +508,12 @@ export class EntitiesApi {
     // is replaced at the file it leads to, which is where the policy judged the write.
     let replaced: string | undefined
     if (followed?.isFile() === true) {
-      replaced = existing?.isSymbolicLink() === true
-        ? await realpath(writePath).catch((error: unknown) => {
-          throw localFileFailure(error, 'written')
-        })
-        : writePath
+      replaced =
+        existing?.isSymbolicLink() === true
+          ? await realpath(writePath).catch((error: unknown) => {
+              throw localFileFailure(error, 'written')
+            })
+          : writePath
     }
     if (existing === undefined || replaced !== undefined) {
       // The folder must exist and be writable; the write below stays the final word.
@@ -510,19 +521,21 @@ export class EntitiesApi {
         throw localFileFailure(error, 'written')
       })
     }
-    const bytes = await this.#connections.withConnection(projectId, async connection =>
-      await connection.queue.run(async () => {
-        const entity = resolveProjectPath(connection.getTree(), filePath)
-        if (entity.type === 'folder') {
-          throw new McpError('INVALID_ARGUMENT', 'Folders cannot be downloaded with download_file.')
-        }
-        const project = encodeURIComponent(projectId)
-        const route =
-          entity.type === 'doc'
-            ? `/Project/${project}/doc/${encodeURIComponent(entity.id)}/download`
-            : `/Project/${project}/file/${encodeURIComponent(entity.id)}`
-        return await this.#http.getBytes(route)
-      })
+    const bytes = await this.#connections.withConnection(
+      projectId,
+      async connection =>
+        await connection.queue.run(async () => {
+          const entity = resolveProjectPath(connection.getTree(), filePath)
+          if (entity.type === 'folder') {
+            throw new McpError('INVALID_ARGUMENT', 'Folders cannot be downloaded with download_file.')
+          }
+          const project = encodeURIComponent(projectId)
+          const route =
+            entity.type === 'doc'
+              ? `/Project/${project}/doc/${encodeURIComponent(entity.id)}/download`
+              : `/Project/${project}/file/${encodeURIComponent(entity.id)}`
+          return await this.#http.getBytes(route)
+        })
     )
     try {
       if (replaced !== undefined) await replaceFileAtomically(replaced, bytes, followed?.mode)

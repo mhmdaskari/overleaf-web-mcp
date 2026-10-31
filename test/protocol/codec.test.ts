@@ -2,11 +2,7 @@ import { readFile } from 'node:fs/promises'
 
 import { describe, expect, test } from 'vitest'
 
-import {
-  encodeEventPacket,
-  parseHandshake,
-  parseSocketPacket,
-} from '../../src/protocol/socketio09-codec.js'
+import { encodeEventPacket, parseHandshake, parseSocketPacket } from '../../src/protocol/socketio09-codec.js'
 
 describe('Socket.IO 0.9 codec', () => {
   test('parses the sanitized handshake fixture', () => {
@@ -19,12 +15,8 @@ describe('Socket.IO 0.9 codec', () => {
   })
 
   test('encodes event packets with and without acknowledgement IDs', () => {
-    expect(encodeEventPacket('leaveDoc', ['DOC'])).toBe(
-      '5:::{"name":"leaveDoc","args":["DOC"]}'
-    )
-    expect(encodeEventPacket('joinDoc', ['DOC', {}], 7)).toBe(
-      '5:7+::{"name":"joinDoc","args":["DOC",{}]}'
-    )
+    expect(encodeEventPacket('leaveDoc', ['DOC'])).toBe('5:::{"name":"leaveDoc","args":["DOC"]}')
+    expect(encodeEventPacket('joinDoc', ['DOC', {}], 7)).toBe('5:7+::{"name":"joinDoc","args":["DOC",{}]}')
   })
 
   test('parses real-shaped ShareJS and history-OT event/ack fixtures', async () => {

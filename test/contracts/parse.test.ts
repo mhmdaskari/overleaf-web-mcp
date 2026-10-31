@@ -16,12 +16,23 @@ describe('strict operation input', () => {
   test('names unknown keys at any depth, and only those', () => {
     const input = {
       projectId: 'p',
-      files: [{ localPath: '/a.png', destinationPath: 'a.png' }, { localPath: '/b.png', destinationpath: 'b.png' }],
+      files: [
+        { localPath: '/a.png', destinationPath: 'a.png' },
+        { localPath: '/b.png', destinationpath: 'b.png' },
+      ],
     }
     expect(() => parseOperationInput('batch_upload', input)).toThrow(
       expect.objectContaining({ details: { unknownKeys: ['files.1.destinationpath'] } })
     )
-    const comment = { projectId: 'p', filePath: 'f', revision: 'r', start: { line: 1, column: 1, col: 2 }, end: { line: 1, column: 2 }, expectedText: 'a', content: 'b' }
+    const comment = {
+      projectId: 'p',
+      filePath: 'f',
+      revision: 'r',
+      start: { line: 1, column: 1, col: 2 },
+      end: { line: 1, column: 2 },
+      expectedText: 'a',
+      content: 'b',
+    }
     expect(() => parseOperationInput('add_comment', comment)).toThrow(
       expect.objectContaining({ details: { unknownKeys: ['start.col'] } })
     )
@@ -34,7 +45,9 @@ describe('strict operation input', () => {
       limit: 50,
       sort: 'lastUpdated',
     })
-    expect(parseOperationInput('write_file', { projectId: 'p', filePath: 'f', revision: 'r', content: '' })).toMatchObject({
+    expect(
+      parseOperationInput('write_file', { projectId: 'p', filePath: 'f', revision: 'r', content: '' })
+    ).toMatchObject({
       writeMode: 'untracked',
     })
   })
@@ -45,7 +58,9 @@ describe('strict operation input', () => {
       expect.objectContaining({ code: 'INVALID_ARGUMENT', details: { unknownKeys: ['verbose'] } })
     )
     for (const input of [null, [], 'x', 3]) {
-      expect(() => parseOperationInput('read_file', input)).toThrow(expect.objectContaining({ code: 'INVALID_ARGUMENT' }))
+      expect(() => parseOperationInput('read_file', input)).toThrow(
+        expect.objectContaining({ code: 'INVALID_ARGUMENT' })
+      )
     }
   })
 
@@ -53,7 +68,13 @@ describe('strict operation input', () => {
     const secret = 'manuscript text that must not be echoed'
     let caught: unknown
     try {
-      parseOperationInput('write_file', { projectId: 'p', filePath: 'f', revision: 'r', content: 'x', writeMode: secret })
+      parseOperationInput('write_file', {
+        projectId: 'p',
+        filePath: 'f',
+        revision: 'r',
+        content: 'x',
+        writeMode: secret,
+      })
     } catch (error) {
       caught = error
     }
@@ -93,10 +114,12 @@ describe('strict operation input', () => {
       ),
     })
     expect(unknownKeys(schema, { operations: [{ type: 'rename', path: 'a', newPath: 'b' }] })).toEqual([])
-    expect(unknownKeys(schema, { operations: [{ type: 'add', path: 'a', newPath: 'b' }] })).toEqual(['operations.0.newPath'])
+    expect(unknownKeys(schema, { operations: [{ type: 'add', path: 'a', newPath: 'b' }] })).toEqual([
+      'operations.0.newPath',
+    ])
   })
 
-  test('names an unknown key at every object position of every operation\'s valid input', () => {
+  test("names an unknown key at every object position of every operation's valid input", () => {
     const injected = 'zzUnknown'
     const positions = new Set<string>()
     for (const name of OPERATION_NAMES) {

@@ -129,7 +129,12 @@ function threadsReply(state: ServerState): unknown {
         { id: 'message-a', content: 'Placeholder comment.', timestamp: Date.UTC(2026, 0, 1), user_id: 'user-b', user },
       ],
       ...(state.resolved
-        ? { resolved: true, resolved_at: '2026-01-02T00:00:00.000Z', resolved_by_user_id: 'user-b', resolved_by_user: user }
+        ? {
+            resolved: true,
+            resolved_at: '2026-01-02T00:00:00.000Z',
+            resolved_by_user_id: 'user-b',
+            resolved_by_user: user,
+          }
         : {}),
     },
   }
@@ -179,7 +184,9 @@ async function withRuntime(
             publicId: 'public-a',
             project: {
               _id: projectId,
-              rootFolder: [{ _id: 'root', name: 'rootFolder', docs: [{ _id: DOC, name: 'main.tex' }], fileRefs: [], folders: [] }],
+              rootFolder: [
+                { _id: 'root', name: 'rootFolder', docs: [{ _id: DOC, name: 'main.tex' }], fileRefs: [], folders: [] },
+              ],
               trackChangesState: state.trackChanges,
             },
             permissionsLevel: 'owner',

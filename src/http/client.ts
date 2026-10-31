@@ -112,12 +112,7 @@ export class OverleafHttpClient {
     this.#persistSetCookies = options.persistSetCookies
   }
 
-  async request(
-    method: string,
-    path: string,
-    body?: unknown,
-    options: RequestOptions = {}
-  ): Promise<Response> {
+  async request(method: string, path: string, body?: unknown, options: RequestOptions = {}): Promise<Response> {
     const base = new URL(`${this.baseUrl}/`)
     const target = new URL(path, base)
     // A path that resolves elsewhere would carry the session cookie and CSRF token off Overleaf.
@@ -142,9 +137,7 @@ export class OverleafHttpClient {
     }
 
     const timeoutSignal = AbortSignal.timeout(options.timeoutMs ?? this.#defaultTimeoutMs)
-    const signal = options.signal
-      ? AbortSignal.any([options.signal, timeoutSignal])
-      : timeoutSignal
+    const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal
 
     let response: Response
     try {
@@ -154,9 +147,7 @@ export class OverleafHttpClient {
         signal,
         // fetch keeps x-csrf-token across a cross-origin redirect, so a mutation follows none.
         redirect: mutating ? 'manual' : 'follow',
-        ...(body === undefined
-          ? {}
-          : { body: body instanceof FormData ? body : JSON.stringify(body) }),
+        ...(body === undefined ? {} : { body: body instanceof FormData ? body : JSON.stringify(body) }),
       })
     } catch (error) {
       if (signal.aborted) {
@@ -180,11 +171,9 @@ export class OverleafHttpClient {
     const location = redirect ? redirectTarget(response, target) : undefined
     const toLogin = location?.origin === base.origin && location.pathname.startsWith('/login')
     if (response.status === 401 || finalPath.startsWith('/login') || toLogin) {
-      throw new McpError(
-        'AUTH_EXPIRED',
-        `Overleaf authentication expired. ${AUTH_LOGIN_INSTRUCTION}`,
-        { retryable: false }
-      )
+      throw new McpError('AUTH_EXPIRED', `Overleaf authentication expired. ${AUTH_LOGIN_INSTRUCTION}`, {
+        retryable: false,
+      })
     }
     if (redirect) {
       throw new McpError(
@@ -234,11 +223,7 @@ export class OverleafHttpClient {
     return (await parseJsonBody(response, path)) as T
   }
 
-  async postJson<T = unknown>(
-    path: string,
-    body: unknown = {},
-    options?: RequestOptions
-  ): Promise<T> {
+  async postJson<T = unknown>(path: string, body: unknown = {}, options?: RequestOptions): Promise<T> {
     const response = await this.request('POST', path, body, options)
     return (await parseJsonBody(response, path, {})) as T
   }
@@ -267,11 +252,7 @@ export class OverleafHttpClient {
     return { body, ...(contentType === undefined ? {} : { contentType }) }
   }
 
-  async postForm<T = unknown>(
-    path: string,
-    form: FormData,
-    options?: RequestOptions
-  ): Promise<T> {
+  async postForm<T = unknown>(path: string, form: FormData, options?: RequestOptions): Promise<T> {
     const response = await this.request('POST', path, form, options)
     return (await parseJsonBody(response, path, {})) as T
   }

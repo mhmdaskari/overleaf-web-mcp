@@ -3,7 +3,9 @@ import type { OperationName, OperationOutput } from '../../src/contracts/operati
 const thread = {
   id: 't',
   status: 'open' as const,
-  messages: [{ id: 'm', author: { id: 'u', displayName: 'Ada' }, content: 'Why?', timestamp: '2026-01-01T00:00:00.000Z' }],
+  messages: [
+    { id: 'm', author: { id: 'u', displayName: 'Ada' }, content: 'Why?', timestamp: '2026-01-01T00:00:00.000Z' },
+  ],
 }
 
 const section = {
@@ -56,7 +58,15 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
   create_file: { revision: 'r1', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },
   manage_entity: { action: 'delete', id: 'd1', trackChangesActive: false, writeMode: 'untracked' },
   upload_file: { path: 'a.png', replaced: false, trackChangesActive: false, writeMode: 'untracked' },
-  batch_upload: { status: 'complete', onConflict: 'fail', completed: [], skipped: [], failed: [], remaining: [], verified: true },
+  batch_upload: {
+    status: 'complete',
+    onConflict: 'fail',
+    completed: [],
+    skipped: [],
+    failed: [],
+    remaining: [],
+    verified: true,
+  },
   download_file: { bytes: 10, localPath: '/tmp/a.png' },
   download_project_zip: { projectId: 'p', localPath: '/tmp/p.zip', bytes: 10, replaced: false },
   plan_sync: {
@@ -69,7 +79,15 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
     conflicts: [],
     ignored: { count: 0, entries: [] },
   },
-  sync_directory: { status: 'complete', mode: 'additive', completed: [], failed: [], remaining: [], identicalCount: 0, planned: true },
+  sync_directory: {
+    status: 'complete',
+    mode: 'additive',
+    completed: [],
+    failed: [],
+    remaining: [],
+    identicalCount: 0,
+    planned: true,
+  },
   delete_entities: { status: 'complete', completed: [], failed: [], remaining: [] },
   get_sections: { sections: [section], revision: 'r', singleFileOnly: true },
   get_section_content: { content: 'Body', section, revision: 'r' },
@@ -97,11 +115,30 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
   },
   stop_compile: { stopped: true },
   get_compile_log: { buildId: 'b', file: 'output.log', log: 'This is pdfTeX', truncated: false, errorLines: [] },
-  download_compile_output: { localPath: '/tmp/paper.pdf', file: 'output.pdf', sizeBytes: 10, buildId: 'b', replaced: false },
+  download_compile_output: {
+    localPath: '/tmp/paper.pdf',
+    file: 'output.pdf',
+    sizeBytes: 10,
+    buildId: 'b',
+    replaced: false,
+  },
   list_comments: { threads: [thread], positionsUnavailable: false },
   reply_to_comment: { threadId: 't', message: thread.messages[0]!, trackChangesActive: false, writeMode: 'untracked' },
-  add_comment: { threadId: 't', thread, revision: 'r', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },
-  set_comment_status: { threadId: 't', status: 'resolved', revision: 'r2', trackChangesActive: false, writeMode: 'untracked' },
+  add_comment: {
+    threadId: 't',
+    thread,
+    revision: 'r',
+    protocol: 'sharejs',
+    trackChangesActive: false,
+    writeMode: 'untracked',
+  },
+  set_comment_status: {
+    threadId: 't',
+    status: 'resolved',
+    revision: 'r2',
+    trackChangesActive: false,
+    writeMode: 'untracked',
+  },
   monitor_project_history: {
     projectId: 'p',
     currentVersion: 2,

@@ -120,9 +120,7 @@ describe('project connection', () => {
       currentUserId: 'user',
     })
 
-    await expect(
-      connection.withDocument('doc', async document => document.content)
-    ).resolves.toBe('az')
+    await expect(connection.withDocument('doc', async document => document.content)).resolves.toBe('az')
   })
 
   test('correlates an apply acknowledgement with the sender applied event', async () => {
@@ -198,9 +196,11 @@ describe('project connection', () => {
     })
     peer.emit('disconnect')
 
-    await expect(
-      connection.submitUpdate('doc', { doc: 'doc', v: 4, op: [{ p: 0, i: 'x' }] })
-    ).rejects.toMatchObject({ code: 'REMOTE_ERROR', retryable: true, details: { reason: 'not_connected' } })
+    await expect(connection.submitUpdate('doc', { doc: 'doc', v: 4, op: [{ p: 0, i: 'x' }] })).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+      retryable: true,
+      details: { reason: 'not_connected' },
+    })
     expect(peer.call).not.toHaveBeenCalled()
   })
 
@@ -214,9 +214,9 @@ describe('project connection', () => {
       supportedProtocolVersions: [2],
     })
 
-    await expect(
-      connection.submitUpdate('doc', { doc: 'doc', v: 4, op: [{ p: 0, i: 'x' }] })
-    ).rejects.toMatchObject({ code: 'OUTCOME_UNKNOWN' })
+    await expect(connection.submitUpdate('doc', { doc: 'doc', v: 4, op: [{ p: 0, i: 'x' }] })).rejects.toMatchObject({
+      code: 'OUTCOME_UNKNOWN',
+    })
   })
 
   test('keeps the cached project tree synchronized with collaborator events', () => {
@@ -237,9 +237,7 @@ describe('project connection', () => {
     peer.emit('reciveNewDoc', 'folder', { _id: 'new-doc', name: 'draft.tex' })
     peer.emit('reciveEntityRename', 'new-doc', 'final.tex')
     expect(connection.getTree()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: 'new-doc', path: 'chapters/final.tex' }),
-      ])
+      expect.arrayContaining([expect.objectContaining({ id: 'new-doc', path: 'chapters/final.tex' })])
     )
 
     peer.emit('reciveEntityMove', 'new-doc', 'root')
@@ -248,8 +246,6 @@ describe('project connection', () => {
     )
 
     peer.emit('removeEntity', 'new-doc')
-    expect(connection.getTree()).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: 'new-doc' })])
-    )
+    expect(connection.getTree()).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: 'new-doc' })]))
   })
 })

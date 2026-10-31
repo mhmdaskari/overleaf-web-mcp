@@ -10,10 +10,7 @@ type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Re
 
 const URL_SCHEME = /^[a-z][a-z\d+.-]*:\/\//iu
 
-function firstSet(
-  env: NodeJS.ProcessEnv,
-  names: readonly string[]
-): { name: string; value: string } | undefined {
+function firstSet(env: NodeJS.ProcessEnv, names: readonly string[]): { name: string; value: string } | undefined {
   for (const name of names) {
     const value = env[name]?.trim()
     if (value) return { name, value }
@@ -84,13 +81,8 @@ function parseProxyUrl(name: string, value: string): URL {
  * (`https_proxy` for HTTPS, `http_proxy` for HTTP, lowercase before uppercase) with no fallback
  * between the two, and `no_proxy` exempts matching hosts.
  */
-export function resolveProxyUrl(
-  target: URL,
-  env: NodeJS.ProcessEnv = process.env
-): string | undefined {
-  const names = target.protocol === 'https:'
-    ? ['https_proxy', 'HTTPS_PROXY']
-    : ['http_proxy', 'HTTP_PROXY']
+export function resolveProxyUrl(target: URL, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const names = target.protocol === 'https:' ? ['https_proxy', 'HTTPS_PROXY'] : ['http_proxy', 'HTTP_PROXY']
   const selected = firstSet(env, names)
   if (selected === undefined) return undefined
   if (bypassesProxy(target, firstSet(env, ['no_proxy', 'NO_PROXY'])?.value ?? '')) {

@@ -20,10 +20,12 @@ async function folders() {
 
 describe('path-safe ids', () => {
   test.each(['../x?', 'p/1', 'p\\1', 'a.b', 'p?x', 'p#x', 'p%2F', '', 'p\n'])('refuses %j', id => {
-    expect(() => assertPathSafeId(id, 'projectId')).toThrow(expect.objectContaining({
-      code: 'INVALID_ARGUMENT',
-      details: { parameter: 'projectId' },
-    }))
+    expect(() => assertPathSafeId(id, 'projectId')).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGUMENT',
+        details: { parameter: 'projectId' },
+      })
+    )
   })
 
   test('accepts Overleaf object ids and other plain ids', () => {
@@ -46,9 +48,11 @@ describe('access policy', () => {
     const policy = await AccessPolicy.create({ allowedProjects: ['a'] })
     expect(() => policy.assertProject('a')).not.toThrow()
     expect(() => policy.assertProject('b')).toThrow(expect.objectContaining({ code: 'POLICY_DENIED' }))
-    expect(() => policy.assertProject('b', 'sourceProjectId')).toThrow(expect.objectContaining({
-      details: { parameter: 'sourceProjectId' },
-    }))
+    expect(() => policy.assertProject('b', 'sourceProjectId')).toThrow(
+      expect.objectContaining({
+        details: { parameter: 'sourceProjectId' },
+      })
+    )
     policy.allowProject('b')
     expect(() => policy.assertProject('b')).not.toThrow()
     expect(policy.allowsProject('c')).toBe(false)
@@ -57,10 +61,12 @@ describe('access policy', () => {
   test('refuses effects outside the allowed list', async () => {
     const policy = await AccessPolicy.create({ allowedEffects: ['overleaf-read'] })
     expect(() => policy.assertEffect('overleaf-read')).not.toThrow()
-    expect(() => policy.assertEffect('overleaf-read', 'overleaf-write')).toThrow(expect.objectContaining({
-      code: 'POLICY_DENIED',
-      details: { effect: 'overleaf-write' },
-    }))
+    expect(() => policy.assertEffect('overleaf-read', 'overleaf-write')).toThrow(
+      expect.objectContaining({
+        code: 'POLICY_DENIED',
+        details: { effect: 'overleaf-write' },
+      })
+    )
     await expect(policy.resolveLocalRead('/x')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
   })
 
@@ -88,7 +94,13 @@ describe('access policy', () => {
     await symlink(jar, join(inside, 'jar-link.txt'))
     const open = await AccessPolicy.create({ cookieJarFile: jar, browserProfileDir: profile })
 
-    for (const path of [jar, `${jar}.lock`, join(base, 'auth', '.cookies.txt.1.2.tmp'), join(profile, 'Default', 'Cookies'), join(inside, 'jar-link.txt')]) {
+    for (const path of [
+      jar,
+      `${jar}.lock`,
+      join(base, 'auth', '.cookies.txt.1.2.tmp'),
+      join(profile, 'Default', 'Cookies'),
+      join(inside, 'jar-link.txt'),
+    ]) {
       await expect(open.resolveLocalWrite(path)).rejects.toMatchObject({
         code: 'PATH_OUTSIDE_ROOT',
         details: { kind: 'session_files' },
@@ -153,8 +165,12 @@ describe('access policy', () => {
     for (const path of [jar, join(inside, 'jar-link.txt'), join(auth, 'chrome-profile', 'Default', 'Cookies')]) {
       await expect(policy.resolveLocalRead(path), path).rejects.toMatchObject({ details: { kind: 'session_files' } })
     }
-    await expect(policy.resolveLocalRead(auth, { folder: true })).rejects.toMatchObject({ details: { kind: 'session_files' } })
-    await expect(policy.resolveLocalRead(base, { folder: true })).rejects.toMatchObject({ details: { kind: 'session_files' } })
+    await expect(policy.resolveLocalRead(auth, { folder: true })).rejects.toMatchObject({
+      details: { kind: 'session_files' },
+    })
+    await expect(policy.resolveLocalRead(base, { folder: true })).rejects.toMatchObject({
+      details: { kind: 'session_files' },
+    })
     await expect(policy.resolveLocalRead(inside, { folder: true })).resolves.toBe(inside)
     await expect(policy.resolveLocalRead(join(inside, 'main.tex'))).resolves.toBe(join(inside, 'main.tex'))
   })
@@ -189,7 +205,9 @@ describe('policy configuration', () => {
 
   test('refuses relative roots, unknown effects, and empty entries', () => {
     expect(() => readConfig({ OVERLEAF_LOCAL_READ_ROOTS: 'relative/path' })).toThrow(/OVERLEAF_LOCAL_READ_ROOTS/u)
-    expect(() => readConfig({ OVERLEAF_ALLOWED_EFFECTS: 'overleaf-read,everything' })).toThrow(/OVERLEAF_ALLOWED_EFFECTS/u)
+    expect(() => readConfig({ OVERLEAF_ALLOWED_EFFECTS: 'overleaf-read,everything' })).toThrow(
+      /OVERLEAF_ALLOWED_EFFECTS/u
+    )
     expect(() => readConfig({ OVERLEAF_ALLOWED_PROJECTS: 'a,,b' })).toThrow(/OVERLEAF_ALLOWED_PROJECTS/u)
   })
 })

@@ -6,11 +6,7 @@ import { Cookie, CookieJar } from 'tough-cookie'
 
 import { McpError } from '../core/errors.js'
 import { CdpClient } from './cdp.js'
-import {
-  chromeLaunchArguments,
-  findChromeExecutable,
-  readDevToolsEndpoint,
-} from './chrome.js'
+import { chromeLaunchArguments, findChromeExecutable, readDevToolsEndpoint } from './chrome.js'
 
 export interface BrowserProcess {
   exitCode: number | null
@@ -19,12 +15,7 @@ export interface BrowserProcess {
 
 export interface CdpTransport {
   readonly closed: boolean
-  send<T>(
-    method: string,
-    params?: Record<string, unknown>,
-    sessionId?: string,
-    timeoutMs?: number
-  ): Promise<T>
+  send<T>(method: string, params?: Record<string, unknown>, sessionId?: string, timeoutMs?: number): Promise<T>
   close(): void
 }
 
@@ -74,10 +65,7 @@ async function cookiesToJar(cookies: BrowserCookie[], baseUrl: URL): Promise<Coo
       path: browserCookie.path || '/',
       secure: browserCookie.secure,
       httpOnly: browserCookie.httpOnly,
-      expires:
-        browserCookie.expires > 0
-          ? new Date(browserCookie.expires * 1000)
-          : 'Infinity',
+      expires: browserCookie.expires > 0 ? new Date(browserCookie.expires * 1000) : 'Infinity',
     })
     const protocol = browserCookie.secure ? 'https:' : baseUrl.protocol
     await jar.setCookie(cookie, `${protocol}//${baseUrl.hostname}${cookie.path ?? '/'}`)
@@ -96,12 +84,10 @@ export async function captureBrowserSession(
   const findChrome = dependencies.findChrome ?? findChromeExecutable
   const spawnChrome =
     dependencies.spawnChrome ??
-    ((executable: string, args: string[]) =>
-      spawn(executable, args, { stdio: 'ignore', detached: false }))
+    ((executable: string, args: string[]) => spawn(executable, args, { stdio: 'ignore', detached: false }))
   const readEndpoint = dependencies.readEndpoint ?? readDevToolsEndpoint
   const connectCdp = dependencies.connectCdp ?? (async (url: string) => await CdpClient.connect(url))
-  const sleep =
-    dependencies.sleep ?? (async (ms: number) => await new Promise(resolve => setTimeout(resolve, ms)))
+  const sleep = dependencies.sleep ?? (async (ms: number) => await new Promise(resolve => setTimeout(resolve, ms)))
   const now = dependencies.now ?? Date.now
   const baseUrl = new URL(options.baseUrl)
 
@@ -127,11 +113,7 @@ export async function captureBrowserSession(
     })
     await cdp.send('Page.enable', {}, attached.sessionId)
     await cdp.send('Runtime.enable', {}, attached.sessionId)
-    await cdp.send(
-      'Page.navigate',
-      { url: new URL('/project', baseUrl).href },
-      attached.sessionId
-    )
+    await cdp.send('Page.navigate', { url: new URL('/project', baseUrl).href }, attached.sessionId)
     options.onStatus?.('Sign in normally; this window will close after authentication succeeds.')
 
     const deadline = now() + options.timeoutMs
@@ -149,7 +131,7 @@ export async function captureBrowserSession(
           'Runtime.evaluate',
           {
             expression:
-              "({ origin: location.origin, pathname: location.pathname, csrfToken: document.querySelector('meta[name=\\\"ol-csrfToken\\\"]')?.content ?? null })",
+              '({ origin: location.origin, pathname: location.pathname, csrfToken: document.querySelector(\'meta[name=\\"ol-csrfToken\\"]\')?.content ?? null })',
             returnByValue: true,
           },
           attached.sessionId

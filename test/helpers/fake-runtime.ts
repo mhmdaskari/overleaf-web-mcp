@@ -11,7 +11,10 @@ const resolved = (value: unknown) => vi.fn<(...args: any[]) => Promise<any>>(asy
 export function fakeServiceRuntime() {
   return {
     authStatus: resolved(OUTPUTS.auth_status),
-    account: { listProjects: resolved(OUTPUTS.list_projects), findProject: resolved(OUTPUTS.list_projects.projects[0]) },
+    account: {
+      listProjects: resolved(OUTPUTS.list_projects),
+      findProject: resolved(OUTPUTS.list_projects.projects[0]),
+    },
     projects: {
       createProject: resolved(OUTPUTS.create_project),
       cloneProject: resolved(OUTPUTS.clone_project),

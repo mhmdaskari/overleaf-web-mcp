@@ -15,11 +15,7 @@ import {
 import type { ProjectEntity } from './tree.js'
 
 export interface CompileHttp {
-  postJson(
-    path: string,
-    body?: unknown,
-    options?: { timeoutMs?: number }
-  ): Promise<unknown>
+  postJson(path: string, body?: unknown, options?: { timeoutMs?: number }): Promise<unknown>
   getStream(
     path: string,
     options?: { timeoutMs?: number }
@@ -120,7 +116,8 @@ const USER_ID_PATTERN = /^[0-9a-f]{24}$/u
  * /project/:id/user/:userId/build/:build/output/, a path the compile response names in each
  * output file's url. That url is never requested; only the user ID is taken from it.
  */
-const PER_USER_OUTPUT_URL = /^\/project\/([0-9a-f]{24})\/user\/([0-9a-f]{24})\/build\/([0-9a-f]{1,64}-[0-9a-f]{1,64})\/output\//u
+const PER_USER_OUTPUT_URL =
+  /^\/project\/([0-9a-f]{24})\/user\/([0-9a-f]{24})\/build\/([0-9a-f]{1,64}-[0-9a-f]{1,64})\/output\//u
 const OUTPUT_TYPE_PATTERN = /^[a-z0-9]{1,16}$/u
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/u
 const MAX_OUTPUT_PATH_LENGTH = 255
@@ -183,11 +180,18 @@ export function isSafeOutputPath(path: string): boolean {
 
 function protocolError(raw: unknown): McpError {
   const receivedKeys = isRecord(raw)
-    ? Object.keys(raw).filter(key => KEY_PATTERN.test(key)).sort().slice(0, 20)
+    ? Object.keys(raw)
+        .filter(key => KEY_PATTERN.test(key))
+        .sort()
+        .slice(0, 20)
     : []
-  return new McpError('PROTOCOL_UNSUPPORTED', 'Overleaf answered the compile request in a shape this server does not recognize.', {
-    details: { endpoint: 'compile', expectedKeys: ['status', 'outputFiles'], receivedKeys },
-  })
+  return new McpError(
+    'PROTOCOL_UNSUPPORTED',
+    'Overleaf answered the compile request in a shape this server does not recognize.',
+    {
+      details: { endpoint: 'compile', expectedKeys: ['status', 'outputFiles'], receivedKeys },
+    }
+  )
 }
 
 /** Reduces Overleaf's response to what this server returns; nothing else of it goes further. */
@@ -300,7 +304,7 @@ function statusError(status: string, rootFilePath: string, record: BuildRecord |
   if (status === 'timedout') {
     return new McpError(
       'COMPILE_TIMEOUT',
-      'The compile reached Overleaf\'s time limit for this account. Compiling again will not help by itself: try draft or stopOnFirstError, or read the partial log with get_compile_log when details has a buildRef.',
+      "The compile reached Overleaf's time limit for this account. Compiling again will not help by itself: try draft or stopOnFirstError, or read the partial log with get_compile_log when details has a buildRef.",
       { details }
     )
   }
@@ -310,7 +314,10 @@ function statusError(status: string, rootFilePath: string, record: BuildRecord |
 }
 
 function outputPath(record: BuildRecord, file: string): string {
-  const encoded = file.split('/').map(segment => encodeURIComponent(segment)).join('/')
+  const encoded = file
+    .split('/')
+    .map(segment => encodeURIComponent(segment))
+    .join('/')
   const user = record.userId === undefined ? '' : `/user/${encodeURIComponent(record.userId)}`
   const path = `/project/${encodeURIComponent(record.projectId)}${user}/build/${encodeURIComponent(record.buildId)}/output/${encoded}`
   return record.clsiServerId === undefined ? path : `${path}?clsiserverid=${encodeURIComponent(record.clsiServerId)}`
@@ -324,9 +331,7 @@ export class CompileApi {
   readonly #http: CompileHttp
   readonly #resolvePath: (projectId: string, path: string, type: 'doc') => Promise<ProjectEntity>
   readonly #defaultTimeoutMs: number
-  readonly #resolveRootDocument:
-    | ((projectId: string) => Promise<ProjectEntity | undefined>)
-    | undefined
+  readonly #resolveRootDocument: ((projectId: string) => Promise<ProjectEntity | undefined>) | undefined
   readonly #policy: AccessPolicy
   /** The latest build of each project this process compiled, which the output tools default to. */
   readonly #latest = new Map<string, BuildRecord>()
@@ -439,18 +444,32 @@ export class CompileApi {
       await target.discard()
       throw error
     }
-    const written = await writeDownload(body, target, file.endsWith('.pdf')
-      ? {
-          head: head => {
-            if (!startsLikePdf(head)) {
-              throw new McpError('PROTOCOL_UNSUPPORTED', `Overleaf did not return a PDF for ${file}; nothing was written.`, {
-                details: { file },
-              })
-            }
-          },
-        }
-      : {})
-    return { localPath: target.path, file, sizeBytes: written.bytes, buildId: record.buildId, replaced: written.replaced }
+    const written = await writeDownload(
+      body,
+      target,
+      file.endsWith('.pdf')
+        ? {
+            head: head => {
+              if (!startsLikePdf(head)) {
+                throw new McpError(
+                  'PROTOCOL_UNSUPPORTED',
+                  `Overleaf did not return a PDF for ${file}; nothing was written.`,
+                  {
+                    details: { file },
+                  }
+                )
+              }
+            },
+          }
+        : {}
+    )
+    return {
+      localPath: target.path,
+      file,
+      sizeBytes: written.bytes,
+      buildId: record.buildId,
+      replaced: written.replaced,
+    }
   }
 
   /** Returns a bounded tail of a build's LaTeX or BibTeX log, and the lines that report errors. */
@@ -520,15 +539,19 @@ export class CompileApi {
     if (!(error instanceof McpError)) return error
     if (error.code === 'RATE_LIMITED') {
       const retryAfterMs = error.details?.retryAfterMs
-      return new McpError('COMPILE_RATE_LIMITED', 'Overleaf rate-limited this compile; nothing was built. Wait, then compile once more.', {
-        retryable: true,
-        details: {
-          status: 'rate-limited',
-          rootFilePath,
-          ...(typeof retryAfterMs === 'number' ? { retryAfterMs } : {}),
-        },
-        cause: error,
-      })
+      return new McpError(
+        'COMPILE_RATE_LIMITED',
+        'Overleaf rate-limited this compile; nothing was built. Wait, then compile once more.',
+        {
+          retryable: true,
+          details: {
+            status: 'rate-limited',
+            rootFilePath,
+            ...(typeof retryAfterMs === 'number' ? { retryAfterMs } : {}),
+          },
+          cause: error,
+        }
+      )
     }
     if (error.code === 'TIMEOUT') {
       // The compile may still be running, so asking again could start a second one.
@@ -551,7 +574,9 @@ export class CompileApi {
       buildId,
       ...(response.clsiServerId === undefined ? {} : { clsiServerId: response.clsiServerId }),
       ...(response.outputUserId === undefined ? {} : { userId: response.outputUserId }),
-      ...(response.outputFiles.length <= MAX_LISTED_OUTPUTS ? { files: response.outputFiles.map(file => file.path) } : {}),
+      ...(response.outputFiles.length <= MAX_LISTED_OUTPUTS
+        ? { files: response.outputFiles.map(file => file.path) }
+        : {}),
     }
     this.#latest.delete(projectId)
     this.#latest.set(projectId, record)
@@ -566,7 +591,10 @@ export class CompileApi {
     if (buildRef !== undefined) {
       const record = decodeBuildRef(buildRef)
       if (record.projectId !== projectId) {
-        throw new McpError('INVALID_ARGUMENT', 'buildRef names a build of another project; pass the projectId it was compiled for.')
+        throw new McpError(
+          'INVALID_ARGUMENT',
+          'buildRef names a build of another project; pass the projectId it was compiled for.'
+        )
       }
       return record
     }

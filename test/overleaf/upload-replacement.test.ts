@@ -77,7 +77,9 @@ describe('upload_file onto an existing binary', () => {
       details: { missing: 'overwrite' },
     })
     expect(http.postForm).not.toHaveBeenCalled()
-    await expect(api.uploadFile('p', png, '', undefined, { expectedHash: OLD_HASH })).resolves.toMatchObject({ replaced: true })
+    await expect(api.uploadFile('p', png, '', undefined, { expectedHash: OLD_HASH })).resolves.toMatchObject({
+      replaced: true,
+    })
     await expect(api.uploadFile('p', png, '', undefined, { overwrite: true })).resolves.toMatchObject({
       replaced: true,
       writeMode: 'untracked',
@@ -145,7 +147,9 @@ describe('upload_file writeMode', () => {
     const png = await localFile('plot.png', new Uint8Array([2]))
 
     const tracking = harness({ trackChangesActive: true }).api
-    await expect(tracking.uploadFile('p', tex, '', undefined, { uncheckedDocumentReplace: true })).resolves.toMatchObject({
+    await expect(
+      tracking.uploadFile('p', tex, '', undefined, { uncheckedDocumentReplace: true })
+    ).resolves.toMatchObject({
       writeMode: 'tracked',
       trackChangesActive: true,
     })

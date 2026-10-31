@@ -223,7 +223,11 @@ async function sdkCall(runtime: FakeRuntime, name: OperationName, input: Record<
 }
 
 /** The service path the client takes: strict parsing, then the operation. */
-async function serviceCall(runtime: FakeRuntime, name: OperationName, input: Record<string, unknown>): Promise<unknown> {
+async function serviceCall(
+  runtime: FakeRuntime,
+  name: OperationName,
+  input: Record<string, unknown>
+): Promise<unknown> {
   const service = createOverleafService(runtime) as unknown as Record<OperationName, Call>
   return await service[name](parseOperationInput(name, input))
 }
@@ -459,7 +463,10 @@ async function realInterfaces(policy: Record<string, string>) {
   const mcp = await connectMcp(mcpRuntime)
   await mcp.client.listTools()
   const cliEnv = await realEnv(policy)
-  const sdk = await createOverleafClient({ config: readConfig(await realEnv(policy)), dependencies: sdkSide.dependencies })
+  const sdk = await createOverleafClient({
+    config: readConfig(await realEnv(policy)),
+    dependencies: sdkSide.dependencies,
+  })
   const sides = { mcp: mcpSide, cli: cliSide, sdk: sdkSide }
   return {
     sides,
@@ -533,7 +540,8 @@ describe('real refusals, identical everywhere, with nothing sent', () => {
       let checked = 0
       for (const name of OPERATION_NAMES) {
         const input = { ...INPUTS[name] }
-        const parameter = 'sourceProjectId' in input ? 'sourceProjectId' : 'projectId' in input ? 'projectId' : undefined
+        const parameter =
+          'sourceProjectId' in input ? 'sourceProjectId' : 'projectId' in input ? 'projectId' : undefined
         if (parameter === undefined) continue
         input[parameter] = 'b'
         const seen = await interfaces.call(name, input)
@@ -564,12 +572,18 @@ describe('one schema, as tools/list advertises it and as `schema` prints it', ()
         expect(tool.inputSchema, name).toEqual(operationJsonSchema(name, 'input'))
         expect(tool.outputSchema, name).toEqual(operationJsonSchema(name, 'output'))
         for (const io of ['input', 'output'] as const) {
-          const printed = await runCli({ kind: 'schema', tool: name, io }, async () => {
-            throw new Error('schema opens no session')
-          }, FAKE_ENV)
+          const printed = await runCli(
+            { kind: 'schema', tool: name, io },
+            async () => {
+              throw new Error('schema opens no session')
+            },
+            FAKE_ENV
+          )
           expect(printed.exitCode, `${name} ${io}`).toBe(0)
           expect(printed.stderr).toBe('')
-          expect(JSON.parse(printed.stdout), `${name} ${io}`).toEqual(io === 'input' ? tool.inputSchema : tool.outputSchema)
+          expect(JSON.parse(printed.stdout), `${name} ${io}`).toEqual(
+            io === 'input' ? tool.inputSchema : tool.outputSchema
+          )
         }
       }
     } finally {
@@ -578,7 +592,7 @@ describe('one schema, as tools/list advertises it and as `schema` prints it', ()
   })
 
   test.each(['legacy', 'modern'] as const)(
-    'the client accepts every tool\'s structuredContent on the %s protocol era',
+    "the client accepts every tool's structuredContent on the %s protocol era",
     async era => {
       const runtime = fakeServiceRuntime()
       const mcp = await connectMcp(runtime, era)

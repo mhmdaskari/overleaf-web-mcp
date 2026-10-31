@@ -17,9 +17,7 @@ const rootDoc: ProjectEntity = {
   parentFolderId: 'root',
 }
 
-function harness(
-  overrides: { name?: string; trashed?: boolean; archived?: boolean; policy?: AccessPolicy } = {}
-) {
+function harness(overrides: { name?: string; trashed?: boolean; archived?: boolean; policy?: AccessPolicy } = {}) {
   const calls: string[] = []
   const http = {
     postJson: vi.fn(async () => ({ project_id: 'new' })),
@@ -272,15 +270,17 @@ describe('projects API', () => {
 
     test('permanently deletes only a project that is already trashed', async () => {
       const live = harness({ trashed: false })
-      await expect(
-        live.api.manageProject('p', { action: 'delete', confirmName: 'Paper' })
-      ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+      await expect(live.api.manageProject('p', { action: 'delete', confirmName: 'Paper' })).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
       expect(live.http.deleteJson).not.toHaveBeenCalled()
 
       const trashed = harness({ trashed: true })
-      await expect(
-        trashed.api.manageProject('p', { action: 'delete', confirmName: 'Paper' })
-      ).resolves.toEqual({ action: 'delete', projectId: 'p', name: 'Paper' })
+      await expect(trashed.api.manageProject('p', { action: 'delete', confirmName: 'Paper' })).resolves.toEqual({
+        action: 'delete',
+        projectId: 'p',
+        name: 'Paper',
+      })
       expect(trashed.http.deleteJson).toHaveBeenCalledWith('/Project/p')
     })
 
@@ -304,9 +304,7 @@ describe('projects API', () => {
     test('resolves rootFilePath to a document id, posts each given key on its own, and re-reads the project', async () => {
       const { api, http, options, calls } = harness()
 
-      await expect(
-        api.updateProjectSettings('p', { rootFilePath: 'main.tex', compiler: 'xelatex' })
-      ).resolves.toEqual({
+      await expect(api.updateProjectSettings('p', { rootFilePath: 'main.tex', compiler: 'xelatex' })).resolves.toEqual({
         projectId: 'p',
         rootDocPath: 'main.tex',
         compiler: 'pdflatex',
@@ -426,7 +424,10 @@ describe('download_project_zip', () => {
   test('streams the archive into a new local file and leaves no temporary file behind', async () => {
     const { api, http } = harness()
     // Split inside the signature, so the check must join chunks before deciding.
-    http.getStream.mockResolvedValueOnce({ body: streamOf([zip.slice(0, 2), zip.slice(2)]), contentType: 'application/zip' })
+    http.getStream.mockResolvedValueOnce({
+      body: streamOf([zip.slice(0, 2), zip.slice(2)]),
+      contentType: 'application/zip',
+    })
     const dir = await folder()
 
     // An id that could step into another route is refused before anything is sent.
@@ -522,7 +523,10 @@ describe('download_project_zip', () => {
     expect(await readFile(path, 'utf8')).toBe('previous')
     expect(await readdir(dir)).toEqual(['backup.zip'])
 
-    http.getStream.mockResolvedValueOnce({ body: streamOf([new Uint8Array([0x7b])]), contentType: 'SENTINEL free text' })
+    http.getStream.mockResolvedValueOnce({
+      body: streamOf([new Uint8Array([0x7b])]),
+      contentType: 'SENTINEL free text',
+    })
     const other = await api.downloadProjectZip('p', join(dir, 'other.zip')).catch((caught: unknown) => caught)
     expect(other).toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
     expect((other as McpError).details).toBeUndefined()

@@ -1,18 +1,26 @@
 import { readConfig, type AppConfig } from './config.js'
 import type { OperationContext } from './contracts/context.js'
-import { OPERATION_NAMES, type OperationInput, type OperationName, type OperationOutput } from './contracts/operations.js'
+import {
+  OPERATION_NAMES,
+  type OperationInput,
+  type OperationName,
+  type OperationOutput,
+} from './contracts/operations.js'
 import { parseOperationInput } from './contracts/parse.js'
 import { asMcpError, McpError } from './core/errors.js'
 import { OverleafRuntime, type RuntimeDependencies } from './runtime.js'
 import { createOverleafService } from './service/operations.js'
 
 /** `read_file` → `readFile`. */
-export type CamelCase<S extends string> = S extends `${infer Head}_${infer Tail}` ? `${Head}${Capitalize<CamelCase<Tail>>}` : S
+export type CamelCase<S extends string> = S extends `${infer Head}_${infer Tail}`
+  ? `${Head}${Capitalize<CamelCase<Tail>>}`
+  : S
 
 /** One operation as a client method: one whose parameters are all optional may be called with none. */
-export type OperationMethod<N extends OperationName> = Record<string, never> extends OperationInput<N>
-  ? (input?: OperationInput<N>, context?: OperationContext) => Promise<OperationOutput<N>>
-  : (input: OperationInput<N>, context?: OperationContext) => Promise<OperationOutput<N>>
+export type OperationMethod<N extends OperationName> =
+  Record<string, never> extends OperationInput<N>
+    ? (input?: OperationInput<N>, context?: OperationContext) => Promise<OperationOutput<N>>
+    : (input: OperationInput<N>, context?: OperationContext) => Promise<OperationOutput<N>>
 
 /**
  * Every operation as a camelCase method (`readFile`, `syncDirectory`), plus `close()`. A method

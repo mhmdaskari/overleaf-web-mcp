@@ -63,9 +63,7 @@ export async function createTestRuntime(options: TestRuntimeOptions = {}) {
       },
       call: async (name: string) => {
         socketCalls.push(name)
-        return name === 'joinDoc'
-          ? [null, options.documentLines ?? ['hello'], 3, null, {}, 'sharejs-text-ot']
-          : [null]
+        return name === 'joinDoc' ? [null, options.documentLines ?? ['hello'], 3, null, {}, 'sharejs-text-ot'] : [null]
       },
       close() {},
     }

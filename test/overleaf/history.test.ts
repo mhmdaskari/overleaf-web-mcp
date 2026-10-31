@@ -161,12 +161,8 @@ describe('project history API', () => {
       }))
     }
 
-    await expect(atVersions(141)).resolves.toEqual([
-      { fromVersion: 138, toVersion: 142, atVersions: [141] },
-    ])
-    await expect(atVersions(139)).resolves.toEqual([
-      { fromVersion: 138, toVersion: 142, atVersions: [141, 140, 139] },
-    ])
+    await expect(atVersions(141)).resolves.toEqual([{ fromVersion: 138, toVersion: 142, atVersions: [141] }])
+    await expect(atVersions(139)).resolves.toEqual([{ fromVersion: 138, toVersion: 142, atVersions: [141, 140, 139] }])
     await expect(atVersions()).resolves.toEqual([
       { fromVersion: 138, toVersion: 142, atVersions: [141, 140, 139, 138] },
       { fromVersion: 137, toVersion: 138, atVersions: [6, 7, 8] },

@@ -29,7 +29,9 @@ function section(markdown: string, heading: string): string {
 }
 
 function tableRows(markdown: string): string[] {
-  return markdown.split('\n').filter(line => line.startsWith('| ') && !line.startsWith('| ---') && !line.startsWith('| :'))
+  return markdown
+    .split('\n')
+    .filter(line => line.startsWith('| ') && !line.startsWith('| ---') && !line.startsWith('| :'))
 }
 
 function codeSpans(markdown: string): string[] {
@@ -81,7 +83,9 @@ describe('docs/cli.md', () => {
   test('has one exit-code row per code 0 to 7, naming the error codes src/cli/exit-codes.ts maps to it', async () => {
     const rows = tableRows(section(await text('docs/cli.md'), 'Exit codes'))
     expect(EXIT_CODES.map(entry => entry.exitCode)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
-    expect(rows.slice(1).map(row => /^\| (\d+) \|/u.exec(row)?.[1])).toEqual(EXIT_CODES.map(entry => String(entry.exitCode)))
+    expect(rows.slice(1).map(row => /^\| (\d+) \|/u.exec(row)?.[1])).toEqual(
+      EXIT_CODES.map(entry => String(entry.exitCode))
+    )
     for (const entry of EXIT_CODES) {
       const row = rows.find(line => line.startsWith(`| ${entry.exitCode} |`))
       for (const code of entry.errorCodes) expect(codeSpans(row!), `exit ${entry.exitCode}`).toContain(code)

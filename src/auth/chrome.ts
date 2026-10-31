@@ -18,14 +18,7 @@ function chromeCandidates(options: ChromeDiscoveryOptions): string[] {
   const names =
     platform === 'win32'
       ? ['chrome.exe', 'msedge.exe', 'brave.exe', 'chromium.exe']
-      : [
-          'google-chrome',
-          'google-chrome-stable',
-          'chromium',
-          'chromium-browser',
-          'brave-browser',
-          'microsoft-edge',
-        ]
+      : ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'brave-browser', 'microsoft-edge']
   const fromPath = (env.PATH ?? '')
     .split(delimiter)
     .filter(Boolean)
@@ -43,9 +36,7 @@ function chromeCandidates(options: ChromeDiscoveryOptions): string[] {
   }
   if (platform === 'win32') {
     return [
-      ...(env.PROGRAMFILES
-        ? [join(env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe')]
-        : []),
+      ...(env.PROGRAMFILES ? [join(env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe')] : []),
       ...(env['PROGRAMFILES(X86)']
         ? [join(env['PROGRAMFILES(X86)'], 'Google', 'Chrome', 'Application', 'chrome.exe')]
         : []),
@@ -114,8 +105,7 @@ export function chromeLaunchArguments(profileDir: string): string[] {
 export async function readDevToolsEndpoint(
   profileDir: string,
   timeoutMs = 10_000,
-  sleep: (ms: number) => Promise<void> = async ms =>
-    await new Promise(resolve => setTimeout(resolve, ms))
+  sleep: (ms: number) => Promise<void> = async ms => await new Promise(resolve => setTimeout(resolve, ms))
 ): Promise<string> {
   const deadline = Date.now() + timeoutMs
   const endpointFile = join(profileDir, 'DevToolsActivePort')

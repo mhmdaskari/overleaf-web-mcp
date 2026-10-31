@@ -41,8 +41,8 @@ describe.skipIf(!enabled)('disposable Overleaf live project', () => {
   test.skipIf(process.env.RUN_OVERLEAF_LIVE_REVIEW_TESTS !== '1')(
     'reads review threads without mutating them when the deployment supports comments',
     async () => {
-    const result = await runtime.comments.listComments(projectId, { status: 'all' })
-    expect(Array.isArray(result.threads)).toBe(true)
+      const result = await runtime.comments.listComments(projectId, { status: 'all' })
+      expect(Array.isArray(result.threads)).toBe(true)
     }
   )
 
@@ -63,24 +63,25 @@ describe.skipIf(!enabled)('disposable Overleaf live project', () => {
         })
         const trackingObserved = await runtime.connections.withConnection(
           projectId,
-          async connection => await connection.queue.run(async () => {
-            const entity = resolveProjectPath(connection.getTree(), filePath, 'doc')
-            const document = await connection.joinDocument(entity.id)
-            try {
-              if (document.protocol === 'history-ot') {
-                const snapshot = document.rawSnapshot as HistorySnapshot
-                return snapshot.trackedChanges?.some(
-                  change =>
-                    change.tracking.type === 'insert' &&
-                    change.tracking.userId === runtime.userId
-                ) ?? false
+          async connection =>
+            await connection.queue.run(async () => {
+              const entity = resolveProjectPath(connection.getTree(), filePath, 'doc')
+              const document = await connection.joinDocument(entity.id)
+              try {
+                if (document.protocol === 'history-ot') {
+                  const snapshot = document.rawSnapshot as HistorySnapshot
+                  return (
+                    snapshot.trackedChanges?.some(
+                      change => change.tracking.type === 'insert' && change.tracking.userId === runtime.userId
+                    ) ?? false
+                  )
+                }
+                const changes = (document.ranges as { changes?: unknown[] } | undefined)?.changes ?? []
+                return changes.length > 0 && JSON.stringify(changes).includes(runtime.userId ?? '')
+              } finally {
+                await connection.leaveDocument(entity.id)
               }
-              const changes = (document.ranges as { changes?: unknown[] } | undefined)?.changes ?? []
-              return changes.length > 0 && JSON.stringify(changes).includes(runtime.userId ?? '')
-            } finally {
-              await connection.leaveDocument(entity.id)
-            }
-          })
+            })
         )
         expect(trackingObserved).toBe(true)
       } finally {
@@ -105,12 +106,8 @@ describe.skipIf(!enabled)('disposable Overleaf live project', () => {
       if (result.updates[0]) {
         expect(Number.isInteger(result.updates[0].fromVersion)).toBe(true)
         expect(Number.isInteger(result.updates[0].toVersion)).toBe(true)
-        expect(new Date(result.updates[0].startedAt).toISOString()).toBe(
-          result.updates[0].startedAt
-        )
-        expect(new Date(result.updates[0].endedAt).toISOString()).toBe(
-          result.updates[0].endedAt
-        )
+        expect(new Date(result.updates[0].startedAt).toISOString()).toBe(result.updates[0].startedAt)
+        expect(new Date(result.updates[0].endedAt).toISOString()).toBe(result.updates[0].endedAt)
         expect(JSON.stringify(result.updates[0])).not.toContain('"email"')
       }
     }
@@ -189,94 +186,91 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS !== '1
   }
 )
 
-describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_SYNC_TESTS !== '1')(
-  'disposable Overleaf folder sync',
-  () => {
-    let runtime: OverleafRuntime
+describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_SYNC_TESTS !== '1')('disposable Overleaf folder sync', () => {
+  let runtime: OverleafRuntime
 
-    beforeAll(async () => {
-      runtime = await OverleafRuntime.create(readConfig())
-    })
+  beforeAll(async () => {
+    runtime = await OverleafRuntime.create(readConfig())
+  })
 
-    afterAll(async () => {
-      await runtime?.close()
-    })
+  afterAll(async () => {
+    await runtime?.close()
+  })
 
-    test('plans, mirrors, and re-plans a local folder into a throwaway project', async () => {
-      const folder = await mkdtemp(join(tmpdir(), 'overleaf-live-sync-'))
-      await mkdir(join(folder, 'sections'))
-      await writeFile(
-        join(folder, 'main.tex'),
-        '\\documentclass{article}\n\\begin{document}\n\\input{sections/intro}\n\\end{document}\n'
-      )
-      await writeFile(join(folder, 'sections', 'intro.tex'), 'Disposable sync test.\n')
-      await writeFile(join(folder, 'main.aux'), 'ignored build output\n')
+  test('plans, mirrors, and re-plans a local folder into a throwaway project', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'overleaf-live-sync-'))
+    await mkdir(join(folder, 'sections'))
+    await writeFile(
+      join(folder, 'main.tex'),
+      '\\documentclass{article}\n\\begin{document}\n\\input{sections/intro}\n\\end{document}\n'
+    )
+    await writeFile(join(folder, 'sections', 'intro.tex'), 'Disposable sync test.\n')
+    await writeFile(join(folder, 'main.aux'), 'ignored build output\n')
 
-      const name = `mcp-sync-${Date.now()}`
-      const created = await runtime.projects.createProject(name, 'blank')
-      try {
-        const plan = await runtime.sync.planSync(created.projectId, folder)
-        expect(plan.ignored.entries.map(entry => entry.localPath)).toContain('main.aux')
-        expect(plan.toUpload.map(entry => entry.destinationPath)).toEqual(['main.tex', 'sections/intro.tex'])
+    const name = `mcp-sync-${Date.now()}`
+    const created = await runtime.projects.createProject(name, 'blank')
+    try {
+      const plan = await runtime.sync.planSync(created.projectId, folder)
+      expect(plan.ignored.entries.map(entry => entry.localPath)).toContain('main.aux')
+      expect(plan.toUpload.map(entry => entry.destinationPath)).toEqual(['main.tex', 'sections/intro.tex'])
 
-        const result = await runtime.sync.syncDirectory(created.projectId, folder, {
-          mode: 'mirror',
-          planToken: plan.planToken,
-          confirmDeleteCount: plan.remoteOnly.length,
-        })
-        expect(result.status).toBe('complete')
+      const result = await runtime.sync.syncDirectory(created.projectId, folder, {
+        mode: 'mirror',
+        planToken: plan.planToken,
+        confirmDeleteCount: plan.remoteOnly.length,
+      })
+      expect(result.status).toBe('complete')
 
-        const again = await runtime.sync.planSync(created.projectId, folder)
-        expect(again.toUpload).toEqual([])
-        expect(again.remoteOnly).toEqual([])
-        expect(again.identical.count).toBe(2)
-      } finally {
-        await runtime.projects.manageProject(created.projectId, { action: 'trash', confirmName: name })
-        await rm(folder, { recursive: true })
-      }
-    }, 120_000)
+      const again = await runtime.sync.planSync(created.projectId, folder)
+      expect(again.toUpload).toEqual([])
+      expect(again.remoteOnly).toEqual([])
+      expect(again.identical.count).toBe(2)
+    } finally {
+      await runtime.projects.manageProject(created.projectId, { action: 'trash', confirmName: name })
+      await rm(folder, { recursive: true })
+    }
+  }, 120_000)
 
-    test('batch-uploads into new folders, skips on request, and downloads the project as a zip', async () => {
-      const folder = await mkdtemp(join(tmpdir(), 'overleaf-live-batch-'))
-      const figure = join(folder, 'figure.png')
-      await writeFile(figure, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]))
-      await writeFile(join(folder, 'notes.tex'), 'Disposable batch upload test.\n')
+  test('batch-uploads into new folders, skips on request, and downloads the project as a zip', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'overleaf-live-batch-'))
+    const figure = join(folder, 'figure.png')
+    await writeFile(figure, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]))
+    await writeFile(join(folder, 'notes.tex'), 'Disposable batch upload test.\n')
 
-      const name = `mcp-batch-${Date.now()}`
-      const created = await runtime.projects.createProject(name, 'blank')
-      try {
-        const files = [
-          { localPath: figure, destinationPath: 'figures/new/figure.png' },
-          { localPath: join(folder, 'notes.tex'), destinationPath: 'notes.tex' },
-        ]
-        const uploaded = await runtime.sync.batchUpload(created.projectId, files)
-        expect(uploaded).toMatchObject({ status: 'complete', verified: true, failed: [] })
-        // A second batch onto the same paths is refused unless onConflict says what to do.
-        await expect(runtime.sync.batchUpload(created.projectId, files)).rejects.toMatchObject({
-          code: 'CONFIRMATION_MISMATCH',
-        })
-        expect(uploaded.completed.map(entry => entry.destinationPath)).toEqual([
-          'figures',
-          'figures/new',
-          'figures/new/figure.png',
-          'notes.tex',
-        ])
+    const name = `mcp-batch-${Date.now()}`
+    const created = await runtime.projects.createProject(name, 'blank')
+    try {
+      const files = [
+        { localPath: figure, destinationPath: 'figures/new/figure.png' },
+        { localPath: join(folder, 'notes.tex'), destinationPath: 'notes.tex' },
+      ]
+      const uploaded = await runtime.sync.batchUpload(created.projectId, files)
+      expect(uploaded).toMatchObject({ status: 'complete', verified: true, failed: [] })
+      // A second batch onto the same paths is refused unless onConflict says what to do.
+      await expect(runtime.sync.batchUpload(created.projectId, files)).rejects.toMatchObject({
+        code: 'CONFIRMATION_MISMATCH',
+      })
+      expect(uploaded.completed.map(entry => entry.destinationPath)).toEqual([
+        'figures',
+        'figures/new',
+        'figures/new/figure.png',
+        'notes.tex',
+      ])
 
-        const skipped = await runtime.sync.batchUpload(created.projectId, files, { onConflict: 'skip' })
-        expect(skipped.skipped.map(entry => entry.destinationPath)).toEqual(['figures/new/figure.png', 'notes.tex'])
-        expect(skipped.completed).toEqual([])
+      const skipped = await runtime.sync.batchUpload(created.projectId, files, { onConflict: 'skip' })
+      expect(skipped.skipped.map(entry => entry.destinationPath)).toEqual(['figures/new/figure.png', 'notes.tex'])
+      expect(skipped.completed).toEqual([])
 
-        const zipPath = join(folder, 'backup.zip')
-        const downloaded = await runtime.projects.downloadProjectZip(created.projectId, zipPath)
-        expect(downloaded.bytes).toBeGreaterThan(0)
-        expect((await readFile(zipPath)).subarray(0, 2).toString('latin1')).toBe('PK')
-        await expect(runtime.projects.downloadProjectZip(created.projectId, zipPath)).rejects.toMatchObject({
-          code: 'CONFIRMATION_MISMATCH',
-        })
-      } finally {
-        await runtime.projects.manageProject(created.projectId, { action: 'trash', confirmName: name })
-        await rm(folder, { recursive: true })
-      }
-    }, 120_000)
-  }
-)
+      const zipPath = join(folder, 'backup.zip')
+      const downloaded = await runtime.projects.downloadProjectZip(created.projectId, zipPath)
+      expect(downloaded.bytes).toBeGreaterThan(0)
+      expect((await readFile(zipPath)).subarray(0, 2).toString('latin1')).toBe('PK')
+      await expect(runtime.projects.downloadProjectZip(created.projectId, zipPath)).rejects.toMatchObject({
+        code: 'CONFIRMATION_MISMATCH',
+      })
+    } finally {
+      await runtime.projects.manageProject(created.projectId, { action: 'trash', confirmName: name })
+      await rm(folder, { recursive: true })
+    }
+  }, 120_000)
+})

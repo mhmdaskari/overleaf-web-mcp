@@ -148,7 +148,9 @@ export function buildStatusOperation(
  * six-character counter to the seed to make comment and tracked-change ids.
  */
 export function generateIdSeed(): string {
-  const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0')
+  const timestamp = Math.floor(Date.now() / 1000)
+    .toString(16)
+    .padStart(8, '0')
   return `${timestamp}${randomBytes(5).toString('hex')}`.slice(0, 18)
 }
 

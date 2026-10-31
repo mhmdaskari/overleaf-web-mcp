@@ -16,23 +16,19 @@ async function scratchFile(name: string, bytes: Uint8Array | string): Promise<st
 describe('local write sources', () => {
   test('requires exactly one of content and localPath', async () => {
     await expect(resolveTextContent({})).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
-    await expect(
-      resolveTextContent({ content: 'text', localPath: '/tmp/whatever.tex' })
-    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(resolveTextContent({ content: 'text', localPath: '/tmp/whatever.tex' })).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+    })
   })
 
   test('passes inline content through untouched, including empty content', async () => {
     await expect(resolveTextContent({ content: '' })).resolves.toBe('')
-    await expect(resolveTextContent({ content: '\\section{One}' })).resolves.toBe(
-      '\\section{One}'
-    )
+    await expect(resolveTextContent({ content: '\\section{One}' })).resolves.toBe('\\section{One}')
   })
 
   test('reads UTF-8 files and strips a byte order mark', async () => {
     const path = await scratchFile('main.tex', '\uFEFF\\section{Ünïcode}\n')
-    await expect(resolveTextContent({ localPath: path })).resolves.toBe(
-      '\\section{Ünïcode}\n'
-    )
+    await expect(resolveTextContent({ localPath: path })).resolves.toBe('\\section{Ünïcode}\n')
   })
 
   test('strips exactly one byte order mark, keeping a zero-width no-break space after it', async () => {
@@ -51,8 +47,8 @@ describe('local write sources', () => {
   })
 
   test('reports a missing file as NOT_FOUND', async () => {
-    await expect(
-      resolveTextContent({ localPath: '/nonexistent/overleaf-web-mcp/main.tex' })
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(resolveTextContent({ localPath: '/nonexistent/overleaf-web-mcp/main.tex' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
   })
 })

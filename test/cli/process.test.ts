@@ -82,7 +82,11 @@ function errorLine(exit: Exit): { code: string; message: string; retryable: bool
   expect(lines, exit.stderr).toHaveLength(2)
   expect(lines[1]).toBe('')
   const error = JSON.parse(lines[0]!) as { code: string; message: string; retryable: boolean }
-  expect(Object.keys(error).filter(key => key !== 'details').sort()).toEqual(['code', 'message', 'retryable'])
+  expect(
+    Object.keys(error)
+      .filter(key => key !== 'details')
+      .sort()
+  ).toEqual(['code', 'message', 'retryable'])
   return error
 }
 

@@ -40,21 +40,17 @@ describe('proxy selection', () => {
   })
 
   test('prefers the lowercase variable and skips an empty one', () => {
-    expect(
-      resolveProxyUrl(HTTPS_TARGET, { https_proxy: 'http://lower:1', HTTPS_PROXY: 'http://upper:2' })
-    ).toBe('http://lower:1/')
-    expect(
-      resolveProxyUrl(HTTPS_TARGET, { https_proxy: '', HTTPS_PROXY: 'http://upper:2' })
-    ).toBe('http://upper:2/')
+    expect(resolveProxyUrl(HTTPS_TARGET, { https_proxy: 'http://lower:1', HTTPS_PROXY: 'http://upper:2' })).toBe(
+      'http://lower:1/'
+    )
+    expect(resolveProxyUrl(HTTPS_TARGET, { https_proxy: '', HTTPS_PROXY: 'http://upper:2' })).toBe('http://upper:2/')
   })
 
   test('treats a bare host:port as an HTTP proxy and keeps credentials', () => {
-    expect(resolveProxyUrl(HTTPS_TARGET, { HTTPS_PROXY: 'proxy.corp:3128' })).toBe(
-      'http://proxy.corp:3128/'
+    expect(resolveProxyUrl(HTTPS_TARGET, { HTTPS_PROXY: 'proxy.corp:3128' })).toBe('http://proxy.corp:3128/')
+    expect(resolveProxyUrl(HTTPS_TARGET, { HTTPS_PROXY: 'https://user:p%40ss@proxy.corp:443' })).toBe(
+      'https://user:p%40ss@proxy.corp/'
     )
-    expect(
-      resolveProxyUrl(HTTPS_TARGET, { HTTPS_PROXY: 'https://user:p%40ss@proxy.corp:443' })
-    ).toBe('https://user:p%40ss@proxy.corp/')
   })
 
   test('rejects unusable values by variable name without echoing them', () => {
@@ -66,18 +62,14 @@ describe('proxy selection', () => {
     expect(socks.message).toContain('SOCKS')
     expect(socks.message).not.toContain('secret')
 
-    const malformed = rejection(() =>
-      resolveProxyUrl(HTTPS_TARGET, { https_proxy: 'not a url with secret' })
-    )
+    const malformed = rejection(() => resolveProxyUrl(HTTPS_TARGET, { https_proxy: 'not a url with secret' }))
     expect(malformed.code).toBe('INVALID_ARGUMENT')
     expect(malformed.message).toBe('https_proxy is not a valid proxy URL.')
     expect(malformed.cause).toBeUndefined()
   })
 
   test('readConfig resolves the proxy against OVERLEAF_BASE_URL and fails at startup', () => {
-    expect(readConfig({ HTTPS_PROXY: 'http://proxy.corp:3128' }).proxyUrl).toBe(
-      'http://proxy.corp:3128/'
-    )
+    expect(readConfig({ HTTPS_PROXY: 'http://proxy.corp:3128' }).proxyUrl).toBe('http://proxy.corp:3128/')
     expect(readConfig({}).proxyUrl).toBeUndefined()
     expect(
       readConfig({
@@ -86,9 +78,7 @@ describe('proxy selection', () => {
         NO_PROXY: '.internal',
       }).proxyUrl
     ).toBeUndefined()
-    expect(rejection(() => readConfig({ HTTPS_PROXY: 'socks5://proxy.corp:1080' })).code).toBe(
-      'INVALID_ARGUMENT'
-    )
+    expect(rejection(() => readConfig({ HTTPS_PROXY: 'socks5://proxy.corp:1080' })).code).toBe('INVALID_ARGUMENT')
   })
 })
 
@@ -213,10 +203,7 @@ describe('proxied runtime', () => {
       })
     )
     try {
-      const publicId = await runtime.connections.withConnection(
-        'project',
-        async connection => connection.publicId
-      )
+      const publicId = await runtime.connections.withConnection('project', async connection => connection.publicId)
       expect(publicId).toBe('P.client')
     } finally {
       await runtime.close()

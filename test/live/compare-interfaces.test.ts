@@ -28,8 +28,7 @@ import type { RuntimeDependencies } from '../../src/runtime.js'
  * The report holds tool names, codes, counts, sizes, and durations, never document text, comment
  * bodies, file names, or project ids.
  */
-const enabled =
-  process.env.RUN_OVERLEAF_LIVE_TESTS === '1' && process.env.RUN_OVERLEAF_LIVE_COMPARE_TESTS === '1'
+const enabled = process.env.RUN_OVERLEAF_LIVE_TESTS === '1' && process.env.RUN_OVERLEAF_LIVE_COMPARE_TESTS === '1'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const CLI = join(ROOT, 'dist', 'cli.js')
@@ -262,7 +261,9 @@ async function runCli(args: string[], env: Record<string, string>, stdin?: strin
         } else if (typeof error.code === 'number') {
           resolve({ exitCode: error.code, stdout, stderr, ms })
         } else {
-          reject(new Error(`${args.slice(0, 2).join(' ')} did not exit normally (${String(error.signal ?? error.code)}).`))
+          reject(
+            new Error(`${args.slice(0, 2).join(' ')} did not exit normally (${String(error.signal ?? error.code)}).`)
+          )
         }
       }
     )
@@ -286,7 +287,13 @@ function cliCommand(tool: OperationName, input: Record<string, unknown>): { args
     case 'plan_sync':
       if (only('projectId', 'localFolderPath', 'destinationFolderPath')) {
         return {
-          args: ['sync', 'plan', value('projectId'), value('localFolderPath'), ...option('--destination', 'destinationFolderPath')],
+          args: [
+            'sync',
+            'plan',
+            value('projectId'),
+            value('localFolderPath'),
+            ...option('--destination', 'destinationFolderPath'),
+          ],
         }
       }
       break
@@ -318,7 +325,13 @@ function cliCommand(tool: OperationName, input: Record<string, unknown>): { args
     case 'list_comments':
       if (only('projectId', 'filePath', 'status')) {
         return {
-          args: ['comments', 'list', value('projectId'), ...option('--file', 'filePath'), ...option('--status', 'status')],
+          args: [
+            'comments',
+            'list',
+            value('projectId'),
+            ...option('--file', 'filePath'),
+            ...option('--status', 'status'),
+          ],
         }
       }
       break
@@ -382,7 +395,11 @@ class McpDriver implements Driver {
     // What a client reads before its first call; it also lets callTool check structuredContent.
     const listed = performance.now()
     const tools = await client.listTools()
-    const discovery = { request: 'tools/list', bytes: utf8Length(JSON.stringify(tools)), ms: performance.now() - listed }
+    const discovery = {
+      request: 'tools/list',
+      bytes: utf8Length(JSON.stringify(tools)),
+      ms: performance.now() - listed,
+    }
     return { ms, upstream: null, discovery }
   }
 
@@ -392,10 +409,7 @@ class McpDriver implements Driver {
     const started = performance.now()
     let result: Awaited<ReturnType<Client['callTool']>>
     try {
-      result = await client.callTool(
-        { name: tool, arguments: input },
-        { timeout: CALL_TIMEOUT_MS }
-      )
+      result = await client.callTool({ name: tool, arguments: input }, { timeout: CALL_TIMEOUT_MS })
     } catch (error) {
       const raw = (error as { code?: unknown }).code
       const code = `MCP_CLIENT_${typeof raw === 'string' || typeof raw === 'number' ? String(raw) : 'ERROR'}`
@@ -449,7 +463,12 @@ class CliDriver implements Driver {
         const value: unknown = JSON.parse(run.stdout)
         return { ok: true, value, code: null, record: { ...base, ok: true, code: null } }
       } catch {
-        return { ok: false, value: undefined, code: 'UNPARSEABLE_STDOUT', record: { ...base, ok: false, code: 'UNPARSEABLE_STDOUT' } }
+        return {
+          ok: false,
+          value: undefined,
+          code: 'UNPARSEABLE_STDOUT',
+          record: { ...base, ok: false, code: 'UNPARSEABLE_STDOUT' },
+        }
       }
     }
     const code = errorCodeOf(run.stderr.trim()) ?? `EXIT_${run.exitCode}`
@@ -473,7 +492,10 @@ class SdkDriver implements Driver {
     const before = await this.counter.snapshot()
     const started = performance.now()
     try {
-      this.#client = await createOverleafClient({ config: this.config, dependencies: { fetcher: this.counter.fetcher } })
+      this.#client = await createOverleafClient({
+        config: this.config,
+        dependencies: { fetcher: this.counter.fetcher },
+      })
     } catch (error) {
       this.#startupFailure = asMcpError(error).code
       throw new TaskFailure('startup', this.#startupFailure)
@@ -485,7 +507,9 @@ class SdkDriver implements Driver {
   async call(tool: OperationName, input: Record<string, unknown>): Promise<CallResult> {
     const client = this.#client
     if (client === undefined) return notStarted(tool, this.#startupFailure ?? 'NOT_STARTED')
-    const method = (client as unknown as Record<string, ((input: object) => Promise<unknown>) | undefined>)[camelCase(tool)]
+    const method = (client as unknown as Record<string, ((input: object) => Promise<unknown>) | undefined>)[
+      camelCase(tool)
+    ]
     if (method === undefined) return notStarted(tool, 'NO_SUCH_METHOD')
     const before = await this.counter.snapshot()
     const started = performance.now()
@@ -601,7 +625,10 @@ const TASKS: readonly TaskDefinition[] = [
       const { projectId } = run
       const filePath = `revise-${run.label}.tex`
       const outline = await run.ok('get_sections', 'get_sections', { projectId, filePath })
-      const methods = run.need('methods_section_found', outline.sections.find(section => section.title === 'Methods'))
+      const methods = run.need(
+        'methods_section_found',
+        outline.sections.find(section => section.title === 'Methods')
+      )
       const section = await run.ok('get_section_content', 'get_section_content', {
         projectId,
         filePath,

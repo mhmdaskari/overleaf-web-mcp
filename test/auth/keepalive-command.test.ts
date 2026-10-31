@@ -8,17 +8,13 @@ import { runKeepaliveCommand } from '../../src/auth/keepalive-command.js'
 import { readConfig, type AppConfig } from '../../src/config.js'
 import { OverleafRuntime } from '../../src/runtime.js'
 
-const AUTHENTICATED_PAGE =
-  '<meta name="ol-csrfToken" content="csrf"><meta name="ol-user_id" content="user">'
+const AUTHENTICATED_PAGE = '<meta name="ol-csrfToken" content="csrf"><meta name="ol-user_id" content="user">'
 const FIVE_DAYS_MS = 432_000_000
 
 async function jarWithSession() {
   const directory = await mkdtemp(join(tmpdir(), 'overleaf-keepalive-'))
   const cookiePath = join(directory, 'cookies.txt')
-  await writeFile(
-    cookiePath,
-    '# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t0\toverleaf.sid\tstale\n'
-  )
+  await writeFile(cookiePath, '# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t0\toverleaf.sid\tstale\n')
   if (process.platform !== 'win32') await chmod(cookiePath, 0o600)
   return {
     cookiePath,
@@ -51,8 +47,7 @@ describe('keepalive command', () => {
         return new Response(AUTHENTICATED_PAGE, {
           status: 200,
           headers: {
-            'set-cookie':
-              'overleaf.sid=rolled; Domain=.overleaf.test; Path=/; Secure; HttpOnly; Max-Age=432000',
+            'set-cookie': 'overleaf.sid=rolled; Domain=.overleaf.test; Path=/; Secure; HttpOnly; Max-Age=432000',
           },
         })
       }),

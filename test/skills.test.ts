@@ -230,14 +230,20 @@ function invocationsIn(item: CodeItem): Invocation[] {
       if (at > 0 || line.includes(PREFIX, at + PREFIX.length)) {
         throw new Error('a command line holds exactly one command, at its start')
       }
-      if (PATH_PLACEHOLDER.test(source)) throw new Error('a project or local path goes in a request file, not on a command line')
+      if (PATH_PLACEHOLDER.test(source))
+        throw new Error('a project or local path goes in a request file, not on a command line')
       const { words, rest } = shellWords(line.slice(at + PREFIX.length + 1))
-      if (rest !== '' && !REDIRECT_TO_FILE.test(rest)) throw new Error(`a command is followed by more than a redirection to a file: ${rest}`)
+      if (rest !== '' && !REDIRECT_TO_FILE.test(rest))
+        throw new Error(`a command is followed by more than a redirection to a file: ${rest}`)
       argv = words.map(fillPlaceholders)
       const login = argv.length === 1 && argv[0] === 'login'
       found.push({ source, argv, parsed: login ? { kind: 'login' } : parseCommandLine(argv) })
     } catch (error) {
-      found.push({ source, argv, parsed: { kind: 'error', message: error instanceof Error ? error.message : String(error) } })
+      found.push({
+        source,
+        argv,
+        parsed: { kind: 'error', message: error instanceof Error ? error.message : String(error) },
+      })
     }
   }
   return found
@@ -343,7 +349,10 @@ describe.each(folders)('skills/%s/SKILL.md', folder => {
       const words = COMMAND_WORDS.find(candidate => candidate.every((word, index) => argv[index] === word))
       expect(words, source).toBeDefined()
       // Text and requests travel in files, never in argv or on a terminal's stdin.
-      expect(argv.some(word => word === '--json' || word === '--stdin'), source).toBe(false)
+      expect(
+        argv.some(word => word === '--json' || word === '--stdin'),
+        source
+      ).toBe(false)
       if (parsed.kind === 'call') expect(parsed.request.from, source).toBe('file')
       // The parser checks only the shape of the options; the contract checks their values.
       if (parsed.kind === 'alias') expect(() => parseOperationInput(parsed.tool, parsed.input), source).not.toThrow()
@@ -379,7 +388,9 @@ describe.each(folders)('skills/%s/SKILL.md', folder => {
     const named = skill.text.match(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/gu) ?? []
     expect(named.length).toBeGreaterThan(0)
     for (const code of named) {
-      const known = (ERROR_CODES as readonly string[]).includes(code) || (code.startsWith('OVERLEAF_') && new RegExp(`\\b${code}\\b`, 'u').test(CONFIG_SOURCE))
+      const known =
+        (ERROR_CODES as readonly string[]).includes(code) ||
+        (code.startsWith('OVERLEAF_') && new RegExp(`\\b${code}\\b`, 'u').test(CONFIG_SOURCE))
       expect(known, code).toBe(true)
     }
   })
@@ -394,8 +405,10 @@ describe.each(folders)('skills/%s/SKILL.md', folder => {
   test('never copies a read over the draft once a write was sent, so an unknown outcome can be compared', () => {
     let written = false
     for (const item of items) {
-      for (const { args } of nodeHelpers([item])) expect(written && args.includes('draft.tex'), args.join(' ')).toBe(false)
-      if (invocationsIn(item).some(({ parsed }) => parsed.kind === 'call' && parsed.tool === 'write_file')) written = true
+      for (const { args } of nodeHelpers([item]))
+        expect(written && args.includes('draft.tex'), args.join(' ')).toBe(false)
+      if (invocationsIn(item).some(({ parsed }) => parsed.kind === 'call' && parsed.tool === 'write_file'))
+        written = true
     }
   })
 })
@@ -432,7 +445,9 @@ describe('node helpers in the skills', () => {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
       })
-      const written = Object.fromEntries(readdirSync(directory).map(name => [name, readFileSync(join(directory, name), 'utf8')]))
+      const written = Object.fromEntries(
+        readdirSync(directory).map(name => [name, readFileSync(join(directory, name), 'utf8')])
+      )
       return { stdout, written }
     } finally {
       rmSync(directory, { recursive: true, force: true })
@@ -443,64 +458,78 @@ describe('node helpers in the skills', () => {
     expect(helpers.length).toBeGreaterThan(0)
   })
 
-  test.each(helpers.map(helper => [helper.args.join(' '), helper] as const))('node -e ... %s', (_label, { script, args }) => {
-    if (script.includes('comment.json')) {
-      // Builds add_comment's request from the read's request, a fresh read, the passage, and the
-      // comment. The project id and path come from a file, never from the shell.
-      expect(args).toEqual([])
-      const files = {
-        'read-request.json': JSON.stringify({ projectId: 'project-id', filePath: SHELL_PATH }),
-        'read.json': JSON.stringify(READ_RESULTS['read.json']),
-        'selection.txt': SELECTION,
-        'message.txt': MESSAGE,
+  test.each(helpers.map(helper => [helper.args.join(' '), helper] as const))(
+    'node -e ... %s',
+    (_label, { script, args }) => {
+      if (script.includes('comment.json')) {
+        // Builds add_comment's request from the read's request, a fresh read, the passage, and the
+        // comment. The project id and path come from a file, never from the shell.
+        expect(args).toEqual([])
+        const files = {
+          'read-request.json': JSON.stringify({ projectId: 'project-id', filePath: SHELL_PATH }),
+          'read.json': JSON.stringify(READ_RESULTS['read.json']),
+          'selection.txt': SELECTION,
+          'message.txt': MESSAGE,
+        }
+        const { written } = runHelper(script, args, files)
+        const input = parseOperationInput('add_comment', JSON.parse(written['comment.json'] ?? 'null'))
+        expect(input).toMatchObject({
+          projectId: 'project-id',
+          filePath: SHELL_PATH,
+          revision: 'revision-read',
+          expectedText: SELECTION,
+          content: MESSAGE,
+        })
+        // Columns count UTF-16 code units, so the emoji before the passage counts two.
+        expect(input.start).toEqual({ line: 2, column: 14 })
+        const start = lineColumnToOffset(DOCUMENT, input.start)
+        expect(DOCUMENT.slice(start, lineColumnToOffset(DOCUMENT, input.end))).toBe(SELECTION)
+        // A passage that is missing or occurs more than once has no single position: nothing is built.
+        for (const selection of ['e', 'absent text']) {
+          expect(() => runHelper(script, args, { ...files, 'selection.txt': selection })).toThrow()
+        }
+        return
       }
-      const { written } = runHelper(script, args, files)
-      const input = parseOperationInput('add_comment', JSON.parse(written['comment.json'] ?? 'null'))
-      expect(input).toMatchObject({
-        projectId: 'project-id',
-        filePath: SHELL_PATH,
-        revision: 'revision-read',
-        expectedText: SELECTION,
-        content: MESSAGE,
-      })
-      // Columns count UTF-16 code units, so the emoji before the passage counts two.
-      expect(input.start).toEqual({ line: 2, column: 14 })
-      const start = lineColumnToOffset(DOCUMENT, input.start)
-      expect(DOCUMENT.slice(start, lineColumnToOffset(DOCUMENT, input.end))).toBe(SELECTION)
-      // A passage that is missing or occurs more than once has no single position: nothing is built.
-      for (const selection of ['e', 'absent text']) {
-        expect(() => runHelper(script, args, { ...files, 'selection.txt': selection })).toThrow()
+      const [first = '', second = '', third] = args
+      if (args.length === 2 && READ_RESULTS[first] !== undefined) {
+        // Copies a read result's text into a local file exactly and prints its revision.
+        const result = READ_RESULTS[first]
+        const { stdout, written } = runHelper(script, args, { [first]: JSON.stringify(result) })
+        expect(written[second]).toBe(result.content)
+        expect(stdout).toBe(`${result.revision}\n`)
+        return
       }
-      return
+      if (third !== undefined && args.length === 3 && third.endsWith('.json')) {
+        // Copies one field of a command's JSON result into a request and keeps everything else, a
+        // tracked writeMode included, and fails on a result without the field.
+        const request = JSON.stringify({
+          projectId: 'sample',
+          filePath: SHELL_PATH,
+          mode: 'additive',
+          writeMode: 'tracked',
+          [second]: 'stale',
+        })
+        const { written } = runHelper(script, args, {
+          [first]: request,
+          [third]: JSON.stringify({ status: 'partial', [second]: 'fresh' }),
+        })
+        expect(JSON.parse(written[first] ?? 'null')).toEqual({ ...(JSON.parse(request) as object), [second]: 'fresh' })
+        expect(() =>
+          runHelper(script, args, { [first]: request, [third]: JSON.stringify({ status: 'partial' }) })
+        ).toThrow()
+        return
+      }
+      if (third !== undefined && args.length === 3) {
+        // Fills one field of a request file from a text file, escaped as JSON requires.
+        const text = third.endsWith('.tex') ? SECTION : MESSAGE
+        const { written } = runHelper(script, args, {
+          [first]: JSON.stringify({ projectId: 'sample', [second]: '' }),
+          [third]: text,
+        })
+        expect(JSON.parse(written[first] ?? 'null')).toEqual({ projectId: 'sample', [second]: text })
+        return
+      }
+      throw new Error(`a node helper this test does not know: node -e ... ${args.join(' ')}`)
     }
-    const [first = '', second = '', third] = args
-    if (args.length === 2 && READ_RESULTS[first] !== undefined) {
-      // Copies a read result's text into a local file exactly and prints its revision.
-      const result = READ_RESULTS[first]
-      const { stdout, written } = runHelper(script, args, { [first]: JSON.stringify(result) })
-      expect(written[second]).toBe(result.content)
-      expect(stdout).toBe(`${result.revision}\n`)
-      return
-    }
-    if (third !== undefined && args.length === 3 && third.endsWith('.json')) {
-      // Copies one field of a command's JSON result into a request and keeps everything else, a
-      // tracked writeMode included, and fails on a result without the field.
-      const request = JSON.stringify({ projectId: 'sample', filePath: SHELL_PATH, mode: 'additive', writeMode: 'tracked', [second]: 'stale' })
-      const { written } = runHelper(script, args, { [first]: request, [third]: JSON.stringify({ status: 'partial', [second]: 'fresh' }) })
-      expect(JSON.parse(written[first] ?? 'null')).toEqual({ ...(JSON.parse(request) as object), [second]: 'fresh' })
-      expect(() => runHelper(script, args, { [first]: request, [third]: JSON.stringify({ status: 'partial' }) })).toThrow()
-      return
-    }
-    if (third !== undefined && args.length === 3) {
-      // Fills one field of a request file from a text file, escaped as JSON requires.
-      const text = third.endsWith('.tex') ? SECTION : MESSAGE
-      const { written } = runHelper(script, args, {
-        [first]: JSON.stringify({ projectId: 'sample', [second]: '' }),
-        [third]: text,
-      })
-      expect(JSON.parse(written[first] ?? 'null')).toEqual({ projectId: 'sample', [second]: text })
-      return
-    }
-    throw new Error(`a node helper this test does not know: node -e ... ${args.join(' ')}`)
-  })
+  )
 })

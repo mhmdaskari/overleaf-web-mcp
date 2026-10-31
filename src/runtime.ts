@@ -36,10 +36,7 @@ async function createDocument(
   runtime.policy.assertProject(projectId)
   runtime.policy.assertEffect('overleaf-write', 'overleaf-read')
   if (writeMode === 'tracked' && content === '') {
-    throw new McpError(
-      'INVALID_ARGUMENT',
-      'Tracked file creation requires non-empty initial content.'
-    )
+    throw new McpError('INVALID_ARGUMENT', 'Tracked file creation requires non-empty initial content.')
   }
   if (writeMode === 'tracked' && runtime.userId === undefined) {
     throw new McpError(
@@ -51,13 +48,7 @@ async function createDocument(
   try {
     const created = await runtime.documents.readFile(projectId, filePath)
     if (content !== '') {
-      return await runtime.documents.writeFile(
-        projectId,
-        filePath,
-        created.revision,
-        content,
-        writeMode
-      )
+      return await runtime.documents.writeFile(projectId, filePath, created.revision, content, writeMode)
     }
     return {
       revision: created.revision,
@@ -143,10 +134,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     this.#proxy = options.proxy
   }
 
-  static async create(
-    config: AppConfig,
-    dependencies: RuntimeDependencies = {}
-  ): Promise<OverleafRuntime> {
+  static async create(config: AppConfig, dependencies: RuntimeDependencies = {}): Promise<OverleafRuntime> {
     // Roots resolve before anything is sent, so a misconfigured policy fails without a request.
     const policy = await AccessPolicy.create({
       allowedProjects: config.allowedProjects,
@@ -187,18 +175,20 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     csrf.token = bootstrap.csrfToken
 
     // Sockets are cached per project, while each document is freshly joined inside its queued call.
-    const factory = dependencies.connectionFactory ?? (async (projectId: string) =>
-      await openProjectConnection({
-        baseUrl: config.baseUrl,
-        projectId,
-        jar: cookieStore.jar,
-        supportedProtocolVersions: config.supportedProtocolVersions,
-        timeoutMs: config.requestTimeoutMs,
-        applyTimeoutMs: config.applyTimeoutMs,
-        ...(bootstrap.userId === undefined ? {} : { currentUserId: bootstrap.userId }),
-        ...(fetcher === undefined ? {} : { fetcher }),
-        ...(proxy === undefined ? {} : { webSocketAgent: proxy.webSocketAgent }),
-      }))
+    const factory =
+      dependencies.connectionFactory ??
+      (async (projectId: string) =>
+        await openProjectConnection({
+          baseUrl: config.baseUrl,
+          projectId,
+          jar: cookieStore.jar,
+          supportedProtocolVersions: config.supportedProtocolVersions,
+          timeoutMs: config.requestTimeoutMs,
+          applyTimeoutMs: config.applyTimeoutMs,
+          ...(bootstrap.userId === undefined ? {} : { currentUserId: bootstrap.userId }),
+          ...(fetcher === undefined ? {} : { fetcher }),
+          ...(proxy === undefined ? {} : { webSocketAgent: proxy.webSocketAgent }),
+        }))
     const connections = new ProjectConnectionCache<ProjectConnection>({
       capacity: config.socketCacheSize,
       idleTtlMs: config.socketIdleTtlMs,
@@ -219,8 +209,9 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     // A fresh join before resolving, so a path is never looked up in a stale tree.
     const resolvePath = async (projectId: string, path: string, type: EntityType) => {
       await connections.invalidate(projectId)
-      return await connections.withConnection(projectId, async connection =>
-        await connection.queue.run(() => resolveProjectPath(connection.getTree(), path, type))
+      return await connections.withConnection(
+        projectId,
+        async connection => await connection.queue.run(() => resolveProjectPath(connection.getTree(), path, type))
       )
     }
     const compile = new CompileApi(
@@ -311,9 +302,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       projectCount,
       ...(sessionExpiresAt === undefined ? {} : { sessionExpiresAt }),
       permissionsUnchecked: this.cookieStore.permissions.permissionsUnchecked,
-      ...(this.cookieStore.permissions.warning === undefined
-        ? {}
-        : { warning: this.cookieStore.permissions.warning }),
+      ...(this.cookieStore.permissions.warning === undefined ? {} : { warning: this.cookieStore.permissions.warning }),
       socketPresenceNotice:
         'An active cached project socket can make this account appear online to collaborators until the idle timeout.',
     }

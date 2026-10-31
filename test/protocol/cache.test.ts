@@ -59,9 +59,7 @@ describe('project connection cache', () => {
 
   test('wakes a pending invalidate when a closed connection still in use is replaced', async () => {
     const connection = { closed: false, close: vi.fn() }
-    const factory = vi.fn()
-      .mockResolvedValueOnce(connection)
-      .mockRejectedValue(new Error('reconnect failed'))
+    const factory = vi.fn().mockResolvedValueOnce(connection).mockRejectedValue(new Error('reconnect failed'))
     const cache = new ProjectConnectionCache({ capacity: 4, idleTtlMs: 90_000, factory })
 
     let finishHolder!: () => void
@@ -93,9 +91,7 @@ describe('project connection cache', () => {
 
   test('wakes every pending invalidate when a closed connection still in use is replaced', async () => {
     const connection = { closed: false, close: vi.fn() }
-    const factory = vi.fn()
-      .mockResolvedValueOnce(connection)
-      .mockRejectedValue(new Error('reconnect failed'))
+    const factory = vi.fn().mockResolvedValueOnce(connection).mockRejectedValue(new Error('reconnect failed'))
     const cache = new ProjectConnectionCache({ capacity: 4, idleTtlMs: 90_000, factory })
 
     let finishHolder!: () => void

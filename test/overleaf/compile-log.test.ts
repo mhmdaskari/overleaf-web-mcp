@@ -43,7 +43,8 @@ describe('LaTeX log parser', () => {
     expect(summary.undefinedCitations).toEqual(['knuth84'])
     expect(summary.warnings).toContainEqual({
       line: 14,
-      message: "Package hyperref Warning: Token not allowed in a PDF string (Unicode): removing `math shift' on input line 14.",
+      message:
+        "Package hyperref Warning: Token not allowed in a PDF string (Unicode): removing `math shift' on input line 14.",
     })
     expect(summary.warnings).toContainEqual({ message: 'There were undefined references.' })
     // Box warnings are typesetting notes, not problems to report.
@@ -70,7 +71,9 @@ describe('LaTeX log parser', () => {
     expect(summary.errors).toHaveLength(MAX_LOG_ENTRIES)
     expect(summary.errors[0]).toMatchObject({ file: 'main.tex', line: 1 })
     // TeX's 79-column wrapping is undone before the message is cut.
-    expect(summary.errors[0]!.message).toMatch(/^Package example Error: generated error number 1, with a long explanation with/u)
+    expect(summary.errors[0]!.message).toMatch(
+      /^Package example Error: generated error number 1, with a long explanation with/u
+    )
     for (const error of summary.errors) {
       expect(error.message.length).toBeLessThanOrEqual(MAX_MESSAGE_LENGTH)
       expect(error.message).not.toMatch(/^l\.\d+ /u)
@@ -125,9 +128,7 @@ describe('BibTeX log parser', () => {
     const summary = parseBibtexLog(
       ["I was expecting a `,' or a `}'---line 5 of file refs.bib", '---line 3 of file output.aux'].join('\n')
     )
-    expect(summary.errors).toEqual([
-      { file: 'refs.bib', line: 5, message: "BibTeX: I was expecting a `,' or a `}'" },
-    ])
+    expect(summary.errors).toEqual([{ file: 'refs.bib', line: 5, message: "BibTeX: I was expecting a `,' or a `}'" }])
     expect(isBibtexErrorLine("I couldn't open database file refs.bib")).toBe(true)
     expect(isBibtexErrorLine('---line 3 of file output.aux')).toBe(false)
     expect(isBibtexErrorLine('[1] Utils.pm:411> ERROR - Cannot find x')).toBe(true)

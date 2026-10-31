@@ -41,18 +41,15 @@ describe('OT operation adapters', () => {
     expect(historyVisibleContent(snapshot)).toBe('abcdef')
     expect(visibleToSnapshotOffset(snapshot, 3)).toBe(3)
     expect(visibleToSnapshotOffset(snapshot, 4)).toBe(10)
-    expect(buildHistoryTextOperation(snapshot, 'abcXdef')).toEqual([
-      { textOperation: [3, 'X', 9] },
-    ])
+    expect(buildHistoryTextOperation(snapshot, 'abcXdef')).toEqual([{ textOperation: [3, 'X', 9] }])
   })
 
   test('builds tracked history-OT replacements with one author and timestamp', () => {
     expect(
-      buildHistoryTextOperation(
-        { content: 'alpha old omega' },
-        'alpha new omega',
-        { userId: 'user', timestamp: '2026-07-20T12:00:00.000Z' }
-      )
+      buildHistoryTextOperation({ content: 'alpha old omega' }, 'alpha new omega', {
+        userId: 'user',
+        timestamp: '2026-07-20T12:00:00.000Z',
+      })
     ).toEqual([
       {
         textOperation: [
@@ -122,15 +119,11 @@ describe('OT operation adapters', () => {
   })
 
   test('builds protocol-specific comment and resolution operations', () => {
-    expect(buildCommentOperation('sharejs', 'thread', 2, 4, 'text')).toEqual([
-      { p: 2, c: 'text', t: 'thread' },
-    ])
+    expect(buildCommentOperation('sharejs', 'thread', 2, 4, 'text')).toEqual([{ p: 2, c: 'text', t: 'thread' }])
     expect(buildCommentOperation('history-ot', 'thread', 2, 4, 'text')).toEqual([
       { commentId: 'thread', ranges: [{ pos: 2, length: 2 }] },
     ])
-    expect(buildStatusOperation('history-ot', 'thread', true)).toEqual([
-      { commentId: 'thread', resolved: true },
-    ])
+    expect(buildStatusOperation('history-ot', 'thread', true)).toEqual([{ commentId: 'thread', resolved: true }])
   })
 
   test('keeps local write disclosure out of the server update envelope', () => {
@@ -139,9 +132,7 @@ describe('OT operation adapters', () => {
       v: 4,
       op: [{ p: 0, i: 'x' }],
     })
-    expect(
-      makeUpdate('doc', 4, [{ p: 0, i: 'x' }], 'sharejs', { tc: 'change-id' })
-    ).toEqual({
+    expect(makeUpdate('doc', 4, [{ p: 0, i: 'x' }], 'sharejs', { tc: 'change-id' })).toEqual({
       doc: 'doc',
       v: 4,
       op: [{ p: 0, i: 'x' }],
