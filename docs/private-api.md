@@ -204,6 +204,13 @@ counts `true`, or `true` for the user, as on.
   after `otUpdateApplied`: live, a ShareJS update with a wrong hash was acknowledged, then
   `otUpdateError("Invalid hash", { project_id, doc_id, error, _id, message })` arrived, then the
   disconnect, and nothing was stored.
+- `too many comments or tracked changes` is document-updater refusing an update that would leave
+  the document with more than 2,000 tracked changes or more than 500 comments (`MAX_CHANGES` and
+  `MAX_COMMENTS` in its `RangesManager`; overleaf/overleaf e039ad2), whether or not the update is
+  tracked. A tracked write here counts a change for each deletion and each insertion it sends,
+  and any write one more for an insertion strictly inside a tracked insertion, which
+  `RangesTracker` splits in two when the insertion is untracked or by another author, and sends
+  fewer, larger edits when the document would pass 2,000. Not captured live.
 
 This server treats the first as `UPDATE_TOO_LARGE` with `details.outcome: "not_applied"`. Any
 other `otUpdateError` for the document leaves the write unconfirmed: it may come from another

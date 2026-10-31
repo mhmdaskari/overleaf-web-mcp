@@ -11,10 +11,21 @@ changed since that read, even by one character, the write fails with `REVISION_C
 nothing is applied. The assistant must read again and reconcile. It may never construct a
 revision or reuse a stale one.
 
-**Edits are minimal and verified.** You send the complete replacement text; the server computes
-the smallest operational-transformation edit that produces it, submits that, then rejoins the
-document and compares a content hash against the intended result before returning the new
-revision. An acknowledgement alone is never treated as success.
+**Edits are small and verified.** You send the complete replacement text; the server compares it
+with the document line by line and then word by word, submits one operational-transformation
+update that changes only the words that differ, then rejoins the document and compares a content
+hash against the intended result before returning the new revision. Text between two edits, and
+comments on it, are not deleted and re-inserted. Word edits are sent only when none of them
+touches a comment or a tracked change, so every range is left as it was, only moved along: an
+edit that would is first cut down to the characters that differ, or moved along repeated text
+to a place clear of every range. A write where an edit still touches a range, a change too large
+to compare word by word, a tracked write that would pass Overleaf's limit of 2,000 tracked
+changes, an untracked legacy-editor write to a document holding tracked deletions that share a
+point, or touching insertions by one author, which Overleaf merges after any untracked deletion,
+and word edits that would have to send again a character outside the Basic Multilingual
+Plane the document holds, such as an emoji, fall back to one edit per changed run of lines or,
+failing that, to one span from the first change to the last, as every write was sent before. An
+acknowledgement alone is never treated as success.
 
 **Timeouts are observed, never retried.** If a write times out, or its socket closes or fails
 after the update was sent, or the verification read after an applied update fails, the server
@@ -175,8 +186,8 @@ in one call.
 - Reads normalize CRLF and lone CR to LF and report `newline: "LF"`.
 - Revisions are opaque concurrency tokens containing project and document identity, OT protocol,
   version, and a SHA-256 content hash. Retain them; never construct them.
-- Content writes use minimal OT edits and are verified against a freshly joined document.
-  Ambiguous writes are observed during a bounded recovery window and are never retried
+- Content writes change only the words that differ and are verified against a freshly joined
+  document. Ambiguous writes are observed during a bounded recovery window and are never retried
   automatically.
 - Explicit tracked writes never fall back to untracked writes. They require an authenticated user
   id, while `trackChangesActive` separately reports the project state observed at connection time.

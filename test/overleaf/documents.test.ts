@@ -295,11 +295,12 @@ describe('document API', () => {
     expect(connection.submitUpdate).toHaveBeenCalledOnce()
   })
 
-  test('edits around a character outside the BMP that a ShareJS write spans without sending it again', async () => {
+  test('edits on both sides of a character outside the BMP without sending it again', async () => {
     const before = 'Intro \u{1F600} text old.'
     const target = 'Intro2 \u{1F600} text new.'
     const after = trackedShareDocument(target, 4, [
-      { p: 5, i: '2' },
+      { p: 0, i: 'Intro2' },
+      { p: 6, d: 'Intro' },
       { p: 15, i: 'new' },
       { p: 18, d: 'old' },
     ])
@@ -324,7 +325,8 @@ describe('document API', () => {
       meta: { tc: string }
     }
     expect(update.op).toEqual([
-      { p: 5, i: '2' },
+      { p: 0, d: 'Intro' },
+      { p: 0, i: 'Intro2' },
       { p: 15, d: 'old' },
       { p: 15, i: 'new' },
     ])

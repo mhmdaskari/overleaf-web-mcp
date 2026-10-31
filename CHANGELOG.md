@@ -12,9 +12,10 @@ authors, and excerpts, and accept or reject them in one document, on both of Ove
 protocols: every decision is checked before anything is sent, sent once, and verified on a fresh
 read. The same work makes every document write safer: an OT write the account's access level
 cannot make is refused before it is sent, a tracked write is checked for having been recorded as
-tracked changes, and Overleaf's `otUpdateError` is classified rather than passed on. Comments on
-non-ASCII text are now located and verified correctly. The server registers 33 tools, two more
-than 0.7.x. Planned in
+tracked changes, and Overleaf's `otUpdateError` is classified rather than passed on. Every
+document write now changes only the words that differ, so a tracked write is one suggestion per
+changed group of words. Comments on non-ASCII text are now located and verified correctly. The
+server registers 33 tools, two more than 0.7.x. Planned in
 [ROADMAP.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/ROADMAP.md).
 
 ### Added
@@ -94,6 +95,34 @@ than 0.7.x. Planned in
   the result is then `REVISION_CONFLICT` with `details.outcome: "unknown"` and
   `details.liveRevision`, and the text is live. A no-op write is not checked. A `sync_directory`
   failed entry for such a step carries `kind: "applied_untracked"` beside its `details`.
+- **A document write changes only the words that differ, away from comments and tracked changes.**
+  `write_file`, `write_section`, `create_file` over an existing document, and a `sync_directory`
+  replacement used to send one span from the first difference to the last. They now compare the text
+  line by line and then word by word and send one update with an edit per changed group of words,
+  words one space apart counting as one group. A tracked write therefore records one suggestion per
+  changed word group, a deletion and an insertion side by side for a replacement, where two
+  separated word changes used to become one long insertion and one long deletion of everything
+  between them, and an untracked write no longer deletes and re-inserts the unchanged text between
+  edits. Word edits are sent only when none of them touches a comment or a tracked change: an edit
+  that would overlap one, or reach an end of one or a tracked deletion's point, is first cut down to
+  the characters that differ, and then, where it is the same text inserted or deleted at any of
+  several places along repeated text, moved up to 64 characters to a place clear of every range. An
+  edit that touches nothing leaves every range as it was, only moved along. If an edit still touches
+  a range, the write is one edit per changed run of lines on the same terms, and failing that the
+  single span, as before. After an untracked delete on the legacy editor (ShareJS), Overleaf merges
+  tracked deletions that share a point, and touching insertions by one author, across the whole
+  document. Editing never leaves such a pair, but a document converted from history-OT can, so an
+  untracked write to such a document sends the single span. As on ShareJS, a history-OT edit is
+  split around a character outside the Basic Multilingual Plane that it would only send again, which
+  Overleaf refuses in a history-OT insertion, so the single span on history-OT is split around such
+  characters too, where it used to be refused. The operations every write sends change accordingly;
+  results do not. A diff past its limits (an edit distance of 2,000 lines or words, a change more
+  than 1,000 code units inside one word, about 100 ms of work on a 2 MB document, or placement
+  looking at more than 4 million ranges), and a tracked write whose changes, one per deletion and
+  one per insertion, would take the document past Overleaf's limit of 2,000 tracked changes, fall
+  back to one edit per changed run of lines or to the single span, as before. The `write_file`
+  description and the connect-time instructions now say so instead of "a minimal edit", and the
+  description says that a change touching a comment or tracked change is sent as one span.
 - **ShareJS range text is decoded like the document's lines.** Overleaf sends the text of a
   ShareJS document's comment and tracked-change ranges as the Latin-1 reading of its UTF-8 bytes,
   as it sends the lines; that text is now decoded the same way when the document is joined.

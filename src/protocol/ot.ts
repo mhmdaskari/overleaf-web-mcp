@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 
-import { createMinimalTextEdit, createOutsideBmpPreservingEdits } from '../core/diff.js'
+import { createGranularEdits, outsideBmpSafeEdits, type TextEdit } from '../core/diff.js'
+import { chooseEdits, createRangeLayout, type RangeLayout, type TextSpan } from '../core/edit-placement.js'
 import type { OtProtocol } from '../core/revision.js'
 
 export interface RawRange {
@@ -63,63 +64,141 @@ export function snapshotToVisibleOffset(snapshot: HistorySnapshot, snapshotOffse
   return snapshotOffset - deletedBefore
 }
 
+/** Each tracked deletion's point in the visible text, ascending, beside the deleted range. */
+function historyDeletionPoints(snapshot: HistorySnapshot): { deletions: RawRange[]; points: number[] } {
+  const deletions = deletedRanges(snapshot)
+  let hidden = 0
+  const points = deletions.map(range => {
+    const point = range.pos - hidden
+    hidden += range.length
+    return point
+  })
+  return { deletions, points }
+}
+
 /**
- * ShareJS applies components in order, each at a position in the text the previous ones left, so
- * the operation steps around a character outside the BMP that the legacy editor could not store
- * again. A target that adds one is refused before this is called.
+ * Where a history-OT snapshot's ranges sit in the visible text: each tracked deletion's point, and
+ * the extent of every tracked insertion and every comment range, which shrinks to a point where
+ * the range covers only tracked-deleted text.
  */
-export function buildShareJsOperation(before: string, after: string): ShareJsComponent[] {
-  const plan = createOutsideBmpPreservingEdits(before, after)
-  const edits = 'edits' in plan ? plan.edits : [createMinimalTextEdit(before, after)!]
+export function historyRangeLayout(snapshot: HistorySnapshot): RangeLayout {
+  const extent = (range: RawRange): TextSpan => ({
+    start: snapshotToVisibleOffset(snapshot, range.pos),
+    end: snapshotToVisibleOffset(snapshot, range.pos + range.length),
+  })
+  const inserts = (snapshot.trackedChanges ?? []).filter(change => change.tracking.type === 'insert')
+  const comments = Array.isArray(snapshot.comments) ? snapshot.comments : []
+  return createRangeLayout(historyDeletionPoints(snapshot).points, [
+    ...inserts.map(change => extent(change.range)),
+    ...comments.flatMap(comment => (Array.isArray(comment.ranges) ? comment.ranges.map(extent) : [])),
+  ])
+}
+
+/**
+ * ShareJS applies components in order, each at a position in the text the previous ones left, as
+ * `edits` are. Each edit is split around a character outside the BMP it would only send again,
+ * which the legacy editor could not store; if the edits pair those characters so that one would
+ * still be sent, the operation steps around them as one minimal edit split the same way does. A
+ * target that adds one is refused before this is called. `edits` default to the granular diff.
+ */
+export function buildShareJsOperation(
+  before: string,
+  after: string,
+  edits: readonly TextEdit[] = createGranularEdits(before, after)
+): ShareJsComponent[] {
   const op: ShareJsComponent[] = []
-  for (const edit of edits) {
+  for (const edit of outsideBmpSafeEdits(before, after, edits)) {
     if (edit.deleteText) op.push({ p: edit.position, d: edit.deleteText })
     if (edit.insertText) op.push({ p: edit.position, i: edit.insertText })
   }
   return op
 }
 
+/**
+ * One history-OT text operation over the raw snapshot for `edits`, which are in visible
+ * coordinates (tracked deletions hidden), each counted in the text the previous ones left. As for
+ * ShareJS, no insertion sends again a character outside the BMP the text already holds, which
+ * Overleaf refuses. The text between edits, and a tracked deletion at the end of an edit, are
+ * retained, and a deleted span takes in a tracked deletion inside it or at its start, as a single
+ * span always did. `edits` default to those `chooseEdits` places around the snapshot's ranges.
+ */
 export function buildHistoryTextOperation(
   snapshot: HistorySnapshot,
   targetVisibleContent: string,
-  tracking?: HistoryTrackingContext
+  tracking?: HistoryTrackingContext,
+  edits?: readonly TextEdit[]
 ): HistoryOperation[] {
-  const visible = historyVisibleContent(snapshot)
-  const edit = createMinimalTextEdit(visible, targetVisibleContent)
-  if (!edit) return []
-  const start = visibleToSnapshotOffset(snapshot, edit.position)
-  const end = visibleToSnapshotOffset(snapshot, edit.position + edit.deleteText.length)
+  const visibleBefore = historyVisibleContent(snapshot)
+  const { deletions, points } = historyDeletionPoints(snapshot)
+  const planned =
+    edits === undefined
+      ? chooseEdits(visibleBefore, targetVisibleContent, historyRangeLayout(snapshot))
+      : outsideBmpSafeEdits(visibleBefore, targetVisibleContent, edits)
+  if (planned.length === 0) return []
+
+  // Maps visible offsets, which only grow, to the snapshot with a cursor over the deletions. A
+  // deletion at the offset itself lies after it, as it always did, so an edit takes in a tracked
+  // deletion at its start and retains one at its end. Planned edits touch none at either end.
+  let next = 0
+  let deletedBefore = 0
+  const toSnapshot = (visibleOffset: number): number => {
+    while (next < points.length && points[next]! < visibleOffset) {
+      deletedBefore += deletions[next]!.length
+      next += 1
+    }
+    return visibleOffset + deletedBefore
+  }
+
   const raw: Array<number | string | Record<string, unknown>> = []
-  if (start > 0) raw.push(start)
-  if (edit.insertText) {
-    raw.push(
-      tracking === undefined
-        ? edit.insertText
-        : {
-            i: edit.insertText,
-            tracking: {
-              type: 'insert',
-              userId: tracking.userId,
-              ts: tracking.timestamp,
-            },
-          }
-    )
+  const push = (component: number | string | Record<string, unknown>): void => {
+    const last = raw[raw.length - 1]
+    // Adjacent retains, or adjacent removals, are one component.
+    if (typeof component === 'number' && typeof last === 'number' && Math.sign(component) === Math.sign(last)) {
+      raw[raw.length - 1] = last + component
+    } else {
+      raw.push(component)
+    }
   }
-  if (end > start) {
-    raw.push(
-      tracking === undefined
-        ? -(end - start)
-        : {
-            r: end - start,
-            tracking: {
-              type: 'delete',
-              userId: tracking.userId,
-              ts: tracking.timestamp,
-            },
-          }
-    )
+  let cursor = 0
+  // The length every earlier edit added, to map a position back to the original visible text.
+  let shift = 0
+  for (const edit of planned) {
+    const visibleStart = edit.position - shift
+    const start = toSnapshot(visibleStart)
+    const end = edit.deleteText === '' ? start : toSnapshot(visibleStart + edit.deleteText.length)
+    if (start > cursor) push(start - cursor)
+    if (edit.insertText) {
+      push(
+        tracking === undefined
+          ? edit.insertText
+          : {
+              i: edit.insertText,
+              tracking: {
+                type: 'insert',
+                userId: tracking.userId,
+                ts: tracking.timestamp,
+              },
+            }
+      )
+    }
+    if (end > start) {
+      push(
+        tracking === undefined
+          ? -(end - start)
+          : {
+              r: end - start,
+              tracking: {
+                type: 'delete',
+                userId: tracking.userId,
+                ts: tracking.timestamp,
+              },
+            }
+      )
+    }
+    cursor = end
+    shift += edit.insertText.length - edit.deleteText.length
   }
-  if (snapshot.content.length > end) raw.push(snapshot.content.length - end)
+  if (snapshot.content.length > cursor) push(snapshot.content.length - cursor)
   return [{ textOperation: raw }]
 }
 

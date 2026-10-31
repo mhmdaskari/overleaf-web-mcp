@@ -196,7 +196,7 @@ Returns `content` with line endings normalized to LF, the opaque `revision` need
 
 ### `write_file` <small>destructive</small>
 
-Replace a text document with a revision-checked, minimal, verified edit.
+Replace a text document with a revision-checked, verified edit of only the words that differ.
 
 | Parameter | Required | Meaning |
 | --- | :---: | --- |
@@ -211,6 +211,21 @@ Exactly one of `content` and `localPath` must be given. Returns the new `revisio
 `trackChangesActive`, `writeMode`, and `recoveredAfterTimeout: true` when the write was confirmed
 during the recovery window after a timeout or a lost socket. A no-op write succeeds and records
 nothing. Fails with `REVISION_CONFLICT` if the document changed since the revision was read.
+
+The update changes only the words that differ, so text between two edits, and any comment or
+tracked change on it, is left alone. Word edits are sent only when none of them touches a comment
+or a tracked change; an edit that would is first cut down to the characters that differ, or moved
+along repeated text to a place clear of every range. With `writeMode: "tracked"`, each changed
+group of words becomes its own tracked change, or a deletion and an insertion side by side for a
+replacement, so a reviewer can accept or reject each one. Words one space apart count as one
+group. A write where an edit still touches a comment or a tracked change, or whose tracked
+changes would take the document past Overleaf's limit of 2,000, sends one edit per changed run of
+lines instead, or failing that one edit from the first change to the last, as before, as does a
+write too large to compare word by word, an untracked legacy-editor write to a document holding
+tracked deletions that share a point, or touching insertions by one author, which Overleaf merges
+after any untracked deletion, and a write whose word edits would have to send again a
+character outside the Basic Multilingual Plane the document holds, such as an emoji (that span is
+split around those characters).
 
 The account's access level is checked before the update is sent: a review-only collaborator can
 write only with `writeMode: "tracked"`, and a read-only one cannot write; either is
@@ -232,7 +247,8 @@ U+FFFD. Text that adds such a character, adds another copy of one the document a
 changes their order fails with `INVALID_ARGUMENT` (`details.line`, the 1-based line of the first
 added one) and nothing is sent. Replace them, for example with a LaTeX command. Editing text on
 either side of one the document already holds is fine: the change is sent as several edits that
-step around it. History-OT documents are not affected.
+step around it, as one span from the first change to the last if the word edits would move it.
+History-OT documents are not affected.
 
 ### `create_file`
 

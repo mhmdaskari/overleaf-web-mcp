@@ -42,9 +42,35 @@ describe('ShareJS tracked-write coverage', () => {
   test('holds for an operation with several components, around a character outside the BMP', () => {
     const before = 'Intro \u{1F600} text old.'
     const after = 'Intro2 \u{1F600} text new.'
-    expect(buildShareJsOperation(before, after)).toHaveLength(3)
+    expect(buildShareJsOperation(before, after)).toHaveLength(4)
     expect(shareWrite(before, after)).toEqual(covered)
-    expect(shareWrite(before, after, [], false)).toEqual({ uncoveredInserts: 2, uncoveredDeletes: 1 })
+    expect(shareWrite(before, after, [], false)).toEqual({ uncoveredInserts: 2, uncoveredDeletes: 2 })
+  })
+
+  test('a granular write of several separated words is covered word by word', () => {
+    const before = 'One draft line.\nKept.\nAnother draft line.\n'
+    const after = 'One final line.\nKept.\nAnother last line.\n'
+    expect(buildShareJsOperation(before, after)).toHaveLength(4)
+    expect(shareWrite(before, after)).toEqual(covered)
+    expect(shareWrite(before, after, [], false)).toEqual({ uncoveredInserts: 2, uncoveredDeletes: 2 })
+  })
+
+  test("a deletion recorded untracked beside the user's earlier deletion of the same text is not covered", () => {
+    // Untracked, Overleaf only moves the earlier deletion to the new one's point, where its text
+    // still holds the deleted text; what it holds must grow by what was deleted.
+    const earlier = [change('a1', { p: 3, d: '.' })]
+    expect(shareWrite('ab.', 'ab', earlier)).toEqual(covered)
+    expect(shareWrite('ab.', 'ab', earlier, false)).toEqual({ uncoveredInserts: 0, uncoveredDeletes: 1 })
+
+    const before = 'one. Two.'
+    const after = 'one Two'
+    expect(buildShareJsOperation(before, after)).toEqual([
+      { p: 3, d: '.' },
+      { p: 7, d: '.' },
+    ])
+    const both = [change('a1', { p: 4, d: '..' }), change('a2', { p: 9, d: '..' })]
+    expect(shareWrite(before, after, both)).toEqual(covered)
+    expect(shareWrite(before, after, both, false)).toEqual({ uncoveredInserts: 0, uncoveredDeletes: 2 })
   })
 
   test('changes by another user do not count', () => {
@@ -208,6 +234,23 @@ describe('history-OT tracked-write coverage', () => {
     const untracked = snapshotAfter(before, textOperation)
     delete untracked.trackedChanges
     expect(check(untracked)).toEqual({ uncoveredInserts: 1, uncoveredDeletes: 1 })
+  })
+
+  test('a granular write of several separated words is covered word by word', () => {
+    const before: HistorySnapshot = { content: 'One draft line.\nKept.\nAnother draft line.\n' }
+    const operation = buildHistoryTextOperation(before, 'One final line.\nKept.\nAnother last line.\n', tracking)
+    const textOperation = operation[0]!.textOperation as unknown[]
+    expect(textOperation.filter(component => typeof component === 'object')).toHaveLength(4)
+    const check = (after: HistorySnapshot) =>
+      trackedWriteCoverage({ protocol: 'history-ot', after, operation, userId: USER })
+
+    const after = snapshotAfter(before, textOperation)
+    expect(check(after)).toEqual(covered)
+    // Losing the tracking of one word is one uncovered span, not the whole write.
+    expect(check({ ...after, trackedChanges: after.trackedChanges!.slice(1) })).toEqual({
+      uncoveredInserts: 1,
+      uncoveredDeletes: 0,
+    })
   })
 
   test('maps earlier spans through later text operations of the same update', () => {
