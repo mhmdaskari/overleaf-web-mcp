@@ -5,17 +5,17 @@ All notable changes to this project are documented here. This project follows
 shapes, and the command line's commands and exit codes may change in a minor or patch release;
 each such change is listed below.
 
-## [0.8.0] - Unreleased
+## [0.8.0] - 2026-10-31
 
 Tracked-change review. Two new tools list a project's tracked changes, with their locations,
 authors, and excerpts, and accept or reject them in one document, on both of Overleaf's document
 protocols: every decision is checked before anything is sent, sent once, and verified on a fresh
-read. The same work makes every document write safer: an OT write the account's access level
-cannot make is refused before it is sent, a tracked write is checked for having been recorded as
-tracked changes, and Overleaf's `otUpdateError` is classified rather than passed on. Every
-document write now changes only the words that differ, so a tracked write is one suggestion per
-changed group of words. Comments on non-ASCII text are now located and verified correctly. The
-server registers 33 tools, two more than 0.7.x. Planned in
+read. The same work makes every document write safer: an OT write the account's access level cannot
+make is refused before it is sent, a tracked write is checked for having been recorded as tracked
+changes, and Overleaf's `otUpdateError` is classified rather than passed on. A document write now
+changes only the words that differ where no comment or tracked change is in the way, so a tracked
+write is usually one suggestion per changed group of words. Comments on non-ASCII text are now
+located and verified correctly. The server registers 33 tools, two more than 0.7.x. Planned in
 [ROADMAP.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/ROADMAP.md).
 
 ### Added
@@ -130,6 +130,8 @@ server registers 33 tools, two more than 0.7.x. Planned in
   project's range index, which is plain UTF-8.
 - The connect-time instructions (445 words) gain the tracked-change review steps, with
   `add_comment` under one Review paragraph, and are tightened elsewhere to stay under 450 words.
+- The three Agent Skills, and the command line page's examples, run
+  `npx --yes overleaf-web-mcp@0.8`, pinned to this minor version as they were pinned to 0.7.
 
 ### Fixed
 
@@ -169,6 +171,11 @@ server registers 33 tools, two more than 0.7.x. Planned in
 - `docs/development.md` describes the opt-in live test of tracked-change review,
   `RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`, and the interface comparison's review task now
   rejects a tracked change too.
+- **A contributing guide**, `CONTRIBUTING.md`, also on the site and linked from the README: how to
+  ask a question, report a bug or a security problem without exposing a session or a manuscript,
+  set up, where code goes, the tests, and what a pull request needs.
+- The TypeScript and JavaScript sources are formatted with Prettier, and CI checks it with
+  `npm run format:check`; `.git-blame-ignore-revs` skips the reformat commit in `git blame`.
 
 ## [0.7.1] - 2026-10-25
 
@@ -1337,6 +1344,7 @@ still registers 19 tools. Planned in [ROADMAP.md](https://github.com/mhmdaskari/
 - First release: browser-assisted session capture, project and file management, revision-checked
   and section-level writing, compilation, and review comments.
 
+[0.8.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.8.0
 [0.7.1]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.7.1
 [0.7.0]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.7.0
 [0.6.2]: https://github.com/mhmdaskari/overleaf-web-mcp/releases/tag/v0.6.2
