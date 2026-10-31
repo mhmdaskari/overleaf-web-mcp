@@ -74,17 +74,17 @@ from v0.7.0, CLI commands and SDK methods are derived from them.
 | v0.5.0 | Shared core and safety | 0 | shipped | Operations reachable only through MCP; safety that depends on the caller picking the safe option |
 | v0.6.0 | Compile and build ergonomics | 2 | shipped | Success inferred from counters; no PDF or log access. Also enforces the safety defaults v0.5.0 announced |
 | v0.7.0 | CLI, SDK, and Skills | 0 | shipped | Every Overleaf operation needs an MCP client |
-| v0.8.0 | Tracked-change review: accept and reject | 2 | L | Tracked changes can be written but not listed, accepted, or rejected |
+| v0.8.0 | Tracked-change review: accept and reject | 2 | shipped | Tracked changes can be written but not listed, accepted, or rejected |
 | v0.9.0 | Multi-file documents | 1 | M | Section tools stop at `\input` boundaries |
 | v1.0.0 | Hardening and compatibility | 0 | M | Failure modes that are not yet legible; no way to check an install before relying on it |
 
 Effort is a relative size (S, M, L) of the work still open in a stage, not a date.
 
-**v0.1.3 shipped on 1 September 2026**, followed the same day by **v0.1.4**, a documentation release: a human-first README, the documentation site at <https://mhmdaskari.github.io/overleaf-web-mcp/>, and usage instructions sent to MCP clients at connect time. **v0.2.0 shipped on 10 September 2026** with the five project lifecycle tools, filtered `list_projects`, and the `RATE_LIMITED` and `CONFIRMATION_MISMATCH` error codes, followed the same day by **v0.2.1**, a documentation patch. **v0.3.0 shipped on 14 September 2026** with the `keepalive` command, `sessionExpiresAt` on `auth_status`, and a cookie-jar fix that persists the session deadline, followed on 22 September by **v0.3.1** (proxy support) and **v0.3.2** (documentation). **v0.4.0 shipped on 27 September 2026** with `plan_sync`, `sync_directory`, and `delete_entities`, ignore rules, progress notifications, and the `REMOTE_DRIFT` and `PATH_OUTSIDE_ROOT` error codes. **v0.4.1 shipped on 6 October 2026**, the stage's point release, with `batch_upload` and `download_project_zip`, the move to the v2 MCP SDK, and the documentation corrections planned for v0.5.0. **v0.5.0 shipped on 10 October 2026** with the operation registry under `src/contracts/`, `createOverleafService`, the `overleaf-web-mcp/core` export, the access policy and `POLICY_DENIED`, path-safe ids, sanitized error details, and the announced plan and replacement defaults that v0.6.0 enforces, followed on 12 October by **v0.5.1**, the MCP Registry listing. **v0.6.0 shipped on 19 October 2026** with a parsed compile `summary` and `builtCleanly`, `buildRef`, `get_compile_log`, `download_compile_output`, the compile output resources, five compile error codes, and the plan and replacement defaults enforced, followed on 20 October by **v0.6.1**, a README and dependency refresh, and **v0.6.2**, fixes from a live test run. **v0.7.0 shipped on 25 October 2026** with the command line (`call`, `schema`, `capabilities`, and shorthand commands, with exit codes that say what is safe to do next), `createOverleafClient` in `overleaf-web-mcp/core`, three Agent Skills, and an `outputSchema` on every tool, followed the same day by **v0.7.1**, compile outputs on self-hosted Overleaf's per-user compiles. See the [changelog](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/CHANGELOG.md) for what landed.
+**v0.1.3 shipped on 1 September 2026**, followed the same day by **v0.1.4**, a documentation release: a human-first README, the documentation site at <https://mhmdaskari.github.io/overleaf-web-mcp/>, and usage instructions sent to MCP clients at connect time. **v0.2.0 shipped on 10 September 2026** with the five project lifecycle tools, filtered `list_projects`, and the `RATE_LIMITED` and `CONFIRMATION_MISMATCH` error codes, followed the same day by **v0.2.1**, a documentation patch. **v0.3.0 shipped on 14 September 2026** with the `keepalive` command, `sessionExpiresAt` on `auth_status`, and a cookie-jar fix that persists the session deadline, followed on 22 September by **v0.3.1** (proxy support) and **v0.3.2** (documentation). **v0.4.0 shipped on 27 September 2026** with `plan_sync`, `sync_directory`, and `delete_entities`, ignore rules, progress notifications, and the `REMOTE_DRIFT` and `PATH_OUTSIDE_ROOT` error codes. **v0.4.1 shipped on 6 October 2026**, the stage's point release, with `batch_upload` and `download_project_zip`, the move to the v2 MCP SDK, and the documentation corrections planned for v0.5.0. **v0.5.0 shipped on 10 October 2026** with the operation registry under `src/contracts/`, `createOverleafService`, the `overleaf-web-mcp/core` export, the access policy and `POLICY_DENIED`, path-safe ids, sanitized error details, and the announced plan and replacement defaults that v0.6.0 enforces, followed on 12 October by **v0.5.1**, the MCP Registry listing. **v0.6.0 shipped on 19 October 2026** with a parsed compile `summary` and `builtCleanly`, `buildRef`, `get_compile_log`, `download_compile_output`, the compile output resources, five compile error codes, and the plan and replacement defaults enforced, followed on 20 October by **v0.6.1**, a README and dependency refresh, and **v0.6.2**, fixes from a live test run. **v0.7.0 shipped on 25 October 2026** with the command line (`call`, `schema`, `capabilities`, and shorthand commands, with exit codes that say what is safe to do next), `createOverleafClient` in `overleaf-web-mcp/core`, three Agent Skills, and an `outputSchema` on every tool, followed the same day by **v0.7.1**, compile outputs on self-hosted Overleaf's per-user compiles. **v0.8.0 shipped on 31 October 2026** with `list_tracked_changes` and `manage_tracked_changes` on both document protocols, the `tracked-changes` commands, the `REVIEW_UNSUPPORTED` error code, an access check before every OT write, classified `otUpdateError`, a check that tracked writes were recorded as tracked changes, and document writes that change only the words that differ where no comment or tracked change is in the way. See the [changelog](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/CHANGELOG.md) for what landed.
 
 **The MCP SDK (v0.4.1):** the server moved from `@modelcontextprotocol/sdk` 1.29 to `@modelcontextprotocol/server` 2.3, the v2 SDK, and `serve` answers both protocol eras over stdio. Protocol 2026-07-28 removes the `initialize` handshake (each request carries its protocol version and client capabilities in `_meta`) and adds `server/discover`, which servers must implement and clients may call, and whose result carries the server instructions; clients on the 2025-era versions still receive them in the `initialize` result. A 2026-07-28 client that never calls `server/discover` never sees the instructions, so tool descriptions must stay self-sufficient. The existing tools' names, inputs, and result shapes did not change.
 
-After v1.0.0 the server would register 34 tools (31 today, after the two the v0.4.1 point release added, `batch_upload` and `download_project_zip`, and the two v0.6.0 added, `download_compile_output` and `get_compile_log`): two in v0.8.0 (`list_tracked_changes`, `manage_tracked_changes`), and one in v0.9.0 (`get_full_document`). Every tool description costs the MCP client context on every turn, so the lifecycle and tracked-change review stages deliberately reuse the `manage_entity` action-enum pattern instead of adding one tool per verb, and checks that need no agent (`doctor`, `capabilities`) are CLI commands, not tools.
+After v1.0.0 the server would register 34 tools (33 today, after the two the v0.4.1 point release added, `batch_upload` and `download_project_zip`, the two v0.6.0 added, `download_compile_output` and `get_compile_log`, and the two v0.8.0 added, `list_tracked_changes` and `manage_tracked_changes`): one more in v0.9.0 (`get_full_document`). Every tool description costs the MCP client context on every turn, so the lifecycle and tracked-change review stages deliberately reuse the `manage_entity` action-enum pattern instead of adding one tool per verb, and checks that need no agent (`doctor`, `capabilities`) are CLI commands, not tools.
 
 ## What already works well (keep these patterns)
 
@@ -156,15 +156,16 @@ The code moves on between releases. Confirm the following before touching anythi
 what you find:
 
 - [ ] `npm view overleaf-web-mcp version` and `git tag` agree with `package.json` and
-      `SERVER_VERSION` in `src/version.ts`. Current release: `0.7.1`.
-- [ ] `TOOL_NAMES` in `src/mcp/tools.ts` lists the 31 registered tools: `auth_status`,
+      `SERVER_VERSION` in `src/version.ts`. Current release: `0.8.0`.
+- [ ] `TOOL_NAMES` in `src/mcp/tools.ts` lists the 33 registered tools: `auth_status`,
       `list_projects`, `create_project`, `clone_project`, `import_project_zip`, `manage_project`,
       `update_project_settings`, `get_project_tree`, `read_file`, `write_file`, `create_file`,
       `manage_entity`, `upload_file`, `batch_upload`, `download_file`, `download_project_zip`,
       `plan_sync`, `sync_directory`, `delete_entities`, `get_sections`, `get_section_content`,
       `write_section`, `compile_project`, `stop_compile`, `get_compile_log`,
       `download_compile_output`, `list_comments`, `reply_to_comment`, `add_comment`,
-      `set_comment_status`, `monitor_project_history`. The README badge and
+      `set_comment_status`, `list_tracked_changes`, `manage_tracked_changes`,
+      `monitor_project_history`. The README badge and
       `docs/tools.md` must agree (`test/mcp/tools.test.ts` enforces it). Since v0.5.0, every name
       is an entry in the operation registry, `OPERATIONS` in `src/contracts/operations.ts`, and
       `tools/list` matches `test/__snapshots__/list-tools.json`. Since v0.7.0 every entry declares an
@@ -843,9 +844,9 @@ Every other operation is reached through `call`. Exit codes apply to operation c
 
 ---
 
-## v0.8.0 — Tracked-change review: accept and reject
+## v0.8.0 — Tracked-change review: accept and reject (shipped)
 
-**Motivation:** tracked changes can be written (`writeMode: "tracked"`) but not listed, accepted, or rejected, the second gap in the README comparison ("Accepts or rejects tracked changes"), which a web-session peer already covers. history-ot `trackedChanges` are read only to strip tracked deletions from visible content (`historyVisibleContent` in `src/protocol/ot.ts`), and ShareJS `ranges.changes` is never read. The same blind spot weakens tracked writes: `DocumentsApi.writeFile` verifies only the visible content hash, so a tracked insert that Overleaf recorded untracked passes verification. The range parsers this stage needs close that gap too.
+**Motivation:** before v0.8.0, tracked changes could be written (`writeMode: "tracked"`) but not listed, accepted, or rejected, the second gap in the README comparison ("Accepts or rejects tracked changes"), which a web-session peer already covered. history-ot `trackedChanges` were read only to strip tracked deletions from visible content (`historyVisibleContent` in `src/protocol/ot.ts`), and ShareJS `ranges.changes` was never read. The same blind spot weakened tracked writes: `DocumentsApi.writeFile` verified only the visible content hash, so a tracked insert that Overleaf recorded untracked passed verification. The range parsers this stage needed closed that gap too.
 
 **Verify first.** Before this stage, no captured frame here held a non-empty change (the fixtures under `test/fixtures/protocol` show `"changes":[]` and `"trackedChanges":[]`), and no accept or reject route is in `docs/private-api.md`. Confirm each item in `overleaf/overleaf` at the commit the release targets, record it in `docs/private-api.md`, and gate anything unconfirmed with `REVIEW_UNSUPPORTED` rather than guessing (`details.kind: "document_protocol"` for a document protocol with no confirmed mechanism). All ten were checked against `overleaf/overleaf` e039ad2 and, where a disposable project allowed it, live on `www.overleaf.com` on 2026-10-30; what was found follows each item, and the details are in `docs/private-api.md`:
 
@@ -885,7 +886,7 @@ manage_tracked_changes({ projectId: string, filePath: string, revision: string,
   // annotations: destructiveHint true, idempotentHint true (a repeat fails and changes nothing)
 ```
 
-CLI: `tracked-changes list <projectId> [--file <path>]` and `tracked-changes accept|reject <projectId> <path> --revision <r> --change <id>... [--confirm-count <n>]`; the SDK methods come from the registry.
+CLI: `tracked-changes list <projectId> [--file <path>] [--type insert|delete] [--author <id>] [--limit <n>] [--excerpt-chars <n>]` and `tracked-changes accept|reject <projectId> <path> --revision <r> --change <id>... --confirm-count <n>`, where a missing `--confirm-count` is `CONFIRMATION_MISMATCH` (exit 2) from the operation; the SDK methods come from the registry.
 
 **Design decisions:**
 
@@ -920,6 +921,7 @@ CLI: `tracked-changes list <projectId> [--file <path>]` and `tracked-changes acc
 - [x] Tracked-change decisions join the review task in `test/live/compare-interfaces.test.ts`.
 - [x] Tracked-change guidance in `src/mcp/instructions.ts` (a "Review" paragraph shared with `add_comment`) within the 450-word bound: list first, confirm with the user, pass revision, ids, and a matching `confirmCount`, re-list after `REVISION_CONFLICT` or `NOT_FOUND`.
 - [x] README (the counts, two Review rows, the comparison row, the plan caveat), `docs/tools.md`, `docs/safety.md`, `docs/internals.md`, `docs/using.md`; an opt-in live test behind `RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`; CHANGELOG 0.8.0 `Added` and `Changed`.
+- [x] Added during the stage: document writes send one edit per changed word group instead of one span, kept clear of comments and tracked changes, so a tracked write records one suggestion per changed word group (`src/core/edit-placement.ts`, `planEdits` in `src/overleaf/documents.ts`).
 
 ### Acceptance
 
@@ -983,7 +985,7 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 
 ## v1.0.0 — Hardening and compatibility
 
-**Motivation:** this wraps undocumented private endpoints, as the README says. At 1.0 the highest-leverage investment is making failure modes legible and the protocol surface complete, not adding tools. A SemVer commitment also needs a read-only check of an install and an Overleaf instance (`doctor`, backend capabilities) and evidence from real clients on each protocol version answered (a compatibility matrix). And `openProjectConnection` turns every `connectionRejected` into `AUTH_EXPIRED`, which agents are told to stop on, even for rejections that do not mean an invalid session *(verify in code)*.
+**Motivation:** this wraps undocumented private endpoints, as the README says. At 1.0 the highest-leverage investment is making failure modes legible and the protocol surface complete, not adding tools. A SemVer commitment also needs a read-only check of an install and an Overleaf instance (`doctor`, backend capabilities) and evidence from real clients on each protocol version answered (a compatibility matrix). And `openProjectConnection` turns every `connectionRejected` but a rate-limited join (`RATE_LIMITED` since v0.8.0) into `AUTH_EXPIRED`, which agents are told to stop on, even for rejections that do not mean an invalid session *(verify in code)*.
 
 ### Error taxonomy (complete list; each is a typed `code` on the error, through every interface)
 
@@ -1002,7 +1004,7 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 | `INVALID_ARGUMENT` | 0.1.0 | Malformed call, wrong entity type (covers the first draft's `NOT_A_DOC`), rejected name; from v0.5.0 an id that is not path-safe |
 | `REMOTE_ERROR` | 0.1.0 | Anything else; from v0.4.1 also a project download cut short before its zip end record (retryable) |
 | `CONFIRMATION_MISMATCH` | v0.2.0 | `confirmPath` / `confirmName` / `confirmCount` / `confirmDeleteCount` wrong; from v0.4.1 an existing `localPath` without `overwrite: true` on `download_project_zip`; from v0.5.0 an explicit `overwrite: false` on an existing binary; from v0.6.0 an omitted `overwrite` there, a missing required `planToken` (`details.missing`), or an existing `localPath` without `overwrite: true` on `download_compile_output`; from v0.8.0 a missing `confirmCount` on `manage_tracked_changes` |
-| `RATE_LIMITED` | v0.2.0 | HTTP 429; `details.retryAfterMs` when Overleaf said how long |
+| `RATE_LIMITED` | v0.2.0 | HTTP 429; `details.retryAfterMs` when Overleaf said how long; from v0.8.0 also a project join Overleaf refused as rate-limited (`details.reason: "join_rate_limited"`) |
 | `REMOTE_DRIFT` | v0.4.0 | The project or the local folder differs from the `planToken` snapshot, or an entity changed just before its delete or, from v0.5.0, its replacement (`expectedHash`) |
 | `PATH_OUTSIDE_ROOT` | v0.4.0 | A symbolic link in `localFolderPath` resolves outside it; from v0.5.0 any local path outside the allowed roots (`details.kind`) |
 | `POLICY_DENIED` | v0.5.0 | The access policy does not allow this project or effect; nothing was sent |
@@ -1063,7 +1065,7 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 - **v0.5.0, shared core and safety (L: contracts M, policy M), before any new interface.** A CLI or library built on today's MCP handlers would copy their shaping and inherit the optional-plan and blind-upload defaults. Moving first means every new interface starts strict, and the registry exists before v0.6.0 writes `compile_project`'s output schema into it.
 - **v0.6.0, compile (M), before the CLI.** It closes a comparison gap cheaply, v0.7.0 exposes its tools for free, and it enforces the v0.5.0 defaults exactly one minor later.
 - **v0.7.0, CLI, SDK, and Skills (L: CLI M, SDK S to M, Skills S).** The first workflow with no MCP client needs both the contracts and the strict defaults; Skills only call the CLI's public commands.
-- **v0.8.0, tracked-change review (L), after the CLI.** Its operations are defined once in the contracts, its upstream verification can take time without blocking anything, and it lands before v1.0.0 so `REVIEW_UNSUPPORTED` and the range shapes join the taxonomy and boundary validation.
+- **v0.8.0, tracked-change review (L), after the CLI.** Its operations are defined once in the contracts, its upstream verification could take time without blocking anything, and it landed before v1.0.0 so `REVIEW_UNSUPPORTED` and the range shapes join the taxonomy and boundary validation.
 - **v0.9.0, multi-file (M), last before 1.0.** `\input` flattening is the most novel item and is self-contained, so it can slip without hurting the core zero-to-PDF story.
 - **v1.0.0, hardening and compatibility (M), last**, because `doctor`, backend capabilities, and the compatibility matrix describe every interface.
 - **Conditional interfaces are not stages.** An HTTP service (L), a Git backend, WebMCP, or A2A each needs a real consumer first; built speculatively, it adds a surface to keep safe without reducing the upstream risk.
@@ -1071,7 +1073,7 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 
 ## Competitive position this roadmap targets
 
-| Capability | v0.7.0 (today) | After roadmap | `olcli` | `@netique/overleaf-mcp` | Git-bridge MCPs |
+| Capability | v0.8.0 (today) | After roadmap | `olcli` | `@netique/overleaf-mcp` | Git-bridge MCPs |
 | --- | :---: | :---: | :---: | :---: | :---: |
 | Works on a free plan | ✅ | ✅ | ✅ | ✅ | ❌ (paid) |
 | Create / clone / import / rename / trash project, set root | ✅ | ✅ | create and rename only | ❌ | partial |
@@ -1080,7 +1082,7 @@ Keep the honesty pattern: update the "never follows `\input`" sentence to say ex
 | Typed compile summary + PDF/log download | ✅ v0.6.0 | ✅ v0.6.0 | compiles, no log; PDF re-check | summary + log, no PDF | varies |
 | Full workflow without an MCP client | ✅ v0.7.0 (CLI and library) | ✅ v0.7.0 (CLI and library) | ✅ (CLI and library) | ❌ (login only) | via git |
 | Tracked changes as suggestions | ✅ | ✅ | ❌ | ✅ | ❌ (bypassed) |
-| Accept or reject tracked changes | ❌ | ✅ v0.8.0 | partial (accepts; rejects on ShareJS documents only, since 0.15.0) | ✅ | ❌ |
+| Accept or reject tracked changes | ✅ v0.8.0 | ✅ v0.8.0 | partial (accepts; rejects on ShareJS documents only, since 0.15.0) | ✅ | ❌ |
 | `\input`/`\include` flattening with source map | ❌ | ✅ v0.9.0 | re-check | ❌ | ❌ |
 | Comments + version history | ✅ | ✅ | comments only | comments only | git log |
 
