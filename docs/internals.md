@@ -9,7 +9,8 @@ Two channels are used, both through the same saved web session:
 
 - **Private REST endpoints**, the ones the Overleaf editor and dashboard call, for the project
   list, project creation, cloning, zip import, renaming, trash and archive state, project
-  settings, the file tree operations, uploads, downloads, compiles, comment threads, and history.
+  settings, the file tree operations, uploads, downloads, compiles, comment threads, accepting
+  tracked changes, and history.
   Every route is listed in the [private API catalogue](private-api.md).
 - **Socket.IO 0.9 with operational transformation (OT)** for reading and writing document text.
   The server implements the Socket.IO 0.9 wire format used by the targeted Overleaf client family
@@ -67,6 +68,18 @@ try {
   writes carry the authenticated author in update metadata; tracked history-OT writes carry author
   and timestamp metadata on inserted and retained-deletion components.
 - Visible history-OT offsets account for tracked deletions retained in the raw snapshot.
+- Before any OT update is sent, its shape is checked against the account's access level, the
+  way Overleaf's real-time service judges it: an update that only adds comments needs view
+  access, one that only makes tracked changes (it carries a `tc` id seed) needs review access,
+  and anything else needs owner or edit access. An update the level does not allow is refused
+  locally with `PERMISSION_DENIED`, since Overleaf would answer `not authorized` and drop the
+  socket.
+- `otUpdateError` has two sources. `update is too large`, matched exactly, comes from the
+  real-time service to the sender alone, after its acknowledgement, with nothing stored; it is
+  `UPDATE_TOO_LARGE` with `details.outcome: "not_applied"`. Every other one comes from the
+  document updater, reaches every client joined to the document, and can follow
+  `otUpdateApplied`, so the write is treated as unconfirmed and observed on a fresh connection,
+  never resent. Known messages map to a `details.reason`; none is quoted.
 - At most two project sockets are cached by default. Active sockets are never evicted, and idle
   sockets disconnect after 90 seconds. A socket Overleaf or a protocol error closed is dropped when
   the next call takes it, and that call opens a fresh one. A call on a closed socket sends nothing
@@ -75,6 +88,40 @@ try {
   and each checks again whether it can proceed.
 - All document sessions and tree mutations in a project share one FIFO queue, because Overleaf's
   join/leave epoch is socket-wide. A document is joined for one queued operation and then left.
+- A write is built from the text the editor shows and the complete target. Lines common to both ends
+  are set aside, the rest is compared line by line, and each changed run of lines word by word, both
+  with Myers' O(ND) difference algorithm. A token is a run of letters, digits, marks, and
+  underscores, a run of horizontal whitespace, a newline, or any other single code point, so no edit
+  splits a word or a surrogate pair. Two edits with one whitespace token between them are joined, so
+  "a b" to "x y" is one change. Scripts written without spaces, such as Chinese or Japanese, have no
+  word breaks but punctuation, so a change there replaces the whole run up to the nearest
+  punctuation mark. The edits become one update: ShareJS components in order, each at a position in
+  the text the previous ones left, or one history-OT `TextOperation` whose retains, counted in the
+  raw snapshot, keep the tracked deletions between edits and at the end of an edit, while an edit
+  takes in one at its start, as the single span always did. Edits are then kept clear of the
+  document's ranges: every comment range and tracked insertion, of any author, as an extent in the
+  visible text (a point, where it covers only tracked-deleted text), and every tracked deletion's
+  point. An edit touches a range if it overlaps it, or starts or ends where it does, or reaches a
+  tracked deletion's point, ends included: Overleaf folds, grows, splits, or merges a range an edit
+  only reaches the end of, in ways that differ by protocol and by tracked or untracked mode, and an
+  edit that touches nothing only moves each range along. An edit that touches a range is cut down to
+  the characters that differ; if that still touches one and is a pure insertion or deletion of text
+  repeated nearby, such as one of two spaces, it moves along the equal text, at most 64 characters
+  each way and never past a neighbouring edit, to the nearest place clear of every range. The plan
+  of one edit per changed group of words is sent if none of its edits touches a range; otherwise the
+  plan of one edit per changed run of lines, on the same terms; otherwise the single span, as every
+  write was sent before. On ShareJS an untracked delete makes Overleaf merge, across the whole
+  document, tracked deletions that share a point and touching insertions by one author. Editing
+  never leaves such a pair, and edits that touch no range cannot make one, but a document converted
+  from history-OT can hold them, so an untracked ShareJS write to such a document is the single
+  span. A tracked ShareJS delete merges them only when it cancels against tracked-inserted text
+  alone, which touches that insertion. A plan is also passed over when, for a tracked write, its
+  changes (one per deletion and one per insertion) would take the document past Overleaf's limit of
+  2,000 tracked changes, or when placing looks at more than 4 million ranges in all. A line or word
+  search past an edit distance of 2,000, a change more than 1,000 code units inside one word, or a
+  diff past a work budget of about 100 ms on a 2 MB document, falls back to one span from the first
+  change to the last, for the whole text or for that run of lines; all three plans come from one
+  line search.
 - A write succeeds only after acknowledgement, a matching `otUpdateApplied`, a leave and rejoin,
   and content-hash verification of the live document.
 - If a write times out, or its socket closes or fails after the update was sent, or the
@@ -86,8 +133,35 @@ try {
   typed into its legacy editor, reads back exactly. A ShareJS write never sends a character
   outside the Basic Multilingual Plane, since Overleaf would store each as U+FFFD and the write
   could never verify. An edit that spans one the document already holds is split into several
-  components that step around it; text that adds one, adds another copy, or reorders them is
-  refused before anything is sent.
+  components that step around it, and if the word diff pairs them so that one would still be sent,
+  the write steps around them as one span does; text that adds one, adds another copy, or
+  reorders them is refused before anything is sent. A history-OT write steps around them the same
+  way, since Overleaf refuses a history-OT insertion that holds one. The text of comment and
+  tracked-change ranges in a ShareJS `joinDoc` reply is encoded the same way and decoded the same
+  way; positions, ids, and metadata are not encoded, and the project range index sends plain
+  UTF-8.
+- Tracked changes are parsed from both protocols into one shape. A ShareJS change has an id
+  Overleaf made from the update's `tc` seed and a counter; a history-OT tracked range has no id, so
+  this server makes one, `ht_` plus a hash of the document, type, position, length, author, and
+  timestamp, which is valid only with the revision it was listed with. An insert followed by a
+  delete by the same author right where the insert ends is reported as a pair, a replacement.
+- A decision is planned and checked locally first: every id must be live, and no change left out
+  may overlap a chosen one. A ShareJS accept is one `POST` to Overleaf's accept route, which
+  leaves the version and text unchanged; its response body is never read. A ShareJS reject is one
+  untracked update with `u: true` on each component, in ascending order with cumulative shifts,
+  that removes a rejected insert's text and restores a rejected delete's. A history-OT decision is
+  one `TextOperation` over the raw snapshot that removes or keeps text and clears its tracking.
+  None carries tracking metadata. The result must match the planned state on a fresh join;
+  history-OT snapshots are compared after merging touching ranges as Overleaf does. A decision that
+  timed out is observed like a write and never resent.
+- After a tracked write verifies, its tracked ranges are checked by coverage: each inserted span
+  must lie inside tracked inserts by this user and each deleted span inside tracked deletes by
+  this user, unless the deleted text was a tracked insert. A covering change need not be new,
+  since Overleaf merges a user's touching changes under the first id. On ShareJS, where a tracked
+  delete is a point, the user's deletes at each point must also hold at least the text deleted
+  there plus every earlier tracked delete that lands there: an untracked delete only moves an
+  earlier one beside it, whose text may hold the same characters. A write that landed untracked
+  is reported as `applied_untracked` and left in place.
 - A comment is created as a REST thread and then attached through OT. An attachment that timed
   out, lost its socket after it was sent, or whose verification read failed is recovered by
   checking the new thread id and exact range; orphan cleanup happens only after the unchanged
@@ -124,7 +198,7 @@ try {
 Protocol fixtures under `test/fixtures/protocol` are sanitized: cookies, user data, project and
 document ids, and document content are removed.
 
-## How comment locations are resolved
+## How comment and tracked-change locations are resolved
 
 Thread messages, authors, and resolution state come from `/project/:id/threads`. When the
 deployment exposes `/project/:id/ranges`, that project-wide index identifies which documents
@@ -135,6 +209,13 @@ If a usable project-wide range index is unavailable, a project-wide `list_commen
 threads with `positionsUnavailable: true`; it never scans every document silently. Supplying
 `filePath` joins only that document and resolves its ShareJS ranges or history-OT comment state.
 Threads without a document range are returned as `unlocated`.
+
+`list_tracked_changes` uses the same index only to choose documents: without `filePath` it joins
+just the documents the index lists with changes, and reads each list from the joined document,
+never from the index. The index can lag or leave a document out, and its change ids for a
+history-OT document are drawn afresh on every flush, so naming a document with `filePath` is the
+authoritative way to list it. Without an index the result has `indexUnavailable: true` and no
+document is joined.
 
 The discussion record and the source range are separate Overleaf objects. The thread endpoint
 provides messages; live document state provides attachment and status.
@@ -147,7 +228,7 @@ capability against the source of the most widely used servers.
 
 | Implementation | Connection model | Focus |
 | --- | --- | --- |
-| **This project** | Browser-assisted saved session plus private REST and Socket.IO/OT | Project and file management, tracked writing, compilation, review, and recent history, from MCP, a shell, or TypeScript |
+| **This project** | Browser-assisted saved session plus private REST and Socket.IO/OT | Project and file management, tracked writing, compilation, review comments and tracked-change decisions, and recent history, from MCP, a shell, or TypeScript |
 | [`@netique/overleaf-mcp`](https://github.com/netique/overleaf-mcp) | Browser session plus private REST and Socket.IO/OT | A close web/OT peer with review comments and tracked-change workflows |
 | [`overleaf-mcp-rt`](https://github.com/DanielHou315/overleaf-mcp-rt) | Session authentication plus native OT | Real-time file, compile, and comment tooling for `www.overleaf.com` and Community Edition |
 | [`olcli`](https://github.com/aloth/olcli) | Session cookie plus private REST | A command-line client with an MCP mode: whole-file uploads, compilation, comments, and local-folder diffs |
@@ -159,8 +240,9 @@ revision checks entirely. Web-session peers such as `@netique/overleaf-mcp` shar
 connection model and also offer tracked changes; what sets this project apart is the project
 lifecycle tools, the verified-write guarantees described above, and folder sync that, given the
 `planToken` from `plan_sync`, stops when either side drifted from the plan. The command line and
-the TypeScript client over the same engine shipped in 0.7.0; the [roadmap](roadmap.md) still
-plans tracked-change review and multi-file documents.
+the TypeScript client over the same engine shipped in 0.7.0, and accepting and rejecting tracked
+changes, on history-OT documents as well as ShareJS ones, in 0.8.0; the [roadmap](roadmap.md)
+plans multi-file documents next.
 
 Review-range investigation was informed by
 [Overleaf Comment Exporter](https://github.com/salokr/overleaf-comment-exporter). Real-time

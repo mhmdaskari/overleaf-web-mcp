@@ -49,6 +49,10 @@ export function fakeServiceRuntime() {
       addComment: resolved(OUTPUTS.add_comment),
       setCommentStatus: resolved(OUTPUTS.set_comment_status),
     },
+    trackedChanges: {
+      listTrackedChanges: resolved(OUTPUTS.list_tracked_changes),
+      manageTrackedChanges: resolved(OUTPUTS.manage_tracked_changes),
+    },
     history: { monitorProjectHistory: resolved(OUTPUTS.monitor_project_history) },
     sync: {
       planSync: resolved(OUTPUTS.plan_sync),

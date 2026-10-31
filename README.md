@@ -17,7 +17,7 @@
   <a href="https://www.npmjs.com/package/overleaf-web-mcp"><img alt="Total npm installs" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmhmdaskari%2Foverleaf-web-mcp%2Fbadges%2Fnpm-downloads.json&amp;style=flat-square&amp;label=installs"></a>
   <a href="https://github.com/mhmdaskari/overleaf-web-mcp/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/mhmdaskari/overleaf-web-mcp/ci.yml?branch=main&amp;style=flat-square&amp;logo=githubactions&amp;logoColor=white&amp;label=CI"></a>
   <img alt="Node.js 20 or newer" src="https://img.shields.io/badge/Node.js-20%2B-339933?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white">
-  <a href="#tools"><img alt="31 MCP tools" src="https://img.shields.io/badge/MCP-31_tools-1F6FEB?style=flat-square"></a>
+  <a href="#tools"><img alt="33 MCP tools" src="https://img.shields.io/badge/MCP-33_tools-1F6FEB?style=flat-square"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-0F766E?style=flat-square"></a>
   <br>
   <a href="https://mhmdaskari.github.io/overleaf-web-mcp/install/"><img alt="Works with Claude Code, Codex, Cursor, and VS Code" src="https://img.shields.io/badge/works_with-Claude_Code_%7C_Codex_%7C_Cursor_%7C_VS_Code-7C3AED?style=flat-square"></a>
@@ -30,7 +30,7 @@
   </picture>
 </p>
 
-Overleaf Web MCP is a [Model Context Protocol](https://modelcontextprotocol.io) server, the `overleaf-web-mcp` command line, and a TypeScript library, `createOverleafClient` from `overleaf-web-mcp/core`, all over one engine with the same safety checks. It signs in to Overleaf once through a browser window you control, then lets an AI assistant, a script, or your own program work on your projects the way you would in the web editor: browse files, make revision-checked edits, optionally as tracked changes, compile, and handle review comments. It uses the same browser-facing endpoints the Overleaf editor uses, so no Git integration or premium plan is needed for the core workflow.
+Overleaf Web MCP is a [Model Context Protocol](https://modelcontextprotocol.io) server, the `overleaf-web-mcp` command line, and a TypeScript library, `createOverleafClient` from `overleaf-web-mcp/core`, all over one engine with the same safety checks. It signs in to Overleaf once through a browser window you control, then lets an AI assistant, a script, or your own program work on your projects the way you would in the web editor: browse files, make revision-checked edits, optionally as tracked changes, compile, and handle review comments and tracked changes. It uses the same browser-facing endpoints the Overleaf editor uses, so no Git integration or premium plan is needed for the core workflow.
 
 ## What you can say
 
@@ -43,6 +43,7 @@ Once connected, talk to your assistant in plain language. It picks the tools.
 - "Which figures in `./figures` differ from what's in the project? Upload only those."
 - "Make the project match `~/papers/thesis`, and show me what would be deleted first."
 - "Summarize the open review comments and reply to the one about Table 2."
+- "Go through the tracked changes in `main.tex` with me, and accept the ones I approve."
 
 ## Get started
 
@@ -126,15 +127,15 @@ try {
 - **Write safely.** Replace a whole document or a single section. Every edit is checked against the revision you read first, so a collaborator's concurrent change is reported instead of overwritten. Edits can be recorded as Overleaf tracked changes.
 - **Work by section.** Parse `\section` headings in a file, read one section, replace one section.
 - **Compile.** Build the project's configured root document, or any document you name, and get the errors and warnings from its log by file and line, with a clear yes or no on whether it built cleanly. Read the full log, save the PDF or any other output locally, or stop a running compile.
-- **Review.** List comment threads with their locations, reply, add a comment anchored to exact text, and resolve or reopen threads.
+- **Review.** List comment threads with their locations, reply, add a comment anchored to exact text, and resolve or reopen threads. List tracked changes with their authors and locations, and accept or reject them once you have confirmed which. Accepting or rejecting them needs a project whose owner's Overleaf plan includes track changes, and on self-hosted Overleaf an edition that includes it; otherwise the decision is refused with nothing changed.
 - **Follow history.** Poll recent project history with a version cursor to see who changed what.
 
 ## Tools
 
-31 tools in eight groups: account, project lifecycle, files, folder sync, sections, compilation, review, and history. Read-only tools change nothing on Overleaf and write nothing on your computer. Destructive tools can replace or remove existing content, and all but `stop_compile` need a value repeated back first: the path, name, or count of what they delete, the revision of the document they replace, the `planToken` of a folder sync, or `overwrite` for a file that exists.
+33 tools in eight groups: account, project lifecycle, files, folder sync, sections, compilation, review, and history. Read-only tools change nothing on Overleaf and write nothing on your computer. Destructive tools can replace or remove existing content, and all but `stop_compile` need a value repeated back first: the path, name, or count of what they delete, the revision of the document they replace, the `planToken` of a folder sync, or `overwrite` for a file that exists.
 
 <details>
-<summary><strong>All 31 tools</strong>, with their annotations and local effects</summary>
+<summary><strong>All 33 tools</strong>, with their annotations and local effects</summary>
 
 An upload that would replace a file, and a folder sync without a `planToken`, are refused unless that replacement or unplanned sync is asked for by name. The last column shows which tools read or write files on the computer the server runs on. Every parameter and result is in the [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/); each tool is also `overleaf-web-mcp call <name>` and a method of `createOverleafClient`.
 
@@ -149,7 +150,7 @@ An upload that would replace a file, and a folder sync without a `planToken`, ar
 | Project lifecycle | `update_project_settings` | Set the root document, TeX engine, TeX Live image, or spell-check language | | |
 | Files | `get_project_tree` | Read the file tree with the project's compile settings | read-only | |
 | Files | `read_file` | Read a text document and its revision | read-only | |
-| Files | `write_file` | Replace a document with a revision-checked, minimal edit | destructive | reads |
+| Files | `write_file` | Replace a document with a revision-checked edit of only the changed words | destructive | reads |
 | Files | `create_file` | Create a text document, optionally with content | | |
 | Files | `manage_entity` | Create a folder, or rename, move, or delete an entity | destructive | |
 | Files | `upload_file` | Upload a local file, replacing what is at that path when confirmed | destructive | reads |
@@ -170,6 +171,8 @@ An upload that would replace a file, and a folder sync without a `planToken`, ar
 | Review | `reply_to_comment` | Reply in an existing thread | | |
 | Review | `add_comment` | Add a comment anchored to exact text | | |
 | Review | `set_comment_status` | Resolve or reopen a thread | destructive | |
+| Review | `list_tracked_changes` | List tracked changes with their locations and authors | read-only | |
+| Review | `manage_tracked_changes` | Accept or reject tracked changes in one document | destructive | |
 | History | `monitor_project_history` | Poll recent project history with a cursor | read-only | |
 
 </details>
@@ -177,7 +180,7 @@ An upload that would replace a file, and a folder sync without a `planToken`, ar
 ## How it keeps your project safe
 
 - Text edits require the revision from a prior read and fail with a conflict if the document changed underneath.
-- Tracked changes are opt-in and never silently downgraded to plain edits.
+- Tracked changes are opt-in and never silently downgraded to plain edits. Accepting or rejecting them needs the revision they were listed with and their number confirmed, and is verified afterwards.
 - Deleting a file requires its path to be confirmed, deleting several requires their count, and trashing or deleting a project requires its name. Projects go to the trash first; permanent deletion only works from there. Downloads, including a whole-project zip, never overwrite a local file unless asked, and never write over the saved session.
 - A write that times out is observed, never resubmitted, so nothing is applied twice. The same holds for each file in a batch upload.
 - A folder sync needs the `planToken` from `plan_sync`, and stops before changing anything if the project or the folder changed since the plan. It deletes only in mirror mode, only with the delete count confirmed, and never after a failed upload.
@@ -193,7 +196,7 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | | **This project** | [OverleafMCP](https://github.com/mjyoo2/OverleafMCP) | [olcli](https://github.com/aloth/olcli) | [overleaf-mcp-server](https://github.com/YounesBensafia/overleaf-mcp-server) | [overleaf-mcp-rt](https://github.com/DanielHou315/overleaf-mcp-rt) | [netique/overleaf-mcp](https://github.com/netique/overleaf-mcp) |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
-| Tools | 31 | 8 | 21 | 5 | 22 | 17 |
+| Tools | 33 | 8 | 21 | 5 | 22 | 17 |
 | Works without an MCP client (command line or library) | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Self-hosted Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹ |
@@ -202,7 +205,7 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | Sends edits as collaborative OT operations, not whole files | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
 | Refuses an edit if the document changed since it was read | ✅ | 🟡⁶ | ❌ | 🟡⁶ | ✅ | 🟡⁷ |
 | Writes as tracked changes when asked | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Accepts or rejects tracked changes | ❌ | ❌ | 🟡⁸ | ❌ | ❌ | ✅ |
+| Accepts or rejects tracked changes | ✅ | ❌ | 🟡⁸ | ❌ | ❌ | ✅ |
 | Reads and replaces one `\section` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Creates, renames, moves, and deletes files and folders | ✅ | 🟡⁹ | 🟡¹⁰ | 🟡⁹ | ✅ | ❌ |
 | Uploads and downloads binary files | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹¹ |
@@ -242,7 +245,7 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | --- | --- |
 | [Install](https://mhmdaskari.github.io/overleaf-web-mcp/install/) | Claude Code, Codex, Claude Desktop, Cursor, VS Code, the command line alone, self-hosted Overleaf, troubleshooting |
 | [Using it](https://mhmdaskari.github.io/overleaf-web-mcp/using/) | Example prompts and what happens underneath |
-| [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 31 tools with parameters and results |
+| [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 33 tools with parameters and results |
 | [Command line](https://mhmdaskari.github.io/overleaf-web-mcp/cli/) | Every command, request formats, output, exit codes, and the Agent Skills |
 | [TypeScript SDK](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) | `createOverleafClient`, results and errors, and the stable surface |
 | [Safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) | Revisions, tracked changes, confirmations, error codes |

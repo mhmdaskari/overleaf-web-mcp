@@ -1,6 +1,6 @@
 # Tool reference
 
-The server registers 31 tools. Names are `snake_case`. Each tool is also
+The server registers 33 tools. Names are `snake_case`. Each tool is also
 `overleaf-web-mcp call <name>` on the [command line](cli.md) and a camelCase method of
 `createOverleafClient` in the [TypeScript SDK](sdk.md), with the same parameters, results, and
 errors. Every tool except `auth_status`,
@@ -196,7 +196,7 @@ Returns `content` with line endings normalized to LF, the opaque `revision` need
 
 ### `write_file` <small>destructive</small>
 
-Replace a text document with a revision-checked, minimal, verified edit.
+Replace a text document with a revision-checked, verified edit of only the words that differ.
 
 | Parameter | Required | Meaning |
 | --- | :---: | --- |
@@ -212,13 +212,43 @@ Exactly one of `content` and `localPath` must be given. Returns the new `revisio
 during the recovery window after a timeout or a lost socket. A no-op write succeeds and records
 nothing. Fails with `REVISION_CONFLICT` if the document changed since the revision was read.
 
+The update changes only the words that differ, so text between two edits, and any comment or
+tracked change on it, is left alone. Word edits are sent only when none of them touches a comment
+or a tracked change; an edit that would is first cut down to the characters that differ, or moved
+along repeated text to a place clear of every range. With `writeMode: "tracked"`, each changed
+group of words becomes its own tracked change, or a deletion and an insertion side by side for a
+replacement, so a reviewer can accept or reject each one. Words one space apart count as one
+group. A write where an edit still touches a comment or a tracked change, or whose tracked
+changes would take the document past Overleaf's limit of 2,000, sends one edit per changed run of
+lines instead, or failing that one edit from the first change to the last, as before, as does a
+write too large to compare word by word, an untracked legacy-editor write to a document holding
+tracked deletions that share a point, or touching insertions by one author, which Overleaf merges
+after any untracked deletion, and a write whose word edits would have to send again a
+character outside the Basic Multilingual Plane the document holds, such as an emoji (that span is
+split around those characters).
+
+The account's access level is checked before the update is sent: a review-only collaborator can
+write only with `writeMode: "tracked"`, and a read-only one cannot write; either is
+`PERMISSION_DENIED` (`details.accessLevel`, `details.required`) with nothing sent. If Overleaf
+reports an error on the document after the update was sent, the write is observed on a fresh
+connection like a timed-out one, except `update is too large`, which is `UPDATE_TOO_LARGE` with
+`details.outcome: "not_applied"`. A tracked write is checked after it verifies: every span it
+inserted or deleted must be held by tracked changes by this account (text that was itself a
+tracked insert can simply be deleted). Otherwise it fails with `PROTOCOL_UNSUPPORTED`,
+`details.kind: "applied_untracked"`, and `details.liveRevision`. That write is live and is not
+reverted: read the file and review it before writing again. If another update followed the write
+before the check, such as a decision on its tracked changes, whether it was tracked can no longer
+be told: the write is live, and the result is `REVISION_CONFLICT` with
+`details.outcome: "unknown"` and `details.liveRevision`.
+
 On a ShareJS document (`protocol: "sharejs"`, Overleaf's legacy editor), characters outside the
 Basic Multilingual Plane, such as emoji, cannot be sent: the legacy editor would store each as
 U+FFFD. Text that adds such a character, adds another copy of one the document already holds, or
 changes their order fails with `INVALID_ARGUMENT` (`details.line`, the 1-based line of the first
 added one) and nothing is sent. Replace them, for example with a LaTeX command. Editing text on
 either side of one the document already holds is fine: the change is sent as several edits that
-step around it. History-OT documents are not affected.
+step around it, as one span from the first change to the last if the word edits would move it.
+History-OT documents are not affected.
 
 ### `create_file`
 
@@ -640,9 +670,11 @@ What happens, in order:
 
 Nothing is retried automatically. Returns `status` (`complete`, or `partial` when anything failed
 or was not attempted), `mode`, `completed` (`{ destinationPath, action, entityId? }`), `failed`
-(`{ destinationPath, action, errorCode, message, details? }`, where `errorCode` is one of the codes
+(`{ destinationPath, action, errorCode, message, details?, kind? }`, where `errorCode` is one of the codes
 in the [safety model](safety.md#error-codes) and `details` is the failed step's own error
-details, such as `reason`, `status`, `outcome`, `liveRevision`, or `created`),
+details, such as `reason`, `status`, `outcome`, `liveRevision`, or `created`, and `kind:
+"applied_untracked"` beside them when a tracked step applied without being recorded as tracked
+changes),
 `remaining` (`{ destinationPath, action }`, what was not attempted), `identicalCount`,
 `planToken`, `planned` (whether the call was checked against a `planToken`; `false` only with
 `unplanned: true`).
@@ -963,6 +995,80 @@ lost its socket, or whose verification read failed is never resent but observed:
 after a lost socket, with `details.outcome: "not_applied"` and `retryable: false` when it never
 appeared, and `OUTCOME_UNKNOWN` when it cannot be observed, or when Overleaf accepted the change
 but the requested status was not seen.
+
+### `list_tracked_changes` <small>read-only</small>
+
+List tracked changes (suggestions) and where they are.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `filePath` | no | Only this document, read directly rather than through the range index |
+| `type` | no | `insert` or `delete` |
+| `authorId` | no | Only changes by this Overleaf user id |
+| `excerptChars` | no | Longest excerpt of each change in UTF-16 units, 0 to 500, default 120; 0 for none |
+| `limit` | no | Most changes returned across all documents, 1 to 500, default 100 |
+
+Returns `documents`, `totalMatched` (every change that matched, before `limit`), `truncated`,
+and `trackChangesActive`. Each document has `filePath`, `revision` (pass it to
+`manage_tracked_changes`), `protocol`, `totalChanges` (every tracked change in the document,
+unfiltered), `undecidableChanges` when Overleaf stored some changes without an id, which cannot
+be decided here, and `changes`. Each change has `changeId`, `type`, `start` and `end` (1-based
+line and UTF-16 column in the text `read_file` returns; a delete is a point, so its `start`
+equals its `end`), `length` in UTF-16 units, `excerpt` (the inserted or deleted text, cut to
+`excerptChars` without splitting a surrogate pair) with `excerptTruncated`, `authorId` (an
+Overleaf user id, or `null`), an ISO `timestamp`, and `pairedChangeId` linking the insert and the
+delete of one replacement. No email address is ever returned.
+
+With `filePath`, that document is read and its list is authoritative. Without it, Overleaf's
+project range index only chooses which documents to read: just the documents it lists with
+changes are read, never every document, and its change ids are never used. The index may lag or
+leave a document out, so name a document with `filePath` for an authoritative list; this matters
+most for history-OT documents, whose index ids are never valid. When the deployment has no
+index, the result has `indexUnavailable: true` and no document is read. Ids merge and split as the
+document is edited, and history-OT ids are made up by this server from the change itself, valid
+only with the revision they were listed with, so list again before deciding.
+
+### `manage_tracked_changes` <small>destructive</small>
+
+Accept or reject tracked changes in one document.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `filePath` | yes | The document the changes are in |
+| `revision` | yes | The revision `list_tracked_changes` returned for that document |
+| `action` | yes | `accept` or `reject` |
+| `changeIds` | yes | 1 to 500 `changeId` values, each once |
+| `confirmCount` | yes, in practice | Must equal the number of `changeIds`, after the user has confirmed them |
+
+Accepting an insert keeps its text and accepting a delete removes it; rejecting an insert removes
+its text and rejecting a delete restores it. A tracked replacement is an insert and a delete
+linked by `pairedChangeId`: pass both ids. Before anything is sent, in this order: a missing or
+different `confirmCount` is `CONFIRMATION_MISMATCH`; access other than owner or edit (a
+review-only or read-only collaborator) is `PERMISSION_DENIED`; a project whose owner's plan or
+whose deployment does not offer track changes is `REVIEW_UNSUPPORTED` with
+`details.kind: "feature_disabled"`; a stale revision is `REVISION_CONFLICT`; an id that is not a
+tracked change in the document is `NOT_FOUND` with `details.missingChangeIds`; and a change left
+out that overlaps a chosen one is `INVALID_ARGUMENT` with `details.overlappingChangeIds`.
+`REVIEW_UNSUPPORTED` with `details.kind` `route_unavailable` or `document_protocol` means this
+Overleaf cannot decide changes that way.
+
+On a ShareJS (legacy editor) document an accept goes through Overleaf's accept route and a reject
+is one untracked edit that undoes the changes; on a history-OT document both are one untracked
+edit. Rejecting on a ShareJS document may notify the change's author; on a history-OT document it
+does not. The decision is sent once and verified on a fresh read. One that timed out is observed,
+never resent: `recoveredAfterTimeout: true` when it applied, `TIMEOUT`, or `REMOTE_ERROR` after a
+lost socket or a server error, with `details.outcome: "not_applied"` when the changes stayed as
+they were, `REVISION_CONFLICT` with `details.outcome: "unknown"` when the document changed
+meanwhile, and `OUTCOME_UNKNOWN` when it could not be observed. A repeated decision changes
+nothing: it fails with `REVISION_CONFLICT` when the first one changed the document's revision, as
+every reject and every history-OT decision does, or with `NOT_FOUND` when it did not, as after an
+accept on a ShareJS document, which leaves the revision as it was.
+
+Returns `action`, `filePath`, `changeIds`, the resulting `revision` and `protocol`,
+`remainingChangeCount` (tracked changes left in the document), `trackChangesActive`, and
+`recoveredAfterTimeout`. List again after every decision.
 
 ## History
 

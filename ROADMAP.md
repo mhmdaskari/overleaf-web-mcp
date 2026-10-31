@@ -180,8 +180,8 @@ what you find:
       `server/discover` results.
 - [ ] `SERVER_INSTRUCTIONS` stays under the 450-word bound in `test/server.test.ts` (444 words at
       0.4.0, 445 at 0.4.1, 392 at 0.5.0, which brought it under 400 once so v0.6.0 and v0.8.0 can
-      spend the headroom, 417 at 0.6.0, 440 at 0.6.2 and 0.7.0); after that, a stage that adds
-      guidance trims elsewhere.
+      spend the headroom, 417 at 0.6.0, 440 at 0.6.2 and 0.7.0, 445 at 0.8.0); after that, a stage
+      that adds guidance trims elsewhere.
 - [ ] The limits and their environment variables still hold: `OVERLEAF_MAX_DOC_LENGTH` (fallback
       2,097,152 UTF-16 code units → `DOC_TOO_LARGE`) and `OVERLEAF_MAX_UPDATE_CHARS` (7,340,032
       serialized characters → `UPDATE_TOO_LARGE`).
@@ -847,18 +847,18 @@ Every other operation is reached through `call`. Exit codes apply to operation c
 
 **Motivation:** tracked changes can be written (`writeMode: "tracked"`) but not listed, accepted, or rejected, the second gap in the README comparison ("Accepts or rejects tracked changes"), which a web-session peer already covers. history-ot `trackedChanges` are read only to strip tracked deletions from visible content (`historyVisibleContent` in `src/protocol/ot.ts`), and ShareJS `ranges.changes` is never read. The same blind spot weakens tracked writes: `DocumentsApi.writeFile` verifies only the visible content hash, so a tracked insert that Overleaf recorded untracked passes verification. The range parsers this stage needs close that gap too.
 
-**Verify first.** No captured frame here holds a non-empty change (the fixtures under `test/fixtures/protocol` show `"changes":[]` and `"trackedChanges":[]`), and no accept or reject route is in `docs/private-api.md`. Confirm each item in `overleaf/overleaf` at the commit the release targets, record it in `docs/private-api.md`, and gate anything unconfirmed with `REVIEW_UNSUPPORTED` rather than guessing (`details.kind: "document_protocol"` for a document protocol with no confirmed mechanism). All ten are *(verify in code)*:
+**Verify first.** Before this stage, no captured frame here held a non-empty change (the fixtures under `test/fixtures/protocol` show `"changes":[]` and `"trackedChanges":[]`), and no accept or reject route is in `docs/private-api.md`. Confirm each item in `overleaf/overleaf` at the commit the release targets, record it in `docs/private-api.md`, and gate anything unconfirmed with `REVIEW_UNSUPPORTED` rather than guessing (`details.kind: "document_protocol"` for a document protocol with no confirmed mechanism). All ten were checked against `overleaf/overleaf` e039ad2 and, where a disposable project allowed it, live on `www.overleaf.com` on 2026-10-30; what was found follows each item, and the details are in `docs/private-api.md`:
 
-1. The accept route, believed to be `POST /project/:project_id/doc/:doc_id/changes/accept` with `{ change_ids }`: authorization, version bump, and history-ot support.
-2. How the editor rejects: a reject route, or an untracked inverse OT operation (for ShareJS, an insert with an undo flag that cancels a delete change).
-3. The ShareJS change shape `{ id, op: { p, i } | { p, d }, metadata: { user_id, ts } }`.
-4. Whether `joinDoc` with `encodeRanges: true` encodes range text as it encodes lines.
-5. The raw history-ot `trackedChanges` form (see `HistorySnapshot` in `src/protocol/ot.ts`): no ids, adjacent-range merging, and the `TextOperation` forms that clear tracking or delete.
-6. Whether `GET /project/:id/ranges` returns `changes`, history-ot documents included.
-7. `project.features.trackChanges` in `joinProject`, and the privilege levels `owner`, `readAndWrite`, `review`, `readOnly`.
-8. Whether `meta.tc` on a tracked ShareJS update is the author or an id seed; this server's tracked writes set it to the user id.
-9. Whether `applyOtUpdate` forces tracking for the `review` privilege.
-10. The real-time service's `otUpdateError` messages (the too-large case in particular) and which clients receive the event.
+1. The accept route, believed to be `POST /project/:project_id/doc/:doc_id/changes/accept` with `{ change_ids }`: authorization, version bump, and history-ot support. **Not in public source; confirmed live.** The web handler is private, so its authorization is unknown (the editor offers Accept only to users who can write). Live: 204 with an empty body, no version bump, content unchanged, ids gone; unknown, already accepted, or no ids also give 204, so ids are checked locally first; a non-ObjectId id gives 400, an unknown document 500, an unknown route 404. document-updater refuses a history-ot document with 422, so REST accept is for ShareJS only.
+2. How the editor rejects: a reject route, or an untracked inverse OT operation (for ShareJS, an insert with an undo flag that cancels a delete change). **Confirmed, changed.** No client route: `/changes/reject` is a private notification route document-updater calls. A ShareJS reject is one untracked update with `u: true` on every component, a reject insert `{ p, d, u: true }` as well as a reject delete `{ p, i, u: true }`, in ascending order with cumulative shifts and `d` before `i` at equal `p`. Live-verified for a delete, an insert, and a replacement pair in one update.
+3. The ShareJS change shape `{ id, op: { p, i } | { p, d }, metadata: { user_id, ts } }`. **Confirmed, with tolerances**, in source and live: `ts` is an ISO string, `user_id` an opaque string (it can be `anonymous-user` or null), `id` can be missing after a history restore, and `op` can carry other keys. Same-user touching inserts merge and keep the first id; a replacement is an insert at `p` plus a delete at `p` plus the insert's length.
+4. Whether `joinDoc` with `encodeRanges: true` encodes range text as it encodes lines. **Confirmed**, in source and live: `op.i`, `op.d`, and `op.c` of a ShareJS document are Latin-1-read UTF-8 like the lines; `p`, ids, and metadata are not encoded, and `/ranges` text is plain UTF-8. 0.7.1 does not decode `op.c`, so non-ASCII comment ranges are wrong there; this stage fixes it.
+5. The raw history-ot `trackedChanges` form (see `HistorySnapshot` in `src/protocol/ot.ts`): no ids, adjacent-range merging, and the `TextOperation` forms that clear tracking or delete. **Confirmed in source, not captured live** (no history-ot document was available): no ids; touching ranges with the same type and user merge, keeping the earliest timestamp, only after a `TextOperation`; empty `comments` and `trackedChanges` keys are left out; the decision forms are in the table below.
+6. Whether `GET /project/:id/ranges` returns `changes`, history-ot documents included. **Not in public source; confirmed live** for ShareJS: a top-level array `[{ id, ranges }]` with `changes`, unflushed changes included, plain UTF-8 text, and the joinDoc ids. Its ids for a history-ot document are drawn at random on every flush, so they are never valid.
+7. `project.features.trackChanges` in `joinProject`, and the privilege levels `owner`, `readAndWrite`, `review`, `readOnly`. **Confirmed, changed.** The levels are as listed. `features` are the owner's, and `features.trackChanges: true` alone proves nothing: `features.trackChangesVisible` says whether the deployment has the review module (true live, false in the public source).
+8. Whether `meta.tc` on a tracked ShareJS update is the author or an id seed. **Confirmed: an 18-hex id seed**, the only key `meta` may hold. Tracking is on when it is present, the author is the session's user, and change ids are `tc` plus a six-hex counter. This server already sends a fresh seed on every tracked write, since 0.6.2.
+9. Whether `applyOtUpdate` forces tracking for the `review` privilege. **Confirmed: it does not.** Authorization follows the op's shape (`meta.tc` needs review level, an untracked text change edit level), and an unauthorized update gets `not authorized` and a disconnect, so every OT write gets a local access check before it is sent.
+10. The real-time service's `otUpdateError` messages (the too-large case in particular) and which clients receive the event. **Confirmed, changed.** `update is too large` is emitted by real-time to the sender only, after a success ack, then a disconnect, with nothing stored. document-updater errors (`Invalid hash`, `Delete component does not match`, and other fixed strings) are emitted to every socket joined to the document and can follow `otUpdateApplied`: live, a wrong hash was acknowledged, then errored and disconnected, with nothing stored.
 
 ### Tools
 
@@ -867,8 +867,10 @@ list_tracked_changes({ projectId: string, filePath?: string, type?: "insert" | "
                        authorId?: string, excerptChars?: number /* 0..500, default 120 */,
                        limit?: number /* 1..500, default 100 */ })
   → { documents: [{ filePath, revision, protocol: "sharejs" | "history-ot", totalChanges,
+                    undecidableChanges?,                 // changes stored without an id
                     changes: [{ changeId, type, start: { line, column }, end: { line, column },
-                                length, excerpt?, excerptTruncated, authorId, timestamp }] }],
+                                length, excerpt?, excerptTruncated, authorId, timestamp?,
+                                pairedChangeId? }] }],  // links the two halves of a replacement
       totalMatched, truncated, trackChangesActive, indexUnavailable?: true }
   // positions 1-based in UTF-16 units. annotations: readOnlyHint true
 
@@ -889,33 +891,35 @@ CLI: `tracked-changes list <projectId> [--file <path>]` and `tracked-changes acc
 
 - **Two tools.** Listing is read-only and cannot share a tool with a destructive action; decisions reuse the `manage_` action-enum pattern, one document per call, because revisions, the accept route, and OT are per document.
 - **`confirmCount` is optional in the schema and checked by `TrackedChangesApi`**, as `sync_directory` checks `confirmDeleteCount`, so a missing value is `CONFIRMATION_MISMATCH`, not a schema error.
-- **Listing never scans every document.** Without `filePath` it reads the `/ranges` index `list_comments` already uses and joins only documents with changes, or returns `indexUnavailable: true`. `filePath` is authoritative, since the index may omit history-ot documents (item 6).
-- **Checks before anything is sent:** `confirmCount`; access level (`owner` or `readAndWrite`, else `PERMISSION_DENIED`); `features.trackChanges === false` (`REVIEW_UNSUPPORTED`, `details.kind: "feature_disabled"`); revision; every id live (`NOT_FOUND`); no overlap with a change left out (`INVALID_ARGUMENT`). Then submit once and verify against a fresh join.
-- **Mechanisms**, all *(verify in code)* per the list above. The expected state is computed locally and canonicalized before comparing; size limits are checked first. Reject operations carry no tracking metadata, so they are not tracked writes that fell back.
+- **Listing never scans every document.** Without `filePath` it reads the `/ranges` index `list_comments` already uses and joins only documents with changes, or returns `indexUnavailable: true`. `filePath` is authoritative: index ids are never valid for history-ot documents; the index is a hint for choosing ShareJS documents to join (item 6).
+- **Checks before anything is sent:** `confirmCount`; access level (`owner` or `readAndWrite`, else `PERMISSION_DENIED`); `features.trackChanges === false` or `features.trackChangesVisible === false` (`REVIEW_UNSUPPORTED`, `details.kind: "feature_disabled"`); revision; every id live (`NOT_FOUND`); no overlap with a change left out (`INVALID_ARGUMENT`). Then submit once and verify against a fresh join.
+- **Mechanisms**, confirmed per the list above and recorded in `docs/private-api.md`. The expected state is computed locally and canonicalized before comparing; size limits are checked first. Reject operations carry no tracking metadata, so they are not tracked writes that fell back.
 
   | Document | accept insert | accept delete | reject insert | reject delete |
   | --- | --- | --- | --- | --- |
-  | ShareJS | REST accept (1) | REST accept (1) | untracked OT delete of the text | untracked OT insert with undo (2) |
-  | history-ot | OT retain with `tracking: { type: "none" }` (5) | OT delete (5) | OT delete | OT retain with `tracking: { type: "none" }` |
+  | ShareJS | REST accept (1), ShareJS only | REST accept (1), ShareJS only | untracked OT `{ p, d, u: true }` (2) | untracked OT `{ p, i, u: true }` at the delete's `p` (2) |
+  | history-ot | `{ r: n, tracking: { type: "none" } }` (5) | `-n` (5) | `-n` (5) | `{ r: n, tracking: { type: "none" } }` (5) |
+
+  A ShareJS reject is one update, ascending, with cumulative shifts and `d` before `i` at equal `p`. History-ot decisions for one document are one `TextOperation` in ascending raw position, retaining the gaps and ending with a retain to the raw length; history-ot forms are confirmed in source, not captured live.
 
 - **History-ot ids are synthesized** (`ht_` plus 22 base64url characters of a SHA-256 over document, type, position, length, user, and timestamp), valid only with the listed revision.
 - **Timeouts are observed, never resent**, through one recovery helper extracted from `DocumentsApi.writeFile` and the comment writes: target state seen, `recoveredAfterTimeout: true`; original state live through the window, `TIMEOUT` with `"not_applied"`; a third state, `REVISION_CONFLICT` with `"unknown"`; nothing seen, `OUTCOME_UNKNOWN`.
-- **The same parsers check tracked writes.** Every inserted span must sit in a new tracked insert by the current user, every deleted span in a new tracked delete. Otherwise the write fails with `PROTOCOL_UNSUPPORTED`, `retryable: false`, and `details.kind: "applied_untracked"`, with no `details.outcome`, because it applied; it is never reverted, since a revert is another write.
-- **`otUpdateError` is classified, not echoed**: `update is too large` is `UPDATE_TOO_LARGE` with `"not_applied"`; anything else goes through observation, since Overleaf broadcasts it to every client on the document *(verify in code: item 10)*.
+- **The same parsers check tracked writes**, by coverage, so the check already holds for an operation with several components. ShareJS: after the write every inserted span is covered by a tracked insert whose author is the current user, and every deleted span is covered by a tracked delete by the current user or lay inside a tracked insert, of any author, before the write. History-ot: inserted spans are covered by `type: "insert"` with this user's `userId`, and deleted spans by `type: "delete"` with it. A covering change need not be new, since same-user changes merge and keep their first id. Otherwise the write fails with `PROTOCOL_UNSUPPORTED`, `retryable: false`, and `details.kind: "applied_untracked"`, with no `details.outcome`, because it applied; it is never reverted, since a revert is another write.
+- **`otUpdateError` is classified, not echoed**: `update is too large`, the exact first argument, which real-time sends to the sender only, is `UPDATE_TOO_LARGE` with `"not_applied"`; anything else goes through observation on a fresh connection, since document-updater errors are broadcast to every client joined to the document and may follow the ack (item 10).
 - **Independent code**: the upstream range libraries and the peer server are AGPL-3.0, this package MIT.
 - **Plan and edition.** Review may need a paid plan on `www.overleaf.com` *(verify live)* and Server Pro when self-hosted *(verify against the current Community Edition)*; the free-plan positioning does not extend to it.
 - **Known limits**, stated in the descriptions: the revision ignores ranges, so per-id checks catch a concurrent accept; after a history-ot decision removes text, re-list; a decision landing after the recovery window is reported `not_applied`, as with `write_file`.
 
 ### Tasks
 
-- [ ] Confirm items 1–10 into `docs/private-api.md`, and capture sanitized fixtures `test/fixtures/protocol/sharejs-tracked-changes.json` and `history-ot-tracked-changes.json` from a disposable project (an insert, a delete, a replacement pair, non-ASCII text; placeholder ids, users, and timestamps), plus a hygiene test over `test/fixtures/protocol` that fails on 24-hex ids, email addresses, and session cookie names.
-- [ ] `src/protocol/tracked-changes.ts` (pure parsers, ids, locations, excerpts, overlap detection, decision planner) with exact-operation tests; the shared recovery helper, with documents and comments moved onto it.
-- [ ] `TrackedChangesApi` in `src/overleaf/tracked-changes.ts`, inside the per-project queue, reading `features.trackChanges` and `permissionsLevel` from `ProjectConnection`; contract entries (`overleaf-read`, `overleaf-write`) registered after `set_comment_status`; `REVIEW_UNSUPPORTED` in `ERROR_CODES`.
-- [ ] CLI aliases and `docs/cli.md`; `src/cli/exit-codes.ts` maps `REVIEW_UNSUPPORTED` to 3 and `applied_untracked` to 4.
-- [ ] The fidelity check in `DocumentsApi.writeFile`, skipping no-op writes, with an optional `kind` on `SyncFailure` (`src/overleaf/sync.ts`); the `otUpdateError` mapping in `ProjectConnection.submitUpdate`.
-- [ ] Tracked-change decisions join the review task in `test/live/compare-interfaces.test.ts`.
-- [ ] A "Tracked changes" paragraph in `src/mcp/instructions.ts` within the 450-word bound: list first, confirm with the user, pass revision, ids, and a matching `confirmCount`, re-list after `REVISION_CONFLICT` or `NOT_FOUND`.
-- [ ] README (the counts, two Review rows, the comparison row, the plan caveat), `docs/tools.md`, `docs/safety.md`, `docs/internals.md`, `docs/using.md`; an opt-in live test behind `RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`; CHANGELOG 0.8.0 `Added` and `Changed`.
+- [x] Confirm items 1–10 into `docs/private-api.md`, and capture sanitized fixtures `test/fixtures/protocol/sharejs-tracked-changes.json` and `history-ot-tracked-changes.json` from a disposable project (an insert, a delete, a replacement pair, non-ASCII text; placeholder ids, users, and timestamps), plus a hygiene test over `test/fixtures/protocol` that fails on 24-hex ids, email addresses, and session cookie names. The history-ot fixture is hand-authored from source, since no history-ot document was available live.
+- [x] `src/protocol/tracked-changes.ts` (pure parsers, ids, locations, excerpts, overlap detection, decision planner) with exact-operation tests; the shared recovery helper, with documents and comments moved onto it.
+- [x] `TrackedChangesApi` in `src/overleaf/tracked-changes.ts`, inside the per-project queue, reading `features.trackChanges` and `permissionsLevel` from `ProjectConnection`; contract entries (`overleaf-read`, `overleaf-write`) registered after `set_comment_status`; `REVIEW_UNSUPPORTED` in `ERROR_CODES`.
+- [x] CLI aliases and `docs/cli.md`; `src/cli/exit-codes.ts` maps `REVIEW_UNSUPPORTED` to 3 and `applied_untracked` to 4.
+- [x] The fidelity check in `DocumentsApi.writeFile`, skipping no-op writes, with an optional `kind` on `SyncFailure` (`src/overleaf/sync.ts`); the `otUpdateError` mapping in `ProjectConnection.submitUpdate`.
+- [x] Tracked-change decisions join the review task in `test/live/compare-interfaces.test.ts`.
+- [x] Tracked-change guidance in `src/mcp/instructions.ts` (a "Review" paragraph shared with `add_comment`) within the 450-word bound: list first, confirm with the user, pass revision, ids, and a matching `confirmCount`, re-list after `REVISION_CONFLICT` or `NOT_FOUND`.
+- [x] README (the counts, two Review rows, the comparison row, the plan caveat), `docs/tools.md`, `docs/safety.md`, `docs/internals.md`, `docs/using.md`; an opt-in live test behind `RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`; CHANGELOG 0.8.0 `Added` and `Changed`.
 
 ### Acceptance
 

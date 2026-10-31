@@ -68,6 +68,32 @@ function call(tool: OperationName, input: Record<string, unknown>, extra: Partia
   return { tool, input: defined(input), progress: false, ...extra }
 }
 
+/** `tracked-changes accept` and `tracked-changes reject`, which differ only in the action. */
+function decisionAlias(action: 'accept' | 'reject', summary: string): AliasCommand {
+  return {
+    words: ['tracked-changes', action],
+    tool: 'manage_tracked_changes',
+    usage: `tracked-changes ${action} <projectId> <path> --revision <r> --change <id>... --confirm-count <n>`,
+    summary,
+    positionals: ['projectId', 'path'],
+    options: {
+      revision: { type: 'string' },
+      change: { type: 'string', multiple: true },
+      'confirm-count': { type: 'string' },
+    },
+    // A missing --confirm-count is left to the operation, which refuses it with CONFIRMATION_MISMATCH.
+    build: ([projectId, filePath], values) =>
+      call('manage_tracked_changes', {
+        projectId,
+        filePath,
+        revision: text(values, 'revision'),
+        action,
+        changeIds: list(values, 'change'),
+        confirmCount: wholeNumber(values, 'confirm-count'),
+      }),
+  }
+}
+
 export const ALIASES: readonly AliasCommand[] = [
   {
     words: ['projects', 'list'],
@@ -311,6 +337,32 @@ export const ALIASES: readonly AliasCommand[] = [
         author: text(values, 'author'),
       }),
   },
+  {
+    words: ['tracked-changes', 'list'],
+    tool: 'list_tracked_changes',
+    usage:
+      'tracked-changes list <projectId> [--file <path>] [--type insert|delete] [--author <id>] [--limit <n>] [--excerpt-chars <n>]',
+    summary: 'List tracked changes with their locations and the revision to decide them with',
+    positionals: ['projectId'],
+    options: {
+      file: { type: 'string' },
+      type: { type: 'string' },
+      author: { type: 'string' },
+      limit: { type: 'string' },
+      'excerpt-chars': { type: 'string' },
+    },
+    build: ([projectId], values) =>
+      call('list_tracked_changes', {
+        projectId,
+        filePath: text(values, 'file'),
+        type: text(values, 'type'),
+        authorId: text(values, 'author'),
+        limit: wholeNumber(values, 'limit'),
+        excerptChars: wholeNumber(values, 'excerpt-chars'),
+      }),
+  },
+  decisionAlias('accept', 'Accept tracked changes in one document: keep inserted text, remove deleted text'),
+  decisionAlias('reject', 'Reject tracked changes in one document: remove inserted text, restore deleted text'),
 ]
 
 /** The generic commands, which reach every operation and describe the contracts. */

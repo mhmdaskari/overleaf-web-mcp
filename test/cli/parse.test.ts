@@ -146,6 +146,67 @@ describe('CLI command line', () => {
       tool: 'list_comments',
       input: { projectId: 'p', status: 'all', filePath: 'main.tex' },
     })
+    expect(
+      parseCommandLine([
+        'tracked-changes',
+        'list',
+        'p',
+        '--file',
+        'main.tex',
+        '--type',
+        'delete',
+        '--author',
+        'u1',
+        '--limit',
+        '20',
+        '--excerpt-chars',
+        '0',
+      ])
+    ).toEqual({
+      kind: 'alias',
+      command: 'tracked-changes list',
+      tool: 'list_tracked_changes',
+      input: { projectId: 'p', filePath: 'main.tex', type: 'delete', authorId: 'u1', limit: 20, excerptChars: 0 },
+      progress: false,
+    })
+    for (const action of ['accept', 'reject'] as const) {
+      expect(
+        parseCommandLine([
+          'tracked-changes',
+          action,
+          'p',
+          'main.tex',
+          '--revision',
+          'r',
+          '--change',
+          'c1',
+          '--change',
+          'c2',
+          '--confirm-count',
+          '2',
+        ])
+      ).toEqual({
+        kind: 'alias',
+        command: `tracked-changes ${action}`,
+        tool: 'manage_tracked_changes',
+        input: {
+          projectId: 'p',
+          filePath: 'main.tex',
+          revision: 'r',
+          action,
+          changeIds: ['c1', 'c2'],
+          confirmCount: 2,
+        },
+        progress: false,
+      })
+    }
+    // A missing --confirm-count is the operation's to refuse, so it is left out, never filled in.
+    expect(
+      parseCommandLine(['tracked-changes', 'accept', 'p', 'main.tex', '--revision', 'r', '--change', 'c1'])
+    ).toMatchObject({ input: { changeIds: ['c1'] } })
+    expect(
+      parseCommandLine(['tracked-changes', 'accept', 'p', 'main.tex', '--revision', 'r', '--change', 'c1'])
+    ).not.toHaveProperty('input.confirmCount')
   })
 
   test('refuses an alias call that cannot be right, before any operation', () => {
@@ -157,6 +218,10 @@ describe('CLI command line', () => {
       ['compile', 'run', 'p', '--overwrite'],
       ['projects', 'list', '--limit', 'ten'],
       ['sync', 'apply', 'p', '.', '--mode', 'mirror', '--confirm-delete-count', '-1'],
+      ['tracked-changes', 'accept', 'p', 'main.tex', '--revision', 'r', '--change', 'c', '--confirm-count', 'one'],
+      ['tracked-changes', 'list', 'p', '--excerpt-chars', '1.5'],
+      ['tracked-changes', 'decide', 'p'],
+      ['tracked-changes', 'reject', 'p', '--revision', 'r', '--change', 'c', '--confirm-count', '1'],
     ]) {
       expect(usage(argv), argv.join(' ')).toMatchObject({ code: 'INVALID_ARGUMENT' })
     }

@@ -2,7 +2,7 @@ import { asMcpError, McpError } from '../core/errors.js'
 import { assertUpdateSize } from '../core/limits.js'
 import { AccessPolicy, assertPathSafeId } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
-import { assertRevisionMatches, contentHash, createRevision, type OtProtocol } from '../core/revision.js'
+import { assertRevisionMatches, createRevision, type OtProtocol } from '../core/revision.js'
 import { lineColumnToOffset, normalizeLf, offsetToLineColumn, type LineColumn } from '../core/text.js'
 import {
   buildCommentOperation,
@@ -14,6 +14,13 @@ import {
   type HistorySnapshot,
 } from '../protocol/ot.js'
 import type { JoinedDocument } from '../protocol/project-connection.js'
+import {
+  isUnchangedDocument,
+  isUnconfirmedWriteError,
+  notAppliedError,
+  observeUnconfirmedWrite,
+  refusedUpdateReason,
+} from './recovery.js'
 import { resolveProjectPath, type ProjectEntity } from './tree.js'
 
 interface CommentHttp {
@@ -433,7 +440,7 @@ export class CommentsApi {
         }
       )
     } catch (error) {
-      if (!(error instanceof McpError) || !['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(error.code)) {
+      if (!isUnconfirmedWriteError(error)) {
         throw error
       }
       // A timed-out POST is accepted only when author, content, and request window identify one reply.
@@ -521,7 +528,7 @@ export class CommentsApi {
               content: messageContent,
             })
           } catch (error) {
-            if (!(error instanceof McpError) || !['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(error.code)) {
+            if (!isUnconfirmedWriteError(error)) {
               throw asMcpError(error)
             }
             // A failed read-back cannot tell whether the thread was created, so it is not retryable either.
@@ -555,7 +562,7 @@ export class CommentsApi {
           }
           await leaveQuietly(connection, entity.id)
           // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
-          if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
+          if (isUnconfirmedWriteError(submitError)) {
             return {
               entity,
               before,
@@ -610,15 +617,12 @@ export class CommentsApi {
     let recoveredAfterTimeout = false
     // Overleaf acknowledged the attachment and only its verification read failed, so it is never cleaned up.
     const confirmed = submit.confirmed === true
-    const timedOut = submit.submitError instanceof McpError && submit.submitError.code === 'TIMEOUT'
     if (!live) {
       // An ambiguous attachment is recovered by observing the generated thread ID and exact range.
       await this.#connections.invalidate(input.projectId)
-      const deadline = Date.now() + this.#recoveryTimeoutMs
-      let observationError: unknown
-      do {
-        try {
-          live = await this.#connections.withConnection(
+      const observation = await observeUnconfirmedWrite({
+        observe: async () =>
+          await this.#connections.withConnection(
             input.projectId,
             async connection =>
               await connection.queue.run(async () => {
@@ -627,45 +631,31 @@ export class CommentsApi {
                 await leaveQuietly(connection, entity.id)
                 return document
               })
-          )
-          observationError = undefined
-          const range = attachment(live, threadId)
-          if (range?.start === submit.visibleStart && range.end === submit.visibleEnd) break
-          const unchanged =
-            live.protocol === submit.before.protocol &&
-            live.version === submit.before.version &&
-            contentHash(live.content) === contentHash(submit.before.content)
-          if (!unchanged) {
-            throw new McpError(
-              'OUTCOME_UNKNOWN',
-              'The document changed while the comment attachment remained unconfirmed.',
-              { details: { threadId } }
-            )
-          }
-        } catch (error) {
-          if (error instanceof McpError && error.code === 'OUTCOME_UNKNOWN') throw error
-          live = undefined
-          observationError = error
-        }
-        if (Date.now() >= deadline) break
-        await new Promise<void>(resolve => setTimeout(resolve, this.#recoveryPollIntervalMs))
-      } while (Date.now() <= deadline)
-      if (!live) {
-        throw new McpError('OUTCOME_UNKNOWN', 'Could not verify the unconfirmed comment attachment.', {
-          cause: observationError,
-          details: { threadId },
-        })
-      }
+          ),
+        classify: document => {
+          const range = attachment(document, threadId)
+          if (range?.start === submit.visibleStart && range.end === submit.visibleEnd) return 'target'
+          return isUnchangedDocument(document, submit.before) ? 'original' : 'other'
+        },
+        timeoutMs: this.#recoveryTimeoutMs,
+        pollIntervalMs: this.#recoveryPollIntervalMs,
+        onOther: () =>
+          new McpError('OUTCOME_UNKNOWN', 'The document changed while the comment attachment remained unconfirmed.', {
+            details: { threadId },
+          }),
+        onUnobserved: cause =>
+          new McpError('OUTCOME_UNKNOWN', 'Could not verify the unconfirmed comment attachment.', {
+            cause,
+            details: { threadId },
+          }),
+      })
+      live = observation.observed
       recoveredAfterTimeout = true
     }
 
     const verifiedRange = attachment(live, threadId)
     if (verifiedRange?.start !== submit.visibleStart || verifiedRange.end !== submit.visibleEnd) {
-      const unchanged =
-        live.protocol === submit.before.protocol &&
-        live.version === submit.before.version &&
-        contentHash(live.content) === contentHash(submit.before.content)
-      if (confirmed || !recoveredAfterTimeout || !unchanged) {
+      if (confirmed || !recoveredAfterTimeout || !isUnchangedDocument(live, submit.before)) {
         throw new McpError('OUTCOME_UNKNOWN', 'The comment thread exists but its exact range could not be verified.', {
           details: { threadId },
         })
@@ -681,9 +671,10 @@ export class CommentsApi {
           details: { threadId },
         })
       }
-      throw new McpError(timedOut ? 'TIMEOUT' : 'REMOTE_ERROR', 'The comment range attachment was not applied.', {
-        retryable: false,
-        details: { threadId, outcome: 'not_applied' },
+      const reason = refusedUpdateReason(submit.submitError)
+      throw notAppliedError(submit.submitError, 'The comment range attachment was not applied.', {
+        threadId,
+        ...(reason === undefined ? {} : { reason }),
       })
     }
 
@@ -769,7 +760,7 @@ export class CommentsApi {
             submitError = error
           }
           await leaveQuietly(connection, entity.id)
-          if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
+          if (isUnconfirmedWriteError(submitError)) {
             return {
               before,
               entity,
@@ -800,59 +791,52 @@ export class CommentsApi {
     let recoveredAfterTimeout = false
     // Overleaf acknowledged the change and only its verification read failed, so it can never be not applied.
     const confirmed = submission.confirmed === true
-    const timedOut = submission.submitError instanceof McpError && submission.submitError.code === 'TIMEOUT'
     if (!live) {
       await this.#connections.invalidate(input.projectId)
-      const deadline = Date.now() + this.#recoveryTimeoutMs
-      let matched = false
-      let observationError: unknown
-      do {
-        try {
-          live = await this.#connections.withConnection(
+      const observation = await observeUnconfirmedWrite({
+        observe: async () => {
+          const document = await this.#connections.withConnection(
             input.projectId,
             async connection =>
               await connection.queue.run(async () => {
                 const entity = resolveProjectPath(connection.getTree(), input.filePath, 'doc')
-                const document = await connection.joinDocument(entity.id)
+                const joined = await connection.joinDocument(entity.id)
                 await leaveQuietly(connection, entity.id)
-                return document
+                return joined
               })
           )
-          observationError = undefined
-          if (live.protocol !== submission.before.protocol) {
-            throw new McpError('PROTOCOL_UNSUPPORTED', 'Document protocol changed during comment-status recovery.')
-          }
-          if (await this.#statusMatches(input.projectId, live, input.threadId, resolved)) {
-            matched = true
-            break
-          }
-        } catch (error) {
-          if (error instanceof McpError && error.code === 'PROTOCOL_UNSUPPORTED') throw error
-          live = undefined
-          observationError = error
+          // A protocol change is classified below; the status of such a document is never read.
+          if (document.protocol !== submission.before.protocol) return { document, matched: false }
+          return { document, matched: await this.#statusMatches(input.projectId, document, input.threadId, resolved) }
+        },
+        classify: ({ document, matched }) =>
+          document.protocol !== submission.before.protocol ? 'other' : matched ? 'target' : 'original',
+        // A read the deployment's protocol cannot serve would fail the same way for the whole window.
+        rethrow: error => error instanceof McpError && error.code === 'PROTOCOL_UNSUPPORTED',
+        timeoutMs: this.#recoveryTimeoutMs,
+        pollIntervalMs: this.#recoveryPollIntervalMs,
+        onOther: () =>
+          new McpError('PROTOCOL_UNSUPPORTED', 'Document protocol changed during comment-status recovery.'),
+        onUnobserved: cause =>
+          new McpError('OUTCOME_UNKNOWN', 'Could not observe the unconfirmed comment status.', {
+            cause,
+            details: { threadId: input.threadId },
+          }),
+      })
+      live = observation.observed.document
+      if (observation.state === 'original') {
+        if (confirmed) {
+          throw new McpError(
+            'OUTCOME_UNKNOWN',
+            'Overleaf accepted the comment status change but the requested state could not be verified. Do not retry it.',
+            { retryable: false, details: { threadId: input.threadId } }
+          )
         }
-        if (Date.now() >= deadline) break
-        await new Promise<void>(resolve => setTimeout(resolve, this.#recoveryPollIntervalMs))
-      } while (Date.now() <= deadline)
-
-      if (!live) {
-        throw new McpError('OUTCOME_UNKNOWN', 'Could not observe the unconfirmed comment status.', {
-          cause: observationError,
-          details: { threadId: input.threadId },
-        })
-      }
-      if (!matched && confirmed) {
-        throw new McpError(
-          'OUTCOME_UNKNOWN',
-          'Overleaf accepted the comment status change but the requested state could not be verified. Do not retry it.',
-          { retryable: false, details: { threadId: input.threadId } }
-        )
-      }
-      if (!matched) {
-        throw new McpError(
-          timedOut ? 'TIMEOUT' : 'REMOTE_ERROR',
+        const reason = refusedUpdateReason(submission.submitError)
+        throw notAppliedError(
+          submission.submitError,
           'The comment status change was not confirmed and the requested state is not live.',
-          { retryable: false, details: { threadId: input.threadId, outcome: 'not_applied' } }
+          { threadId: input.threadId, ...(reason === undefined ? {} : { reason }) }
         )
       }
       recoveredAfterTimeout = true

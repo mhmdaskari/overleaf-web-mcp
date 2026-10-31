@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 
 import { describe, expect, test } from 'vitest'
 
+import { historyVisibleContent, type HistorySnapshot } from '../../src/protocol/ot.js'
 import { encodeEventPacket, parseHandshake, parseSocketPacket } from '../../src/protocol/socketio09-codec.js'
 
 describe('Socket.IO 0.9 codec', () => {
@@ -42,6 +43,31 @@ describe('Socket.IO 0.9 codec', () => {
       args: expect.arrayContaining(['history-ot']),
     })
     expect(parseSocketPacket('2::')).toEqual({ type: 'heartbeat' })
+  })
+
+  test('parses the tracked-change fixtures', async () => {
+    const share = JSON.parse(
+      await readFile(new URL('../fixtures/protocol/sharejs-tracked-changes.json', import.meta.url), 'utf8')
+    ) as { joinDocAck: string }
+    const history = JSON.parse(
+      await readFile(new URL('../fixtures/protocol/history-ot-tracked-changes.json', import.meta.url), 'utf8')
+    ) as { joinDocAck: string; rawLength: number; visibleContent: string }
+
+    const shareAck = parseSocketPacket(share.joinDocAck)
+    expect(shareAck).toMatchObject({ type: 'ack', ackId: 1 })
+    const shareArgs = (shareAck as { args: unknown[] }).args
+    expect(shareArgs[5]).toBe('sharejs-text-ot')
+    expect(shareArgs[4]).toMatchObject({ changes: expect.any(Array), comments: expect.any(Array) })
+
+    const historyAck = parseSocketPacket(history.joinDocAck)
+    expect(historyAck).toMatchObject({ type: 'ack', ackId: 3 })
+    const historyArgs = (historyAck as { args: unknown[] }).args
+    expect(historyArgs[4]).toEqual({})
+    expect(historyArgs[5]).toBe('history-ot')
+    const snapshot = historyArgs[1] as HistorySnapshot
+    expect(snapshot).not.toHaveProperty('comments')
+    expect(snapshot.content).toHaveLength(history.rawLength)
+    expect(historyVisibleContent(snapshot)).toBe(history.visibleContent)
   })
 
   test('reads an event without args as one with no arguments', () => {

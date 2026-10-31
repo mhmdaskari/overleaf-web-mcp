@@ -42,5 +42,14 @@ export const INPUTS: Record<OperationName, Record<string, unknown>> = {
     content: 'Why?',
   },
   set_comment_status: { projectId: 'p', filePath: 'main.tex', revision: 'r', threadId: 't', status: 'resolved' },
+  list_tracked_changes: { projectId: 'p' },
+  manage_tracked_changes: {
+    projectId: 'p',
+    filePath: 'main.tex',
+    revision: 'r',
+    action: 'accept',
+    changeIds: ['c'],
+    confirmCount: 1,
+  },
   monitor_project_history: { projectId: 'p' },
 }

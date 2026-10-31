@@ -29,6 +29,7 @@ const TABLE: Record<ErrorCode, { write: number; read: number }> = {
   BUILD_NOT_FOUND: { write: 1, read: 1 },
   PARTIAL_CLEANUP: { write: 1, read: 1 },
   REMOTE_ERROR: { write: 1, read: 1 },
+  REVIEW_UNSUPPORTED: { write: 3, read: 3 },
 }
 
 describe('CLI exit codes', () => {
@@ -74,6 +75,31 @@ describe('CLI exit codes', () => {
       exitCodeForError(
         new McpError('REVISION_CONFLICT', 'x', { details: { created: true, outcome: 'unknown' } }),
         'create_file'
+      )
+    ).toBe(5)
+  })
+
+  test('review the deployment cannot do exits 3, from the review tools and any other', () => {
+    for (const kind of ['feature_disabled', 'route_unavailable', 'document_protocol']) {
+      const error = new McpError('REVIEW_UNSUPPORTED', 'x', { details: { kind } })
+      expect(exitCodeForError(error, 'manage_tracked_changes'), kind).toBe(3)
+      expect(exitCodeForError(error, 'list_tracked_changes'), kind).toBe(3)
+    }
+  })
+
+  test('a tracked write that applied untracked exits 4, and any other PROTOCOL_UNSUPPORTED 1', () => {
+    const untracked = new McpError('PROTOCOL_UNSUPPORTED', 'x', { details: { kind: 'applied_untracked' } })
+    for (const operation of ['write_file', 'write_section', 'create_file', 'sync_directory'] as const) {
+      expect(exitCodeForError(untracked, operation), operation).toBe(4)
+    }
+    expect(
+      exitCodeForError(new McpError('PROTOCOL_UNSUPPORTED', 'x', { details: { kind: 'response_shape' } }), 'write_file')
+    ).toBe(1)
+    // An unknown outcome still wins.
+    expect(
+      exitCodeForError(
+        new McpError('PROTOCOL_UNSUPPORTED', 'x', { details: { kind: 'applied_untracked', outcome: 'unknown' } }),
+        'write_file'
       )
     ).toBe(5)
   })

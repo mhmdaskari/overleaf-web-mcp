@@ -113,13 +113,20 @@ export async function openProjectConnection(options: OpenProjectConnectionOption
     }
     peer.once('joinProjectResponse', (value: JoinProjectData) => finish(() => resolve(value)))
     peer.once('connectionRejected', (value: unknown) =>
-      finish(() =>
+      finish(() => {
+        const reason = upstreamReason(value)
         reject(
-          new McpError('AUTH_EXPIRED', `Overleaf rejected the socket connection. ${AUTH_LOGIN_INSTRUCTION}`, {
-            details: { reason: upstreamReason(value) },
-          })
+          reason === 'join_rate_limited'
+            ? new McpError(
+                'RATE_LIMITED',
+                'Overleaf rate-limited joining this project. Nothing was sent; wait a minute before trying again.',
+                { retryable: true, details: { reason } }
+              )
+            : new McpError('AUTH_EXPIRED', `Overleaf rejected the socket connection. ${AUTH_LOGIN_INSTRUCTION}`, {
+                details: { reason },
+              })
         )
-      )
+      })
     )
     // The socket's own error text is not passed on; this server's typed errors are.
     peer.once('error', error =>

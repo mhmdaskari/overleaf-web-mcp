@@ -5,6 +5,171 @@ All notable changes to this project are documented here. This project follows
 shapes, and the command line's commands and exit codes may change in a minor or patch release;
 each such change is listed below.
 
+## [0.8.0] - Unreleased
+
+Tracked-change review. Two new tools list a project's tracked changes, with their locations,
+authors, and excerpts, and accept or reject them in one document, on both of Overleaf's document
+protocols: every decision is checked before anything is sent, sent once, and verified on a fresh
+read. The same work makes every document write safer: an OT write the account's access level
+cannot make is refused before it is sent, a tracked write is checked for having been recorded as
+tracked changes, and Overleaf's `otUpdateError` is classified rather than passed on. Every
+document write now changes only the words that differ, so a tracked write is one suggestion per
+changed group of words. Comments on non-ASCII text are now located and verified correctly. The
+server registers 33 tools, two more than 0.7.x. Planned in
+[ROADMAP.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/ROADMAP.md).
+
+### Added
+
+- **`list_tracked_changes`**, read-only: lists tracked changes with `changeId`, `type`, `start`
+  and `end` (1-based line and UTF-16 column in the visible text), `length`, a bounded `excerpt`
+  that never splits a surrogate pair, `excerptTruncated`, `authorId`, `timestamp`, and
+  `pairedChangeId` for the two halves of a replacement, per document with its `revision`,
+  `protocol`, `totalChanges`, and `undecidableChanges` when Overleaf stored a change without an id.
+  `type`, `authorId`, `limit` (`totalMatched`, `truncated`), and `excerptChars` shape the result.
+  With `filePath` it reads that document; without it, only the documents Overleaf's range index
+  lists with changes, and `indexUnavailable: true` when there is no index, never every document.
+  History-OT changes carry ids made up from the change itself (`ht_...`), valid only with the
+  listed revision.
+- **`manage_tracked_changes`**, destructive: accepts or rejects tracked changes in one document,
+  given the listed `revision`, the `changeIds`, and `confirmCount` equal to their number. Before
+  anything is sent it refuses a missing or different `confirmCount` (`CONFIRMATION_MISMATCH`),
+  access below owner or edit (`PERMISSION_DENIED`), a project without track changes
+  (`REVIEW_UNSUPPORTED`), a stale revision (`REVISION_CONFLICT`), an id that is not a live change
+  (`NOT_FOUND`, `details.missingChangeIds`), a change left out that overlaps a chosen one
+  (`INVALID_ARGUMENT`, `details.overlappingChangeIds`), and, for a ShareJS reject, a chosen change
+  that does not match the document text (`PROTOCOL_UNSUPPORTED`). A ShareJS accept goes through
+  Overleaf's accept route; a ShareJS reject and every history-OT decision is one untracked OT update
+  with no tracking metadata. The result is verified on a fresh join, and a decision that timed out
+  is observed, never resent. Returns the resulting `revision`, `remainingChangeCount`,
+  `trackChangesActive`, and `recoveredAfterTimeout`. The server now registers 33 tools.
+- **`REVIEW_UNSUPPORTED`**, a new error code, with `details.kind` `feature_disabled` (the
+  project's owner's plan or the deployment has no track changes), `route_unavailable` (Overleaf
+  has no accept route), or `document_protocol` (Overleaf refused the document's protocol). The
+  command line exits 3 for it, and 4 for `PROTOCOL_UNSUPPORTED` with
+  `details.kind: "applied_untracked"`.
+- **Command line:** `tracked-changes list`, `tracked-changes accept`, and
+  `tracked-changes reject`, shorthand for the two tools.
+- **Protocol fixtures for review**: a sanitized live capture of a ShareJS document with tracked
+  changes and a comment on non-ASCII text, a history-OT document with tracked changes written from
+  Overleaf's source together with the decision operations expected for it, and a test that fails
+  on a 24-hex id, an `@`, or a session cookie name in any file under `test/fixtures/protocol`.
+
+### Changed
+
+- **An OT write that the account's access level cannot make is refused before it is sent.**
+  Overleaf judges an update by its shape: one that only adds comments needs view access, one that
+  only makes tracked changes needs review access, and anything else needs owner or edit access.
+  An untracked `write_file`, `write_section`, `create_file`, or `sync_directory` write from a
+  review-only collaborator, any write from a read-only one, and a history-OT comment status
+  change from either is now `PERMISSION_DENIED` (exit 3) with `details.accessLevel` and
+  `details.required`, and nothing is sent. Before, Overleaf answered `not authorized` and
+  dropped the socket, which surfaced as `REMOTE_ERROR`. An access level this release does not
+  know may add comments only.
+- **`otUpdateError` is classified, not passed on.** `update is too large`, matched exactly, which
+  Overleaf sends to the sender alone after storing nothing, is now `UPDATE_TOO_LARGE` with
+  `details.outcome: "not_applied"`, so the command line exits 4 for it rather than 1. Any other
+  `otUpdateError` reaches every client joined to the document and can follow the update being
+  applied, so it now leaves the write unconfirmed (`OUTCOME_UNKNOWN` with
+  `details.event: "otUpdateError"` from the socket) and the write is observed on a fresh
+  connection, never resent, as after a timeout: `write_file`, `write_section`, `create_file`,
+  `sync_directory`, `add_comment`, `set_comment_status`, and `manage_tracked_changes` then return
+  the verified result with `recoveredAfterTimeout: true`, or `REMOTE_ERROR` with
+  `details.outcome: "not_applied"` and the error's `details.reason`, or `REVISION_CONFLICT`, or
+  `OUTCOME_UNKNOWN`. Before, every `otUpdateError` was `REMOTE_ERROR` (exit 1) with no
+  observation. Overleaf drops the socket after the event, so it is no longer reused.
+- **More of Overleaf's fixed socket error messages have a `details.reason`**, matched exactly:
+  `realtime_error`, `null_bytes_in_op`, `doc_over_max_size`, `doc_too_large`, `ranges_too_large`,
+  `string_too_long`, `ops_not_loaded`, `too_many_ranges`, `unrecognized_op`,
+  `conflicting_deletes`, `op_too_old`, `op_at_future_version`, `version_missing`,
+  `delete_mismatch`, and `invalid_hash`. Anything else is still `unrecognized`, and no upstream
+  text is quoted.
+- **A tracked write is checked for being recorded as tracked changes.** After a tracked
+  `write_file`, `write_section`, `create_file`, or `sync_directory` write verifies, every span it
+  inserted must lie inside tracked inserts by this account, and every span it deleted must be held
+  by a tracked delete by this account, unless that text was itself a tracked insert. Otherwise
+  the result is `PROTOCOL_UNSUPPORTED` with `details.kind: "applied_untracked"` and
+  `details.liveRevision` (exit 4), and no `details.outcome`, because the write applied: it is
+  live and never reverted. A tracked delete, of any author, that the deleted text spanned is
+  expected inside the merged delete, as Overleaf records it. If another update followed the write
+  before the check, such as a decision on its tracked changes, the ranges no longer describe it:
+  the result is then `REVISION_CONFLICT` with `details.outcome: "unknown"` and
+  `details.liveRevision`, and the text is live. A no-op write is not checked. A `sync_directory`
+  failed entry for such a step carries `kind: "applied_untracked"` beside its `details`.
+- **A document write changes only the words that differ, away from comments and tracked changes.**
+  `write_file`, `write_section`, `create_file` over an existing document, and a `sync_directory`
+  replacement used to send one span from the first difference to the last. They now compare the text
+  line by line and then word by word and send one update with an edit per changed group of words,
+  words one space apart counting as one group. A tracked write therefore records one suggestion per
+  changed word group, a deletion and an insertion side by side for a replacement, where two
+  separated word changes used to become one long insertion and one long deletion of everything
+  between them, and an untracked write no longer deletes and re-inserts the unchanged text between
+  edits. Word edits are sent only when none of them touches a comment or a tracked change: an edit
+  that would overlap one, or reach an end of one or a tracked deletion's point, is first cut down to
+  the characters that differ, and then, where it is the same text inserted or deleted at any of
+  several places along repeated text, moved up to 64 characters to a place clear of every range. An
+  edit that touches nothing leaves every range as it was, only moved along. If an edit still touches
+  a range, the write is one edit per changed run of lines on the same terms, and failing that the
+  single span, as before. After an untracked delete on the legacy editor (ShareJS), Overleaf merges
+  tracked deletions that share a point, and touching insertions by one author, across the whole
+  document. Editing never leaves such a pair, but a document converted from history-OT can, so an
+  untracked write to such a document sends the single span. As on ShareJS, a history-OT edit is
+  split around a character outside the Basic Multilingual Plane that it would only send again, which
+  Overleaf refuses in a history-OT insertion, so the single span on history-OT is split around such
+  characters too, where it used to be refused. The operations every write sends change accordingly;
+  results do not. A diff past its limits (an edit distance of 2,000 lines or words, a change more
+  than 1,000 code units inside one word, about 100 ms of work on a 2 MB document, or placement
+  looking at more than 4 million ranges), and a tracked write whose changes, one per deletion and
+  one per insertion, would take the document past Overleaf's limit of 2,000 tracked changes, fall
+  back to one edit per changed run of lines or to the single span, as before. The `write_file`
+  description and the connect-time instructions now say so instead of "a minimal edit", and the
+  description says that a change touching a comment or tracked change is sent as one span.
+- **ShareJS range text is decoded like the document's lines.** Overleaf sends the text of a
+  ShareJS document's comment and tracked-change ranges as the Latin-1 reading of its UTF-8 bytes,
+  as it sends the lines; that text is now decoded the same way when the document is joined.
+  Positions, ids, and metadata are not encoded and are read as they are, and so is the text of the
+  project's range index, which is plain UTF-8.
+- The connect-time instructions (445 words) gain the tracked-change review steps, with
+  `add_comment` under one Review paragraph, and are tightened elsewhere to stay under 450 words.
+
+### Fixed
+
+- **Comments on non-ASCII text are located and verified correctly.** On a ShareJS
+  (legacy editor) document, a comment anchored to text with a character outside ASCII, such as
+  "naïve café", was read back in its encoded form: `list_comments` reported a wrong `end` and
+  `quotedText`, and `add_comment` created the thread and attached it, then failed with
+  `OUTCOME_UNKNOWN` because the exact range could not be verified. Comment ranges are now decoded
+  as the document's lines are, so both report the range that was selected.
+- **An unconfirmed document write is reported as not applied only when the original revision was
+  the last thing seen.** When a document write from `write_file`, `write_section`, `create_file`,
+  or `sync_directory` timed out or lost its socket after sending, and a recovery read saw the
+  original revision but every later read failed until the recovery window ended, the error was
+  `TIMEOUT` (exit 4) or `REMOTE_ERROR` (exit 1) with `details.outcome: "not_applied"`, although
+  the write could have applied after that sighting. It is now `OUTCOME_UNKNOWN` (exit 5), as
+  [the safety page](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) already described
+  `not_applied`: the original revision stayed live throughout the recovery window. Comment writes
+  already worked this way.
+- **A rate-limited project join is `RATE_LIMITED`, not `AUTH_EXPIRED`.** Overleaf allows one
+  account about 45 joins of one project a minute, and `sync_directory` joins about once per
+  upload, so a sync of a few dozen files could reach it. The refused join was reported as
+  `AUTH_EXPIRED` (exit 3), telling the caller to log in again although the session was fine. It is
+  now `RATE_LIMITED` (exit 7), retryable, with `details.reason: "join_rate_limited"`; nothing was
+  sent. Wait a minute before trying again. Every other refused join is still `AUTH_EXPIRED`.
+
+### Documentation
+
+- The tool reference documents both new tools, the access check before a write, and
+  `applied_untracked`; the safety model lists `REVIEW_UNSUPPORTED` and how a decision is checked,
+  sent, and verified; the command line page lists the new commands and exit codes; the usage
+  guide, internals page, and README cover reviewing tracked changes, and the comparison now marks
+  accepting and rejecting them as supported. The private API catalogue records the accept route,
+  how a reject is sent, the range encoding, the change shapes of both protocols, the
+  track-changes features, and where `otUpdateError` comes from, each marked as read in Overleaf's
+  source, confirmed live, or both.
+- The roadmap records what checking v0.8.0's ten open protocol questions found.
+- `docs/development.md` describes the opt-in live test of tracked-change review,
+  `RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`, and the interface comparison's review task now
+  rejects a tracked change too.
+
 ## [0.7.1] - 2026-10-25
 
 Compile outputs on self-hosted Overleaf. No tool was added or removed, and no result shape

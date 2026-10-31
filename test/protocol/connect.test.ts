@@ -84,4 +84,36 @@ describe('project socket bootstrap', () => {
       })
     ).rejects.toMatchObject({ code: 'REMOTE_ERROR', retryable: true, details: { reason: 'disconnected' } })
   })
+
+  test.each([
+    // The payload real-time sends when web's join-project limiter refuses the join, captured live.
+    [
+      { message: 'rate-limit hit when joining project', code: 'TooManyRequests' },
+      'RATE_LIMITED',
+      true,
+      'join_rate_limited',
+    ],
+    [{ message: 'invalid session' }, 'AUTH_EXPIRED', false, 'invalid_session'],
+  ])('maps connectionRejected %j to %s', async (payload, code, retryable, reason) => {
+    const socket = new FakeSocket()
+    const webSocketFactory = vi.fn(() => {
+      setTimeout(() => {
+        socket.readyState = 1
+        socket.emit('message', `5:::${JSON.stringify({ name: 'connectionRejected', args: [payload] })}`)
+      }, 0)
+      return socket
+    })
+
+    await expect(
+      openProjectConnection({
+        baseUrl: 'https://overleaf.test',
+        projectId: 'project',
+        jar: new CookieJar(),
+        supportedProtocolVersions: [2],
+        fetcher: vi.fn(async () => new Response('SOCKET_SESSION:60:60:websocket')),
+        webSocketFactory,
+        timeoutMs: 1_000,
+      })
+    ).rejects.toMatchObject({ code, retryable, details: { reason } })
+  })
 })

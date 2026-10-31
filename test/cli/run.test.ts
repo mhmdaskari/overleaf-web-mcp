@@ -181,6 +181,7 @@ const EXIT_TABLE: Record<ErrorCode, { write: number; read: number }> = {
   BUILD_NOT_FOUND: { write: 1, read: 1 },
   PARTIAL_CLEANUP: { write: 1, read: 1 },
   REMOTE_ERROR: { write: 1, read: 1 },
+  REVIEW_UNSUPPORTED: { write: 3, read: 3 },
 }
 
 describe('operation command framing', () => {
@@ -508,6 +509,57 @@ describe('safety checks with a real runtime', () => {
       { runtime: confirmed.runtime }
     )
     expect(confirmed.fetches.filter(fetch => fetch.startsWith('DELETE '))).toHaveLength(1)
+  })
+
+  test('tracked-changes accept without --confirm-count exits 2 before any document is read or request sent', async () => {
+    const revision = createRevision({
+      projectId: 'p',
+      docId: 'd1',
+      protocol: 'sharejs',
+      otVersion: 3,
+      content: 'hello',
+    })
+    for (const extra of [[], ['--confirm-count', '2']]) {
+      const live = await realRuntime()
+      const run = await cli(
+        ['tracked-changes', 'accept', 'p', 'main.tex', '--revision', revision, '--change', 'c1', ...extra],
+        { runtime: live.runtime }
+      )
+      expect(run.exitCode).toBe(2)
+      expect(expectError(run).code).toBe('CONFIRMATION_MISMATCH')
+      expect(live.socketCalls).toEqual([])
+      expect(live.connectionFactory).not.toHaveBeenCalled()
+      expect(live.fetches).toEqual([])
+      expect(live.close).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  test('tracked-changes exits 3 for review the deployment cannot do', async () => {
+    for (const kind of ['feature_disabled', 'route_unavailable', 'document_protocol']) {
+      const fake = rejectAll(
+        fakeServiceRuntime(),
+        new McpError('REVIEW_UNSUPPORTED', 'No review.', { details: { kind } })
+      )
+      const run = await cli(
+        ['tracked-changes', 'reject', 'p', 'main.tex', '--revision', 'r', '--change', 'c1', '--confirm-count', '1'],
+        { runtime: fake }
+      )
+      expect(run.exitCode, kind).toBe(3)
+      expect(expectError(run)).toEqual({
+        code: 'REVIEW_UNSUPPORTED',
+        message: 'No review.',
+        retryable: false,
+        details: { kind },
+      })
+      expect(fake.trackedChanges.manageTrackedChanges).toHaveBeenCalledWith({
+        projectId: 'p',
+        filePath: 'main.tex',
+        revision: 'r',
+        action: 'reject',
+        changeIds: ['c1'],
+        confirmCount: 1,
+      })
+    }
   })
 
   test('sync apply prints progress on stderr only with --progress, and only as progress lines', async () => {

@@ -17,6 +17,13 @@ const TIMESTAMP = '2026-01-01T00:00:00.000Z'
 
 type Mark = 'insert' | 'delete' | undefined
 
+/** A ShareJS tracked change as Overleaf stores it, with plain (not latin1-encoded) text. */
+export interface ShareChange {
+  id: string
+  op: { p: number; i?: string; d?: string }
+  metadata: { user_id: string; ts: string }
+}
+
 /** One document as the fake Overleaf holds it. History-OT keeps tracked deletions in `content`. */
 export interface ServerDocument {
   protocol: 'sharejs' | 'history-ot'
@@ -24,6 +31,8 @@ export interface ServerDocument {
   content: string
   /** History-OT only: the tracked state of each UTF-16 unit of `content`. */
   marks: Mark[]
+  /** ShareJS only: tracked changes, recorded for updates that carry `meta.tc`. */
+  changes?: ShareChange[]
 }
 
 /** The project state every socket the runtime opens shares, so a rejoin sees what an update did. */
@@ -32,8 +41,19 @@ export interface FakeOverleaf {
   documents: Map<string, ServerDocument>
   trackChangesState?: boolean
   newDocumentProtocol: 'sharejs' | 'history-ot'
-  /** The next applyOtUpdate applies and then fails as a socket would. */
-  failNextApply?: 'timeout' | 'lost-socket'
+  /**
+   * The next applyOtUpdate applies and then fails as a socket would. For `too-large` it is
+   * acknowledged, then refused with `otUpdateError("update is too large")`, storing nothing; for
+   * `update-error` it is acknowledged, then refused with `otUpdateError("Invalid hash")`, storing
+   * nothing, and for `applied-update-error` the same error follows the update being stored.
+   */
+  failNextApply?: 'timeout' | 'lost-socket' | 'too-large' | 'update-error' | 'applied-update-error'
+  /** Apply tracked updates as untracked ones, recording no tracked changes, as a deployment without review might. */
+  ignoreTracking?: boolean
+  /** Runs once right after the next update is stored, as another client's update that follows it would. */
+  afterNextApply?: (document: ServerDocument) => void
+  /** The access level joinProject reports; `owner` unless set. */
+  permissionsLevel?: string
   applied: number
   /** Every request after the bootstrap `GET /project`, as `METHOD /path`. */
   requests: string[]
@@ -77,7 +97,8 @@ export function fakeOverleaf(
   }
 }
 
-function snapshotOf(document: ServerDocument): HistorySnapshot {
+/** The raw snapshot a history-OT join returns: tracked ranges as runs of one mark, all by `user`. */
+export function snapshotOf(document: ServerDocument): HistorySnapshot {
   const trackedChanges: NonNullable<HistorySnapshot['trackedChanges']> = []
   let start = 0
   for (let index = 1; index <= document.marks.length; index += 1) {
@@ -94,10 +115,130 @@ function snapshotOf(document: ServerDocument): HistorySnapshot {
   return { content: document.content, comments: [], trackedChanges }
 }
 
-type TextComponent = number | string | { i: string; tracking: { type: Mark } } | { r: number; tracking: { type: Mark } }
+/** Moves, merges, splits, and adds ShareJS tracked changes for one component, roughly as Overleaf does. */
+export function trackShareJs(
+  document: { changes?: ShareChange[] },
+  component: { p: number; i?: string; d?: string },
+  metadata: ShareChange['metadata'] | undefined,
+  nextId: () => string
+): void {
+  const changes = (document.changes ??= [])
+  if (component.i !== undefined) {
+    const length = component.i.length
+    let merged = false
+    for (const change of [...changes]) {
+      if (change.op.d !== undefined) {
+        if (change.op.p >= component.p) change.op.p += length
+        continue
+      }
+      const end = change.op.p + change.op.i!.length
+      if (
+        !merged &&
+        metadata &&
+        change.metadata.user_id === metadata.user_id &&
+        component.p >= change.op.p &&
+        component.p <= end
+      ) {
+        const offset = component.p - change.op.p
+        change.op.i = change.op.i!.slice(0, offset) + component.i + change.op.i!.slice(offset)
+        merged = true
+      } else if (change.op.p >= component.p) {
+        change.op.p += length
+      } else if (component.p < end) {
+        const offset = component.p - change.op.p
+        changes.push({
+          id: `${change.id}s`,
+          op: { p: component.p + length, i: change.op.i!.slice(offset) },
+          metadata: { ...change.metadata },
+        })
+        change.op.i = change.op.i!.slice(0, offset)
+      }
+    }
+    if (metadata && !merged) changes.push({ id: nextId(), op: { p: component.p, i: component.i }, metadata })
+  } else if (component.d !== undefined) {
+    const start = component.p
+    const end = start + component.d.length
+    // As Overleaf's RangesTracker does, the new delete's text is edited in its own coordinates:
+    // text a tracked insert held is cut out, since deleting it only shortens that insert, and a
+    // tracked delete it absorbs is spliced in at its point. Applied in descending order, cuts first.
+    const modifications: Array<{ p: number; cut?: number; text?: string }> = []
+    for (const change of [...changes]) {
+      if (change.op.i === undefined) continue
+      const changeEnd = change.op.p + change.op.i.length
+      if (changeEnd <= start) continue
+      if (change.op.p >= end) {
+        change.op.p -= end - start
+        continue
+      }
+      const from = Math.max(start, change.op.p)
+      const to = Math.min(end, changeEnd)
+      modifications.push({ p: from - start, cut: to - from })
+      change.op.i = change.op.i.slice(0, from - change.op.p) + change.op.i.slice(to - change.op.p)
+      change.op.p = Math.min(change.op.p, start)
+      if (change.op.i === '') changes.splice(changes.indexOf(change), 1)
+    }
+    for (const change of [...changes]) {
+      if (change.op.d === undefined) continue
+      if (change.op.p > end) change.op.p -= end - start
+      else if (change.op.p >= start) {
+        if (metadata) {
+          modifications.push({ p: change.op.p - start, text: change.op.d })
+          changes.splice(changes.indexOf(change), 1)
+        } else {
+          change.op.p = start
+        }
+      }
+    }
+    const cutsFirst = (modification: { cut?: number }) => (modification.cut === undefined ? 1 : 0)
+    modifications.sort((left, right) => right.p - left.p || cutsFirst(left) - cutsFirst(right))
+    let text = component.d
+    for (const modification of modifications) {
+      text =
+        modification.cut !== undefined
+          ? text.slice(0, modification.p) + text.slice(modification.p + modification.cut)
+          : text.slice(0, modification.p) + modification.text! + text.slice(modification.p)
+    }
+    if (metadata && text !== '') changes.push({ id: nextId(), op: { p: start, d: text }, metadata })
+  }
+  changes.sort((left, right) => left.op.p - right.op.p || (left.op.d !== undefined ? -1 : 1))
+}
+
+/** Records one ShareJS update's components in the document's tracked changes, ids `tc` and a 6-hex counter. */
+export function recordShareJsChanges(
+  document: { changes?: ShareChange[] },
+  components: readonly ShareJsComponent[],
+  tc: string | undefined
+): void {
+  let counter = 0
+  const nextId = () => `${tc}${(++counter).toString(16).padStart(6, '0')}`
+  for (const component of components) {
+    if (component.c !== undefined) continue
+    trackShareJs(document, component, tc === undefined ? undefined : { user_id: 'user', ts: TIMESTAMP }, nextId)
+  }
+}
+
+/** Overleaf sends ShareJS range text as the latin1 string of its UTF-8 bytes. */
+export function encodedRanges(document: { changes?: ShareChange[] }): Record<string, unknown> {
+  if (!document.changes?.length) return {}
+  const encode = (text: string | undefined) => (text === undefined ? {} : Buffer.from(text, 'utf8').toString('latin1'))
+  return {
+    changes: document.changes.map(change => ({
+      id: change.id,
+      op: {
+        p: change.op.p,
+        ...(change.op.i === undefined ? {} : { i: encode(change.op.i) }),
+        ...(change.op.d === undefined ? {} : { d: encode(change.op.d) }),
+      },
+      metadata: { ...change.metadata },
+    })),
+  }
+}
+
+export type TextComponent =
+  number | string | { i: string; tracking: { type: Mark } } | { r: number; tracking: { type: Mark } }
 
 /** Applies one history-OT text operation, which must span the whole raw content. */
-function applyTextOperation(document: ServerDocument, operation: TextComponent[]): void {
+export function applyTextOperation(document: ServerDocument, operation: TextComponent[]): void {
   let cursor = 0
   let content = ''
   const marks: Mark[] = []
@@ -152,22 +293,52 @@ export class FakePeer extends EventEmitter {
             document.content.split('\n').map(line => Buffer.from(line, 'utf8').toString('latin1')),
             document.version,
             [],
-            {},
+            encodedRanges(document),
             'sharejs-text-ot',
           ]
     }
     if (name !== 'applyOtUpdate') throw new Error(`unexpected socket call ${name}`)
-    const update = args[1] as { doc: string; v: number; op: unknown[] }
+    const update = args[1] as { doc: string; v: number; op: unknown[]; meta?: { tc?: string } }
     if (update.v !== document.version) return [{ message: 'version mismatch' }]
+    const refusal = (message: string): unknown[] => {
+      // Overleaf acknowledges the update, then sends the error and disconnects the socket.
+      setImmediate(() => {
+        this.emit('otUpdateError', message, { project_id: PROJECT, doc_id: update.doc, error: message })
+        this.closed = true
+        this.emit('disconnect')
+      })
+      return [null]
+    }
+    if (this.#server.failNextApply === 'too-large' || this.#server.failNextApply === 'update-error') {
+      const failure = this.#server.failNextApply
+      delete this.#server.failNextApply
+      return refusal(failure === 'too-large' ? 'update is too large' : 'Invalid hash')
+    }
     if (document.protocol === 'sharejs') {
-      document.content = applyShareJs(document.content, update.op as ShareJsComponent[])
+      const components = update.op as ShareJsComponent[]
+      document.content = applyShareJs(document.content, components)
+      recordShareJsChanges(document, components, this.#server.ignoreTracking ? undefined : update.meta?.tc)
     } else {
       for (const step of update.op as Array<{ textOperation: TextComponent[] }>) {
-        applyTextOperation(document, step.textOperation)
+        const untracked = (component: TextComponent): TextComponent =>
+          typeof component !== 'object'
+            ? component
+            : 'i' in component
+              ? component.i
+              : component.tracking.type === 'delete'
+                ? -component.r
+                : component
+        applyTextOperation(
+          document,
+          this.#server.ignoreTracking ? step.textOperation.map(untracked) : step.textOperation
+        )
       }
     }
     document.version += 1
     this.#server.applied += 1
+    const followUp = this.#server.afterNextApply
+    delete this.#server.afterNextApply
+    followUp?.(document)
     const failure = this.#server.failNextApply
     delete this.#server.failNextApply
     if (failure === 'timeout') throw new McpError('TIMEOUT', 'Timed out waiting for otUpdateApplied.')
@@ -175,6 +346,7 @@ export class FakePeer extends EventEmitter {
       this.closed = true
       throw new Error('socket closed')
     }
+    if (failure === 'applied-update-error') return refusal('Invalid hash')
     setImmediate(() => this.emit('otUpdateApplied', { doc: update.doc, v: update.v }))
     return [null]
   }
@@ -251,7 +423,7 @@ export async function fakeSession(
             rootFolder: [structuredClone(server.root)],
             ...(server.trackChangesState === undefined ? {} : { trackChangesState: server.trackChangesState }),
           },
-          permissionsLevel: 'owner',
+          permissionsLevel: server.permissionsLevel ?? 'owner',
           protocolVersion: 2,
         },
         supportedProtocolVersions: [2],
@@ -273,7 +445,11 @@ export async function openFakeRuntime(server: FakeOverleaf) {
 
 /** The text an editor shows: history-OT tracked deletions left out. */
 export function visible(server: FakeOverleaf, id: string): string {
-  const document = server.documents.get(id)!
+  return visibleText(server.documents.get(id)!)
+}
+
+/** The text an editor shows of one document: history-OT tracked deletions left out. */
+export function visibleText(document: ServerDocument): string {
   return document.content
     .split('')
     .filter((_, index) => document.marks[index] !== 'delete')

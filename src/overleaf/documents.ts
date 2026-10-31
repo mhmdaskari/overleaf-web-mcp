@@ -1,5 +1,6 @@
 import { asMcpError, McpError } from '../core/errors.js'
-import { createOutsideBmpPreservingEdits } from '../core/diff.js'
+import { createOutsideBmpPreservingEdits, type TextEdit } from '../core/diff.js'
+import { chooseEdits, createRangeLayout, type RangeLayout, type TextSpan } from '../core/edit-placement.js'
 import { assertDocumentSize, assertUpdateSize } from '../core/limits.js'
 import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
@@ -9,10 +10,22 @@ import {
   buildHistoryTextOperation,
   buildShareJsOperation,
   generateIdSeed,
+  historyRangeLayout,
+  historyVisibleContent,
   makeUpdate,
+  type HistoryOperation,
   type HistorySnapshot,
+  type ShareJsComponent,
 } from '../protocol/ot.js'
 import type { JoinedDocument } from '../protocol/project-connection.js'
+import { parseShareJsChanges, trackedWriteCoverage } from '../protocol/tracked-changes.js'
+import {
+  isUnchangedDocument,
+  isUnconfirmedWriteError,
+  notAppliedError,
+  observeUnconfirmedWrite,
+  refusedUpdateReason,
+} from './recovery.js'
 import { resolveProjectPath, type ProjectEntity } from './tree.js'
 
 interface DocumentConnection {
@@ -52,6 +65,8 @@ interface SubmitResult {
   live?: JoinedDocument
   trackChangesActive: boolean
   submitError?: unknown
+  /** The operation sent; absent for a no-op write, which sends nothing. */
+  operation?: unknown[]
 }
 
 export interface DocumentsApiOptions {
@@ -73,6 +88,108 @@ function insertedOutsideBmpLine(current: string, target: string): number | undef
   const plan = createOutsideBmpPreservingEdits(current, target)
   if (!('insertedAt' in plan)) return undefined
   return target.slice(0, plan.insertedAt).split('\n').length
+}
+
+/**
+ * Overleaf's document updater refuses an update that would leave a document with more than this
+ * many tracked changes (`MAX_CHANGES` in its RangesManager), with `too many comments or tracked
+ * changes`.
+ */
+export const MAX_TRACKED_CHANGES = 2000
+
+/** How many tracked changes the document holds before the write. */
+function existingTrackedChanges(document: JoinedDocument): number {
+  if (document.protocol === 'history-ot') {
+    const snapshot = document.rawSnapshot as HistorySnapshot
+    return Array.isArray(snapshot.trackedChanges) ? snapshot.trackedChanges.length : 0
+  }
+  const ranges = document.ranges
+  if (typeof ranges !== 'object' || ranges === null) return 0
+  const changes = (ranges as { changes?: unknown }).changes
+  return Array.isArray(changes) ? changes.length : 0
+}
+
+function shareJsComments(ranges: unknown): TextSpan[] {
+  const comments = (ranges as { comments?: unknown } | null | undefined)?.comments
+  if (!Array.isArray(comments)) return []
+  return comments.flatMap(entry => {
+    const op = (entry as { op?: { p?: unknown; c?: unknown } } | null)?.op
+    return typeof op?.p === 'number' && typeof op.c === 'string' ? [{ start: op.p, end: op.p + op.c.length }] : []
+  })
+}
+
+/** Where a document's comments and tracked changes sit in its visible text. */
+function documentRanges(document: JoinedDocument): RangeLayout {
+  if (document.protocol === 'history-ot') return historyRangeLayout(document.rawSnapshot as HistorySnapshot)
+  const changes = parseShareJsChanges(document.ranges)
+  return createRangeLayout(
+    changes.filter(change => change.type === 'delete').map(change => change.position),
+    [
+      ...changes
+        .filter(change => change.type === 'insert')
+        .map(change => ({ start: change.position, end: change.position + change.length })),
+      ...shareJsComments(document.ranges),
+    ]
+  )
+}
+
+/**
+ * Whether a ShareJS document holds tracked deletions that share a point, or touching insertions by
+ * one author. After any untracked delete Overleaf merges each such pair, wherever it is in the
+ * document, the first one's author keeping a merged deletion. Editing never leaves one; a document
+ * converted from history-OT can.
+ */
+function holdsMergeablePairs(document: JoinedDocument): boolean {
+  if (document.protocol !== 'sharejs') return false
+  const changes = parseShareJsChanges(document.ranges)
+  const deletionPoints = new Set<number>()
+  const insertEnds = new Set<string>()
+  for (const change of changes) {
+    if (change.type === 'delete') {
+      if (deletionPoints.has(change.position)) return true
+      deletionPoints.add(change.position)
+    } else {
+      insertEnds.add(`${change.authorId}\u0000${change.position + change.length}`)
+    }
+  }
+  return changes.some(
+    change => change.type === 'insert' && insertEnds.has(`${change.authorId}\u0000${change.position}`)
+  )
+}
+
+/**
+ * The tracked changes `edits` add: for a tracked write, one per deletion and one per insertion.
+ * Edits that touch no tracked change neither split nor fold one, and an untracked write records
+ * none.
+ */
+function addedTrackedChanges(edits: readonly TextEdit[], tracked: boolean): number {
+  if (!tracked) return 0
+  return edits.reduce((added, edit) => added + (edit.deleteText === '' ? 0 : 1) + (edit.insertText === '' ? 0 : 1), 0)
+}
+
+/**
+ * The edits a write sends, chosen by `chooseEdits` around the document's comments and tracked
+ * changes: one per changed group of words where none of them touches one of those ranges, then one
+ * per changed run of lines on the same terms, and failing both one span, as before. A plan whose
+ * changes, as `addedTrackedChanges` counts them, would take the document past Overleaf's limit is
+ * passed over too, and so is every plan of an untracked write to a document that
+ * `holdsMergeablePairs`, so that what Overleaf merges is what the span always merged. The line
+ * search runs once for every attempt.
+ */
+export function planEdits(
+  document: JoinedDocument,
+  visibleBefore: string,
+  target: string,
+  tracked: { userId: string } | undefined
+): TextEdit[] {
+  const existing = existingTrackedChanges(document)
+  const spanOnly = tracked === undefined && holdsMergeablePairs(document)
+  return chooseEdits(
+    visibleBefore,
+    target,
+    documentRanges(document),
+    edits => !spanOnly && existing + addedTrackedChanges(edits, tracked !== undefined) <= MAX_TRACKED_CHANGES
+  )
 }
 
 async function safelyLeave(connection: DocumentConnection, docId: string): Promise<void> {
@@ -106,7 +223,8 @@ function resultFor(
 }
 
 /**
- * Reads and writes collaborative documents through revision-checked, minimal OT updates.
+ * Reads and writes collaborative documents through revision-checked OT updates that change only
+ * the words that differ.
  * Successful mutations are rejoined and hash-verified before a new revision is returned.
  */
 export class DocumentsApi {
@@ -202,10 +320,15 @@ export class DocumentsApi {
 
           const tracking =
             writeMode === 'tracked' ? { userId: this.#currentUserId!, timestamp: new Date().toISOString() } : undefined
+          const visibleBefore =
+            before.protocol === 'sharejs'
+              ? before.content
+              : historyVisibleContent(before.rawSnapshot as HistorySnapshot)
+          const edits = planEdits(before, visibleBefore, target, tracking)
           const operation =
             before.protocol === 'sharejs'
-              ? buildShareJsOperation(before.content, target)
-              : buildHistoryTextOperation(before.rawSnapshot as HistorySnapshot, target, tracking)
+              ? buildShareJsOperation(before.content, target, edits)
+              : buildHistoryTextOperation(before.rawSnapshot as HistorySnapshot, target, tracking, edits)
           if (operation.length === 0) {
             await safelyLeave(connection, entity.id)
             return {
@@ -230,9 +353,10 @@ export class DocumentsApi {
             submitError = error
           }
           await safelyLeave(connection, entity.id)
-          // OUTCOME_UNKNOWN means the socket failed after the update was sent, so it may have applied.
-          if (submitError instanceof McpError && ['TIMEOUT', 'OUTCOME_UNKNOWN'].includes(submitError.code)) {
-            return { before, trackChangesActive: connection.trackChangesActive, submitError }
+          // OUTCOME_UNKNOWN means the socket failed after the update was sent, or Overleaf reported
+          // an error on the document after it, so it may have applied.
+          if (isUnconfirmedWriteError(submitError)) {
+            return { before, trackChangesActive: connection.trackChangesActive, submitError, operation }
           }
           if (submitError) throw asMcpError(submitError)
 
@@ -241,10 +365,10 @@ export class DocumentsApi {
             live = await connection.joinDocument(entity.id)
           } catch (error) {
             // The update applied, so a failed verification read is settled by observation, never a resend.
-            return { before, trackChangesActive: connection.trackChangesActive, submitError: error }
+            return { before, trackChangesActive: connection.trackChangesActive, submitError: error, operation }
           }
           await safelyLeave(connection, entity.id)
-          return { before, live, trackChangesActive: connection.trackChangesActive }
+          return { before, live, trackChangesActive: connection.trackChangesActive, operation }
         })
     )
 
@@ -267,19 +391,18 @@ export class DocumentsApi {
           },
         })
       }
+      this.#assertTracked(projectId, writeMode, submitted, submitted.live)
       return resultFor(projectId, submitted.live, submitted.trackChangesActive, writeMode)
     }
 
     // Never retry an ambiguous write: observe whether the target, original, or a third state is live.
     const timedOut = submitted.submitError instanceof McpError && submitted.submitError.code === 'TIMEOUT'
-    const unconfirmed = timedOut ? 'timed out' : 'lost its socket'
+    const reason = refusedUpdateReason(submitted.submitError)
+    const unconfirmed = timedOut ? 'timed out' : reason !== undefined ? 'met an Overleaf error' : 'lost its socket'
     await this.#connections.invalidate?.(projectId)
-    const deadline = Date.now() + this.#recoveryTimeoutMs
-    let unchangedRecovery: { live: JoinedDocument; trackChangesActive: boolean } | undefined
-    let observationError: unknown
-    do {
-      try {
-        const recovery = await this.#connections.withConnection(
+    const observation = await observeUnconfirmedWrite({
+      observe: async () =>
+        await this.#connections.withConnection(
           projectId,
           async connection =>
             await connection.queue.run(async () => {
@@ -288,51 +411,95 @@ export class DocumentsApi {
               await safelyLeave(connection, entity.id)
               return { live, trackChangesActive: connection.trackChangesActive }
             })
-        )
-        observationError = undefined
-        // The intended hash proves the timed-out submission was applied.
-        if (contentHash(recovery.live.content) === contentHash(target)) {
-          return resultFor(projectId, recovery.live, recovery.trackChangesActive, writeMode, true)
-        }
-        const unchanged =
-          recovery.live.protocol === submitted.before.protocol &&
-          recovery.live.version === submitted.before.version &&
-          contentHash(recovery.live.content) === contentHash(submitted.before.content)
-        if (!unchanged) {
-          // Any third state may include concurrent work and must be reported as a conflict.
-          throw new McpError('REVISION_CONFLICT', `Live content changed after the write ${unconfirmed}.`, {
-            retryable: false,
-            details: {
-              outcome: 'unknown',
-              liveRevision: createRevision({
-                projectId,
-                docId: recovery.live.docId,
-                protocol: recovery.live.protocol,
-                otVersion: recovery.live.version,
-                content: recovery.live.content,
-              }),
-            },
-          })
-        }
-        unchangedRecovery = recovery
-      } catch (error) {
-        if (error instanceof McpError && error.code === 'REVISION_CONFLICT') throw error
-        observationError = error
-      }
-      if (Date.now() >= deadline) break
-      await new Promise<void>(resolve => setTimeout(resolve, this.#recoveryPollIntervalMs))
-    } while (Date.now() <= deadline)
+        ),
+      // The intended hash proves the unconfirmed submission was applied.
+      classify: recovery =>
+        contentHash(recovery.live.content) === contentHash(target)
+          ? 'target'
+          : isUnchangedDocument(recovery.live, submitted.before)
+            ? 'original'
+            : 'other',
+      timeoutMs: this.#recoveryTimeoutMs,
+      pollIntervalMs: this.#recoveryPollIntervalMs,
+      // Any third state may include concurrent work and must be reported as a conflict.
+      onOther: recovery =>
+        new McpError('REVISION_CONFLICT', `Live content changed after the write ${unconfirmed}.`, {
+          retryable: false,
+          details: {
+            outcome: 'unknown',
+            liveRevision: createRevision({
+              projectId,
+              docId: recovery.live.docId,
+              protocol: recovery.live.protocol,
+              otVersion: recovery.live.version,
+              content: recovery.live.content,
+            }),
+          },
+        }),
+      onUnobserved: cause =>
+        new McpError('OUTCOME_UNKNOWN', `Could not observe live content after the write ${unconfirmed}.`, { cause }),
+    })
+    if (observation.state === 'target') {
+      this.#assertTracked(projectId, writeMode, submitted, observation.observed.live)
+      return resultFor(projectId, observation.observed.live, observation.observed.trackChangesActive, writeMode, true)
+    }
+    // Seeing the original revision through the full recovery window proves no application was observed.
+    throw notAppliedError(
+      submitted.submitError,
+      `The write ${unconfirmed} and the original revision is still live.`,
+      reason === undefined ? {} : { reason }
+    )
+  }
 
-    if (unchangedRecovery) {
-      // Seeing the original revision through the full recovery window proves no application was observed.
+  /**
+   * Refuses a tracked write that Overleaf applied without recording it as tracked changes by this
+   * account. It is live, so it is reported and never reverted: a revert would be another write.
+   */
+  #assertTracked(projectId: string, writeMode: WriteMode, submitted: SubmitResult, live: JoinedDocument): void {
+    const operation = submitted.operation
+    if (writeMode !== 'tracked' || operation === undefined || operation.length === 0) return
+    const liveRevision = createRevision({
+      projectId,
+      docId: live.docId,
+      protocol: live.protocol,
+      otVersion: live.version,
+      content: live.content,
+    })
+    // The operation's positions describe the document only right after it. Another update since,
+    // even one that kept the text, such as a decision on a tracked change, may have moved or
+    // removed the ranges, so whether this write was tracked can no longer be told.
+    if (live.version !== submitted.before.version + 1) {
       throw new McpError(
-        timedOut ? 'TIMEOUT' : 'REMOTE_ERROR',
-        `The write ${unconfirmed} and the original revision is still live.`,
-        { retryable: false, details: { outcome: 'not_applied' } }
+        'REVISION_CONFLICT',
+        'The write applied, but another update followed it before it could be checked that Overleaf recorded it as tracked changes by this account. Read the file and list its tracked changes before writing again.',
+        { retryable: false, details: { outcome: 'unknown', liveRevision } }
       )
     }
-    throw new McpError('OUTCOME_UNKNOWN', `Could not observe live content after the write ${unconfirmed}.`, {
-      cause: observationError,
-    })
+    const userId = this.#currentUserId!
+    const coverage =
+      live.protocol === 'history-ot'
+        ? trackedWriteCoverage({
+            protocol: 'history-ot',
+            after: live.rawSnapshot as HistorySnapshot,
+            operation: operation as HistoryOperation[],
+            userId,
+          })
+        : trackedWriteCoverage({
+            protocol: 'sharejs',
+            beforeContent: submitted.before.content,
+            beforeRanges: submitted.before.ranges,
+            afterRanges: live.ranges,
+            operation: operation as ShareJsComponent[],
+            userId,
+          })
+    if (coverage.uncoveredInserts === 0 && coverage.uncoveredDeletes === 0) return
+    throw new McpError(
+      'PROTOCOL_UNSUPPORTED',
+      'The write applied, but Overleaf did not record all of it as tracked changes by this account. It is live and was not reverted: read the file and review the text before writing again.',
+      {
+        retryable: false,
+        details: { kind: 'applied_untracked', liveRevision },
+      }
+    )
   }
 }

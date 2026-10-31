@@ -15,6 +15,7 @@ import { HistoryApi } from './overleaf/history.js'
 import { ProjectsApi } from './overleaf/projects.js'
 import { SectionsApi } from './overleaf/sections-api.js'
 import { SyncApi } from './overleaf/sync.js'
+import { TrackedChangesApi } from './overleaf/tracked-changes.js'
 import { resolveProjectPath, type EntityType } from './overleaf/tree.js'
 import { ProjectConnectionCache } from './protocol/connection-cache.js'
 import { openProjectConnection } from './protocol/connect.js'
@@ -89,6 +90,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
   readonly sections: SectionsApi
   readonly compile: CompileApi
   readonly comments: CommentsApi
+  readonly trackedChanges: TrackedChangesApi
   readonly history: HistoryApi
   readonly projects: ProjectsApi
   readonly sync: SyncApi
@@ -108,6 +110,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     sections: SectionsApi
     compile: CompileApi
     comments: CommentsApi
+    trackedChanges: TrackedChangesApi
     history: HistoryApi
     projects: ProjectsApi
     sync: SyncApi
@@ -125,6 +128,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     this.sections = options.sections
     this.compile = options.compile
     this.comments = options.comments
+    this.trackedChanges = options.trackedChanges
     this.history = options.history
     this.projects = options.projects
     this.sync = options.sync
@@ -231,6 +235,12 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       ...(bootstrap.userId === undefined ? {} : { currentUserId: bootstrap.userId }),
       policy,
     })
+    const trackedChanges = new TrackedChangesApi(http, connections, {
+      maxDocLength: bootstrap.maxDocLength ?? config.maxDocLength,
+      maxUpdateChars: config.maxUpdateChars,
+      recoveryTimeoutMs: config.recoveryTimeoutMs,
+      policy,
+    })
     const history = new HistoryApi(http, policy)
     const projects = new ProjectsApi({
       http,
@@ -270,6 +280,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       sections,
       compile,
       comments,
+      trackedChanges,
       history,
       projects,
       sync,

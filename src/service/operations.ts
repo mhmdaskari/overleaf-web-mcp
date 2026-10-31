@@ -308,6 +308,29 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
     ),
     add_comment: operation('add_comment', async input => await runtime.comments.addComment(input)),
     set_comment_status: operation('set_comment_status', async input => await runtime.comments.setCommentStatus(input)),
+    list_tracked_changes: operation(
+      'list_tracked_changes',
+      async input =>
+        await runtime.trackedChanges.listTrackedChanges(input.projectId, {
+          filePath: input.filePath,
+          type: input.type,
+          authorId: input.authorId,
+          excerptChars: input.excerptChars,
+          limit: input.limit,
+        })
+    ),
+    manage_tracked_changes: operation(
+      'manage_tracked_changes',
+      async input =>
+        await runtime.trackedChanges.manageTrackedChanges({
+          projectId: input.projectId,
+          filePath: input.filePath,
+          revision: input.revision,
+          action: input.action,
+          changeIds: input.changeIds,
+          confirmCount: input.confirmCount,
+        })
+    ),
     monitor_project_history: operation(
       'monitor_project_history',
       async input => await runtime.history.monitorProjectHistory(input.projectId, input.sinceVersion)

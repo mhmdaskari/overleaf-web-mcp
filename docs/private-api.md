@@ -15,7 +15,7 @@ unexpected shape surfaces as `PROTOCOL_UNSUPPORTED` rather than a parse exceptio
 | Method and route | Sent | Read | Notes |
 | --- | --- | --- | --- |
 | `GET /project` | session cookie | `<meta name="ol-csrfToken">`, `ol-user_id`, `ol-maxDocLength` from the HTML | Runs once at startup. A missing CSRF token means the session expired (`AUTH_EXPIRED`). |
-| `GET /socket.io/1/?...` and `WS /socket.io/1/websocket/:sessionId` | session cookie, `projectId` | Socket.IO 0.9 handshake, then the `joinProject` payload: `project.rootFolder`, `rootDoc_id`, `compiler`, `imageName`, `spellCheckLanguage`, `trackChangesState`, `permissionsLevel`, `protocolVersion` | One cached socket per project; document text goes over this channel as OT. |
+| `GET /socket.io/1/?...` and `WS /socket.io/1/websocket/:sessionId` | session cookie, `projectId` | Socket.IO 0.9 handshake, then the `joinProject` payload: `project.rootFolder`, `rootDoc_id`, `compiler`, `imageName`, `spellCheckLanguage`, `trackChangesState`, `features.trackChanges`, `features.trackChangesVisible`, `permissionsLevel`, `protocolVersion` | One cached socket per project; document text goes over this channel as OT. Each join counts against web's join-project limiter: 45 a minute for one user on one project. Past it the socket sends `connectionRejected` `{ message: "rate-limit hit when joining project", code: "TooManyRequests" }` (captured live), reported as `RATE_LIMITED` with `details.reason: "join_rate_limited"`. |
 
 ## Projects
 
@@ -92,12 +92,134 @@ a while; a 404 from the output route is `BUILD_NOT_FOUND`.
 | Method and route | Sent | Read | Used by |
 | --- | --- | --- | --- |
 | `GET /project/:id/threads` | nothing | thread ids, messages, authors, resolution state | `list_comments` |
-| `GET /project/:id/ranges` | nothing | per-document comment ranges, when the deployment exposes it | `list_comments` |
+| `GET /project/:id/ranges` | nothing | a top-level array `[{ id, ranges }]` with each document's comment and tracked-change ranges, when the deployment exposes it | `list_comments`, `list_tracked_changes` without `filePath` |
 | `POST /project/:id/thread/:threadId/messages` | `{ content }` | nothing | `add_comment`, `reply_to_comment` |
 | `DELETE /project/:id/doc/:docId/thread/:threadId` | nothing | nothing | orphan cleanup after a failed `add_comment` attachment |
 | `POST /project/:id/doc/:docId/thread/:threadId/resolve` and `/reopen` | nothing | nothing | `set_comment_status` on ShareJS documents |
+| `POST /project/:id/doc/:docId/changes/accept` | `{ change_ids }` | the status only; the body is never read | `manage_tracked_changes` `accept` on ShareJS documents |
 
-Comment ranges themselves travel over the OT channel, not REST.
+Comment and tracked-change ranges themselves travel over the OT channel, not REST. The `/ranges`
+handler is not in Overleaf's public source. Live, it answers 200 with a `ranges` of `{}` for a
+document without any, lists a change before the document is flushed, with the same id joinDoc
+reports, and carries plain UTF-8 text and ISO timestamps (live, www.overleaf.com, 2026-10-30). It is
+a hint for choosing which ShareJS documents to join, not an authority: ids and positions are taken
+only from a fresh joinDoc. For a history-ot document its ids are drawn at random each time the
+document is flushed (overleaf/overleaf e039ad2), so they never identify a change.
+
+## Tracked changes
+
+Recorded from Overleaf's source at overleaf/overleaf e039ad2 and checked live on a disposable
+project (live, www.overleaf.com, 2026-10-30), except where an entry says it was not captured live.
+
+**Accept, ShareJS documents.** `POST /project/:id/doc/:docId/changes/accept` with
+`{ change_ids }` and the `x-csrf-token` header, as the editor sends it. The web handler is not in
+the public source; it reaches document-updater's `/change/accept`, whose reply carries previews of
+the document's text, so the server never reads or logs the body. Live, it answers 204 with an
+empty body, leaves the version and the content unchanged, and removes the ids from the ranges.
+Unknown or already accepted ids, an empty list, and a document with no changes all answer 204 as
+well, so every id is checked against a fresh join before the post. An id that is not an ObjectId
+answers 400, an unknown document 500, and an unknown route 404. In source document-updater refuses
+a history-ot document with 422, and the server never sends this route for one. The sender's own
+socket, like every other editor's, then receives `accept-changes(docId, changeIds)`.
+
+**Reject, ShareJS documents.** There is no client route; the editor rejects with one OT update.
+It carries no `meta`, so it is untracked, is sent at the version of a fresh join (the server drops
+`u` when it transforms a stale update), and lists its components in ascending document order, each
+position shifted by the components before it. A tracked insert is rejected with
+`{ p, d: <inserted text>, u: true }`, a tracked delete with `{ p, i: <deleted text>, u: true }` at
+the delete's `p`, and at equal `p` the `d` component comes first. Live, a delete, an insert, and a
+replacement pair rejected in one update each restored the original text exactly and removed their
+ids, with no new change. `POST /project/:id/doc/:docId/changes/reject` exists, but it is a
+private, basic-auth route that document-updater calls to tell web that changes were rejected, not a
+client route, and the server never calls it. Any ShareJS update that removes tracked changes sends
+that notification, so a ShareJS reject may notify the change's author.
+
+**`meta.tc`.** An 18-hex id seed, not the author. Tracking is on exactly when `tc` is present, the
+author is the session's user, and the k-th change an update creates gets the id `tc` followed by
+k as six hex digits, from `000001`. The server has sent a fresh seed on every tracked ShareJS write
+since 0.6.2.
+
+**Update validation and authorization** (confirmed in source at e039ad2, not captured live).
+real-time validates `applyOtUpdate` strictly: `meta` may hold only `tc`, and a component only `p`,
+`i`, `d`, `c`, `t`, and `u`; any other key disconnects the socket. The access level an update
+needs follows its shape, and nothing forces tracking for a `review` member. A ShareJS op made only
+of comment components needs view level (any member), one with `meta.tc` review level (`owner`,
+`readAndWrite`, `review`), and any other edit level (`owner`, `readAndWrite`). A history-ot op
+made only of plain retains, tracked inserts, and retains whose tracking is not `none` needs review
+level; any other text operation (an untracked insert, a removal, or a retain that clears tracking)
+needs edit level, and an op made only of comment additions needs view level. An unauthorized
+update is answered `not authorized` and its socket disconnected.
+
+**ShareJS change shape.** joinDoc's `ranges` is `{ changes?, comments? }`, and a change is
+`{ id, op: { p, i } | { p, d }, metadata: { user_id, ts } }`. `p` counts UTF-16 units of the
+decoded document and `ts` is an ISO string. `user_id` is an opaque string, which can be
+`anonymous-user`, or null in the web types. `id` is missing on a change restored from history, and
+`op` can carry other keys, such as `u` or `fixedRemoveChange`. A tracked insert that touches one by
+the same user merges into it, keeping the first id and the older timestamp; inserts by different
+users never merge. A tracked replacement is stored as an insert at `p` and a delete at `p` plus the
+insert's length, and at equal `p` deletes sort before inserts. Live, a tracked
+`[{ p, d: "foo" }, { p, i: "bar" }]` became the insert `{ p, i: "bar" }`, id `tc` + `000002`, and
+the delete `{ p + 3, d: "foo" }`, id `tc` + `000001`.
+
+**Range text encoding.** joinDoc with `encodeRanges: true` encodes a ShareJS document's `op.i`,
+`op.d`, and `op.c` as it encodes the lines: the UTF-8 bytes read as Latin-1 (`Ã©` for `é`), decoded
+the same way. `p`, ids, and metadata are not encoded, a history-ot snapshot is sent as is, and the
+`/ranges` text is plain UTF-8, never decoded.
+
+**History-ot documents** (confirmed in source at e039ad2, not captured live). The joinDoc snapshot
+is `{ content, comments?, trackedChanges? }`, with a key left out when it is empty, and joinDoc's
+`ranges` is `{}`. A tracked change is
+`{ range: { pos, length }, tracking: { type: "insert" | "delete", userId, ts } }`, with no id;
+positions are UTF-16 offsets into the raw content, which still holds tracked-deleted text. Ranges
+never overlap, and ranges that touch with the same type and user merge, keeping the earliest
+timestamp, but only once a TextOperation is applied. An update is
+`{ doc, v, op: [{ textOperation: [...] }] }` with no `meta`: a positive integer retains, a
+negative one removes, a string or `{ i, tracking?, commentIds? }` inserts, and
+`{ r, tracking: { type: "none" } }` retains and clears tracking. Its base length must equal the raw
+content length. A decision is one such update for all the chosen changes of a document, in
+ascending raw position, retaining the gaps and ending with a retain to the raw length:
+
+| Tracked change | accept | reject |
+| --- | --- | --- |
+| insert of n units | `{ r: n, tracking: { type: "none" } }` | `-n` |
+| delete of n units | `-n` | `{ r: n, tracking: { type: "none" } }` |
+
+It bumps the version, needs edit level, and sends no rejection notification.
+
+**Project features.** joinProject's `project.features` are the project owner's.
+`features.trackChanges` is the owner's track-changes feature, false by default in source.
+`features.trackChangesVisible` is false in the public source and set only where the deployment has
+the review module; live, both are true. `trackChangesState` is sent only when
+`features.trackChanges` is true, as a boolean or a map of user ids to booleans, and the server
+counts `true`, or `true` for the user, as on.
+
+**`otUpdateError`.** real-time emits it from two places.
+
+- `update is too large`, the exact first argument, comes from real-time itself: it acknowledges the
+  update with success, emits `otUpdateError("update is too large", { project_id, doc_id, error })`
+  about 100 ms later to the sender only, and disconnects it. Nothing is stored. Not captured live.
+- An error from document-updater, such as `Invalid hash`, `Delete component does not match`,
+  `doc ops range is not loaded in redis`, `too many comments or tracked changes`, or `Op too old`, is
+  emitted to every socket that has joined the document, and each is disconnected. It can arrive
+  after `otUpdateApplied`: live, a ShareJS update with a wrong hash was acknowledged, then
+  `otUpdateError("Invalid hash", { project_id, doc_id, error, _id, message })` arrived, then the
+  disconnect, and nothing was stored.
+- `too many comments or tracked changes` is document-updater refusing an update that would leave
+  the document with more than 2,000 tracked changes or more than 500 comments (`MAX_CHANGES` and
+  `MAX_COMMENTS` in its `RangesManager`; overleaf/overleaf e039ad2), whether or not the update is
+  tracked. A tracked write here counts a change for each deletion and each insertion it sends,
+  and any write one more for an insertion strictly inside a tracked insertion, which
+  `RangesTracker` splits in two when the insertion is untracked or by another author, and sends
+  fewer, larger edits when the document would pass 2,000. Not captured live.
+
+This server treats the first as `UPDATE_TOO_LARGE` with `details.outcome: "not_applied"`. Any
+other `otUpdateError` for the document leaves the write unconfirmed: it may come from another
+client's update or follow ours being applied, so the write is observed on a fresh connection and
+never resent. Either way the socket is not reused. Before sending, an update is checked against
+the account's access level as real-time checks it: an update of only comment ops needs view
+access, one with `meta.tc` (ShareJS) or of only positive retains, tracked inserts, and retains
+whose tracking is not `none` (history-OT) needs review access, and anything else needs edit
+access (`owner` or `readAndWrite`).
 
 ## History
 
@@ -123,7 +245,9 @@ with `details.path` and `details.contentType`, never quoted. A rejection's `erro
 `details.overleafError` only when it is a short lowercase code.
 
 Socket errors (`connectionRejected`, a failed `joinDoc`, `leaveDoc`, or `applyOtUpdate`
-acknowledgement, `otUpdateError`, and a Socket.IO error packet) are free text, and
-`otUpdateError` can quote the rejected update. Their text never reaches a caller: a message this
+acknowledgement, `otUpdateError`, and a Socket.IO error packet) are free text. Of that text, only
+the error string can carry document content or ids: a comment mismatch quotes document text, and
+`document not found: <docId>` names a document. Their text never reaches a caller: a message this
 release recognizes becomes an identifier in `details.reason`, such as `invalid_session` or
-`update_too_large`, and anything else is `unrecognized`.
+`update_too_large`, and anything else is `unrecognized`. An `otUpdateError` payload's `project_id`,
+`doc_id`, and host-derived `_id` are never surfaced either.

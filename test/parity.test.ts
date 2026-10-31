@@ -401,6 +401,36 @@ describe('one failure, one error object, through every interface', () => {
     expect(cli.exitCode).toBe(1)
   })
 
+  test('REVIEW_UNSUPPORTED from manage_tracked_changes is one error everywhere and exits 3', async () => {
+    const error = new McpError('REVIEW_UNSUPPORTED', 'Track changes is not available for this project.', {
+      details: { kind: 'feature_disabled' },
+    })
+    const expected = {
+      code: 'REVIEW_UNSUPPORTED',
+      message: 'Track changes is not available for this project.',
+      retryable: false,
+      details: { kind: 'feature_disabled' },
+    }
+    const runtimes = {
+      mcp: fakeServiceRuntime(),
+      cli: fakeServiceRuntime(),
+      sdk: fakeServiceRuntime(),
+      service: fakeServiceRuntime(),
+    }
+    for (const runtime of Object.values(runtimes)) runtime.trackedChanges.manageTrackedChanges.mockRejectedValue(error)
+    const input = INPUTS.manage_tracked_changes
+
+    const mcp = await callMcp(runtimes.mcp, 'manage_tracked_changes', input)
+    const cli = await callCli('manage_tracked_changes', input, async () => runtimes.cli, FAKE_ENV)
+
+    expect(mcp.isError).toBe(true)
+    expect(mcp.text).toStrictEqual(expected)
+    expect(stderrError(cli)).toStrictEqual(expected)
+    expect(await rejection(sdkCall(runtimes.sdk, 'manage_tracked_changes', input))).toStrictEqual(expected)
+    expect(await rejection(serviceCall(runtimes.service, 'manage_tracked_changes', input))).toStrictEqual(expected)
+    expect(cli.exitCode).toBe(3)
+  })
+
   test('a write result outside its output schema is returned, never failed after the write applied', async () => {
     const offSchema = { projectId: 'p', unexpected: true }
     const runtimes = { cli: fakeServiceRuntime(), sdk: fakeServiceRuntime(), service: fakeServiceRuntime() }

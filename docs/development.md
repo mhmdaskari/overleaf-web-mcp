@@ -80,6 +80,27 @@ set its root document, compile it once, and trash it, or
 temporary local folder into it with `plan_sync` and `sync_directory`, check that a second plan
 finds nothing to do, and trash it.
 
+`RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1`, with `RUN_OVERLEAF_LIVE_TESTS=1`, needs no project id:
+it runs `test/live/tracked-review-live.test.ts` on a throwaway project it creates, named
+`mcp-tracked-review-<time>`, and trashes afterwards. It writes tracked changes and checks that
+`list_tracked_changes` lists them with the account's own user id as `authorId`; that rejecting an
+insert restores the original text; that accepting a tracked replacement in a second file keeps the
+new text and empties the listing; that both halves of a tracked replacement, on non-ASCII text, are
+listed as a pair and rejected in one call; that a tracked write changing two separated words in
+one line lists two inserts and two deletes, each insert paired with its delete, and that
+rejecting all four restores the original; that `add_comment` on non-ASCII text verifies and
+`list_comments` quotes it exactly; that a comment keeps its whole words through a tracked and then
+an untracked typo fix inside them, the tracked fix recorded as only the swapped letters; and that a
+tracked word change inside the account's own tracked sentence merges into that one insertion, which
+rejecting removes. New documents in a new project use ShareJS today, so history-OT
+decisions run only if Overleaf created the documents as history-OT; otherwise that test is skipped.
+It never looks at any other project.
+
+```bash
+RUN_OVERLEAF_LIVE_TESTS=1 RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS=1 \
+npm test -- test/live/tracked-review-live.test.ts
+```
+
 Two more live files drive the built package, so run `npm run build` first, and run each on its own
 path:
 
@@ -90,12 +111,14 @@ RUN_OVERLEAF_LIVE_TESTS=1 RUN_OVERLEAF_LIVE_COMPARE_TESTS=1 npm test -- test/liv
 ```
 
 `test/live/cli-live.test.ts` drives `node dist/cli.js` alone, from `call create_project` through
-`files write`, `sync apply --plan-token`, and `compile run`, to a trash of the throwaway project
-it named `mcp-cli-<time>`. `test/live/compare-interfaces.test.ts` creates a throwaway project
-named `mcp-compare-<time>`, runs four tasks on it (revise one section, sync figures and sources,
-diagnose a failed build, and resolve a review task on comment threads) through a spawned `serve`,
-`node dist/cli.js`, and the SDK, each cold and warm, then trashes it. Every task must succeed
-through every interface, with the same outcome. It writes a JSON report to
+`files write`, `sync apply --plan-token`, and `compile run`, to a trash of the throwaway project it
+named `mcp-cli-<time>`. `test/live/compare-interfaces.test.ts` creates a throwaway project named
+`mcp-compare-<time>`, runs four tasks on it (revise one section, sync figures and sources, diagnose
+a failed build, and resolve a review task: a comment thread, then a tracked change written and
+rejected) through a spawned `serve`, `node dist/cli.js`, and the SDK, each cold and warm, then
+trashes it. Every task must succeed through every interface, with the same outcome. Before each
+interface's runs it waits a minute, untimed, because Overleaf allows one account 45 joins of one
+project a minute, so the whole suite takes about a quarter of an hour. It writes a JSON report to
 `OVERLEAF_LIVE_COMPARE_REPORT`, by default a file in the system temp folder whose path the test
 prints.
 

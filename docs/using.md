@@ -57,6 +57,9 @@ can call the same operations directly, with the [command line](cli.md) or the
 - "List the open comments and summarize them."
 - "Reply to the comment about Figure 2 saying the caption is fixed."
 - "Add a comment on the sentence starting 'We assume independence' asking for a citation."
+- "List the tracked changes in `main.tex`, show me each one, and accept the ones I approve." The
+  assistant will confirm which changes, and how many, before deciding them.
+- "Reject the suggested deletions in the abstract."
 
 **History**
 
@@ -218,6 +221,24 @@ compile in a loop.
 3. `add_comment` anchors a new thread to exact text: it needs a fresh revision, 1-based line and
    UTF-16 column positions, and `expectedText` equal to the selected text.
 4. `set_comment_status` resolves or reopens a thread using the latest revision.
+
+### Reviewing tracked changes
+
+1. `list_tracked_changes` with `filePath` lists a document's tracked changes: each with its
+   `changeId`, `type` (`insert` or `delete`), position, an excerpt, its `authorId`, and its
+   timestamp, plus the document's `revision`. A replacement is an insert and a delete linked by
+   `pairedChangeId`. Without `filePath` it lists the documents Overleaf's range index says have
+   changes; `authorId` and `type` filter the list.
+2. The assistant shows you the changes and asks which to accept or reject.
+3. `manage_tracked_changes` with `action` `accept` or `reject`, that `filePath` and `revision`, the
+   chosen `changeIds`, and `confirmCount` equal to their number decides them in one call. Accepting
+   an insert keeps its text and accepting a delete removes it; rejecting does the opposite.
+   Nothing is sent if the count is wrong, the document changed, an id is no longer a tracked
+   change, or a change left out overlaps a chosen one.
+4. List again before the next decision: ids merge and split as the document changes.
+
+Accepting and rejecting needs owner or edit access to the project; a review-only collaborator can
+suggest changes with `writeMode: "tracked"` but not decide them here.
 
 Review comments and tracked changes require an Overleaf plan and deployment that support them.
 

@@ -6,6 +6,13 @@ import { MAX_LOG_ENTRIES, MAX_MESSAGE_LENGTH } from '../overleaf/compile-log.js'
 import { SECTION_COMMANDS } from '../core/sections.js'
 import { COMPILERS, DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS } from '../overleaf/projects.js'
 import { BATCH_UPLOAD_LIMIT } from '../overleaf/sync.js'
+import {
+  DEFAULT_EXCERPT_CHARS,
+  DEFAULT_TRACKED_CHANGE_LIMIT,
+  MAX_CHANGE_IDS,
+  MAX_EXCERPT_CHARS,
+  MAX_TRACKED_CHANGE_LIMIT,
+} from '../overleaf/tracked-changes.js'
 import type { Effect } from './effects.js'
 import { ERROR_CODES } from './error-codes.js'
 
@@ -44,6 +51,8 @@ export const OPERATION_NAMES = [
   'reply_to_comment',
   'add_comment',
   'set_comment_status',
+  'list_tracked_changes',
+  'manage_tracked_changes',
   'monitor_project_history',
 ] as const
 
@@ -177,6 +186,21 @@ const commentThreadSchema = z.object({
   messages: z.array(commentMessageSchema),
   resolvedAt: z.string().optional(),
   resolvedBy: commentAuthorSchema.optional(),
+})
+
+const trackedChangeTypeSchema = z.enum(['insert', 'delete'])
+
+const trackedChangeSchema = z.object({
+  changeId: z.string(),
+  type: trackedChangeTypeSchema,
+  start: position,
+  end: position,
+  length: z.number().int().positive(),
+  excerpt: z.string().optional(),
+  excerptTruncated: z.boolean(),
+  authorId: z.string().nullable(),
+  timestamp: z.string().optional(),
+  pairedChangeId: z.string().optional(),
 })
 
 const projectActionSchema = z.enum(['rename', 'trash', 'restore', 'archive', 'unarchive', 'delete'])
@@ -368,7 +392,7 @@ export const OPERATIONS = {
   },
   write_file: {
     description:
-      'Replace a text document using a minimal verified OT edit, optionally recorded as tracked changes. Supply the new text either inline through content or from disk through localPath, never both; localPath keeps a whole-file replacement revision-checked without sending the file through the tool call. A write that hit a timeout or a lost socket after the update was sent is never resent: the live document is observed instead, and recoveredAfterTimeout: true means the intended text was confirmed. On a ShareJS (legacy editor) document, text that adds a character outside the Basic Multilingual Plane, such as an emoji, adds another copy of one the document holds, or changes their order is INVALID_ARGUMENT with details.line (1-based) and nothing is sent, because Overleaf would store it as U+FFFD; editing text on either side of one the document already holds is fine.',
+      'Replace a text document with a verified OT update that changes only the words that differ, optionally recorded as tracked changes, one per changed group of words; where a changed word touches a comment or tracked change, the update is one edit from the first change to the last instead. Supply the new text either inline through content or from disk through localPath, never both; localPath keeps a whole-file replacement revision-checked without sending the file through the tool call. A write that hit a timeout, a lost socket, or an error Overleaf reported on the document after the update was sent is never resent: the live document is observed instead, and recoveredAfterTimeout: true means the intended text was confirmed. An update Overleaf refused as too large is UPDATE_TOO_LARGE with details.outcome not_applied: nothing was stored. On a ShareJS (legacy editor) document, text that adds a character outside the Basic Multilingual Plane, such as an emoji, adds another copy of one the document holds, or changes their order is INVALID_ARGUMENT with details.line (1-based) and nothing is sent, because Overleaf would store it as U+FFFD; editing text on either side of one the document already holds is fine. With writeMode tracked, a write Overleaf applied without recording it as tracked changes by this account is PROTOCOL_UNSUPPORTED with details.kind applied_untracked and details.liveRevision: it is live and not reverted, so read the file before writing again; if another update followed the write before that check, it is REVISION_CONFLICT with details.outcome unknown instead. A review-only collaborator can write only with writeMode tracked, and a read-only one cannot write: either is PERMISSION_DENIED before anything is sent.',
     inputSchema: z.object({
       projectId,
       filePath,
@@ -387,7 +411,7 @@ export const OPERATIONS = {
   },
   create_file: {
     description:
-      'Create a text document and optionally record non-empty initial content as tracked changes. The content is written as by write_file once the empty document exists, so on a ShareJS (legacy editor) document, content that adds an emoji or other character outside the Basic Multilingual Plane is refused with INVALID_ARGUMENT, and a timeout or a lost socket is observed, never resent. If reading back or writing the content fails after the document was created, the error keeps its code and adds details.created: true; the document then exists, possibly empty, so do not create it again: read it with read_file and write the content with write_file.',
+      'Create a text document and optionally record non-empty initial content as tracked changes. The content is written as by write_file once the empty document exists, so on a ShareJS (legacy editor) document, content that adds an emoji or other character outside the Basic Multilingual Plane is refused with INVALID_ARGUMENT; a timeout, a lost socket, or an Overleaf error after sending is observed, never resent; content the account may not write, such as untracked content from a review-only collaborator, is PERMISSION_DENIED before it is sent; and tracked content Overleaf applied without recording it as tracked changes by this account is PROTOCOL_UNSUPPORTED with details.kind applied_untracked, live and not reverted. If reading back or writing the content fails after the document was created, the error keeps its code and adds details.created: true; the document then exists, possibly empty, so do not create it again: read it with read_file and write the content with write_file.',
     inputSchema: z.object({ projectId, filePath, content: z.string().optional(), writeMode }),
     outputSchema: documentWriteSchema,
     annotations: { destructiveHint: false, idempotentHint: false },
@@ -604,7 +628,7 @@ export const OPERATIONS = {
   },
   sync_directory: {
     description:
-      "Make a project folder match a local folder: upload new and changed files, and in mirror mode also delete what exists only in the project. Call plan_sync first, confirm the plan with the user, and pass its planToken; if the project or the folder changed since, REMOTE_DRIFT is returned and nothing changes. A planToken is required: without one the call is refused with CONFIRMATION_MISMATCH before anything is read, unless an additive sync passes unplanned: true to run without a plan on purpose (planned is then false); a mirror sync always needs one. Changed text documents are replaced through revision-checked write_file edits, recorded as tracked changes when writeMode is tracked, so a concurrent edit fails that file with REVISION_CONFLICT rather than being overwritten. Binaries and new files are uploaded, and one whose path changed since the plan fails with REMOTE_DRIFT; with writeMode tracked, new .tex, .bib, and similar text files are created with tracked content instead. Missing folders are created. Uploads and writes run first. Deletes run only in mirror mode, only when confirmDeleteCount equals the number of remoteOnly entries, else CONFIRMATION_MISMATCH, and never after any upload or write failed. Failures are per file and nothing is retried: the call continues unless stopOnError, then returns status, completed, failed, remaining, and a planToken to resume with. Each failed entry carries the step's error details; a create that failed with details.created left its document behind, and resuming with the planToken writes it while it is still empty or holds the local text. On a ShareJS (legacy editor) document, text that adds an emoji or another character outside the Basic Multilingual Plane, or reorders existing ones, fails that file with INVALID_ARGUMENT. It saves tool calls, not time.",
+      "Make a project folder match a local folder: upload new and changed files, and in mirror mode also delete what exists only in the project. Call plan_sync first, confirm the plan with the user, and pass its planToken; if the project or the folder changed since, REMOTE_DRIFT is returned and nothing changes. A planToken is required: without one the call is refused with CONFIRMATION_MISMATCH before anything is read, unless an additive sync passes unplanned: true to run without a plan on purpose (planned is then false); a mirror sync always needs one. Changed text documents are replaced through revision-checked write_file edits, recorded as tracked changes when writeMode is tracked, so a concurrent edit fails that file with REVISION_CONFLICT rather than being overwritten. Binaries and new files are uploaded, and one whose path changed since the plan fails with REMOTE_DRIFT; with writeMode tracked, new .tex, .bib, and similar text files are created with tracked content instead. Missing folders are created. Uploads and writes run first. Deletes run only in mirror mode, only when confirmDeleteCount equals the number of remoteOnly entries, else CONFIRMATION_MISMATCH, and never after any upload or write failed. Failures are per file and nothing is retried: the call continues unless stopOnError, then returns status, completed, failed, remaining, and a planToken to resume with. Each failed entry carries the step's error details, and kind: applied_untracked when a tracked step applied without being recorded as tracked changes (it is live, not reverted); a create that failed with details.created left its document behind, and resuming with the planToken writes it while it is still empty or holds the local text. On a ShareJS (legacy editor) document, text that adds an emoji or another character outside the Basic Multilingual Plane, or reorders existing ones, fails that file with INVALID_ARGUMENT. It saves tool calls, not time.",
     inputSchema: z.object({
       projectId,
       localFolderPath,
@@ -648,6 +672,12 @@ export const OPERATIONS = {
           errorCode: errorCodeSchema,
           message: z.string(),
           details: z.record(z.string(), z.unknown()).optional(),
+          kind: z
+            .enum(['applied_untracked'])
+            .optional()
+            .describe(
+              'applied_untracked: the tracked step applied but was not recorded as tracked changes; it is live, not reverted'
+            ),
         })
       ),
       remaining: z.array(z.object({ destinationPath: z.string(), action: syncActionSchema })),
@@ -701,7 +731,7 @@ export const OPERATIONS = {
   },
   write_section: {
     description:
-      'Replace one section body in a single file using a revision-checked write, optionally recorded as tracked changes. Included files are not traversed. content replaces the whole body as get_section_content returns it, including nested subsections and, for the last section, \\end{document}, so read it first and keep what should survive. The write is made as by write_file: on a ShareJS (legacy editor) document, content that adds an emoji or other character outside the Basic Multilingual Plane, or reorders existing ones, is refused with INVALID_ARGUMENT, and a timeout or a lost socket is observed, never resent.',
+      'Replace one section body in a single file using a revision-checked write, optionally recorded as tracked changes. Included files are not traversed. content replaces the whole body as get_section_content returns it, including nested subsections and, for the last section, \\end{document}, so read it first and keep what should survive. The write is made as by write_file: on a ShareJS (legacy editor) document, content that adds an emoji or other character outside the Basic Multilingual Plane, or reorders existing ones, is refused with INVALID_ARGUMENT; a timeout, a lost socket, or an Overleaf error after sending is observed, never resent; a review-only collaborator can write only with writeMode tracked and a read-only one cannot write, either being PERMISSION_DENIED before anything is sent; and a tracked write Overleaf applied without recording it as tracked changes by this account is PROTOCOL_UNSUPPORTED with details.kind applied_untracked, live and not reverted.',
     inputSchema: z.object({
       projectId,
       filePath,
@@ -884,7 +914,7 @@ export const OPERATIONS = {
   },
   set_comment_status: {
     description:
-      'Resolve or reopen a review thread and verify its resulting document revision. filePath must be the document the thread is anchored in, as list_comments reports it; a thread not anchored there fails with NOT_FOUND and nothing changes. Returns threadId, status, the resulting revision, trackChangesActive, writeMode, and recoveredAfterTimeout when a change that timed out, lost its socket, or could not be read back was confirmed by observation.',
+      'Resolve or reopen a review thread and verify its resulting document revision. filePath must be the document the thread is anchored in, as list_comments reports it; a thread not anchored there fails with NOT_FOUND and nothing changes. On a history-OT document a status change needs owner or edit access: review-only or read-only access is PERMISSION_DENIED before anything is sent. Returns threadId, status, the resulting revision, trackChangesActive, writeMode, and recoveredAfterTimeout when a change that timed out, lost its socket, or could not be read back was confirmed by observation.',
     inputSchema: z.object({
       projectId,
       filePath,
@@ -898,6 +928,83 @@ export const OPERATIONS = {
       revision: z.string(),
       trackChangesActive: z.boolean(),
       writeMode: z.literal('untracked'),
+      recoveredAfterTimeout: z.literal(true).optional(),
+    }),
+    annotations: { destructiveHint: true, idempotentHint: true },
+    effects: ['overleaf-write', 'overleaf-read'],
+  },
+  list_tracked_changes: {
+    description: `List tracked changes (suggestions) and where they are, so they can be accepted or rejected with manage_tracked_changes. With filePath, that document is read and its list is authoritative. Without it, Overleaf's project range index only chooses which documents to read: just the documents it lists with changes are read, its change ids are never used, and it may lag or leave a document out, so name a document with filePath for an authoritative list (this matters most for history-OT documents, whose index ids are never valid). indexUnavailable: true means the deployment has no index and no document was read. type and authorId keep only matching changes; limit (default ${DEFAULT_TRACKED_CHANGE_LIMIT}, at most ${MAX_TRACKED_CHANGE_LIMIT}) caps the changes returned across all documents, totalMatched counts every match, and truncated says some were left out. Returns documents, each with filePath, revision (pass it to manage_tracked_changes), protocol, totalChanges (every tracked change in the document, unfiltered), undecidableChanges when some changes carry no id and cannot be decided by this server, and changes: changeId, type (insert: suggested text that is visible; delete: suggested removal of text that is no longer visible), start and end (1-based line and UTF-16 column in the text read_file returns; a delete is a point, so its start equals its end), length in UTF-16 units, excerpt of the inserted or deleted text (at most excerptChars UTF-16 units, default ${DEFAULT_EXCERPT_CHARS}, 0 for none) with excerptTruncated, authorId (an Overleaf user id, or null), an ISO timestamp, and pairedChangeId linking the insert and the delete of one replacement. Also returns trackChangesActive. Ids merge and split as the document is edited, and history-OT ids are valid only with the revision they were listed with, so list again before deciding.`,
+    inputSchema: z.object({
+      projectId,
+      filePath: z
+        .string()
+        .min(1)
+        .optional()
+        .describe('Only this document, read directly rather than through the index'),
+      type: trackedChangeTypeSchema.optional().describe('Only inserts or only deletes'),
+      authorId: z.string().min(1).optional().describe('Only changes by this Overleaf user id'),
+      excerptChars: z
+        .number()
+        .int()
+        .min(0)
+        .max(MAX_EXCERPT_CHARS)
+        .default(DEFAULT_EXCERPT_CHARS)
+        .describe('Longest excerpt of each change, in UTF-16 units; 0 for none'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_TRACKED_CHANGE_LIMIT)
+        .default(DEFAULT_TRACKED_CHANGE_LIMIT)
+        .describe('Most changes returned across all documents'),
+    }),
+    outputSchema: z.object({
+      documents: z.array(
+        z.object({
+          filePath: z.string(),
+          revision: z.string(),
+          protocol: otProtocolSchema,
+          totalChanges: z.number().int().nonnegative(),
+          undecidableChanges: z.number().int().positive().optional(),
+          changes: z.array(trackedChangeSchema),
+        })
+      ),
+      totalMatched: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+      trackChangesActive: z.boolean(),
+      indexUnavailable: z.literal(true).optional(),
+    }),
+    annotations: { readOnlyHint: true },
+    effects: ['overleaf-read'],
+  },
+  manage_tracked_changes: {
+    description: `Accept or reject tracked changes in one document. First list them with list_tracked_changes and confirm them with the user, then pass that document's filePath and revision, the changeIds (1 to ${MAX_CHANGE_IDS}, each once), and confirmCount equal to the number of changeIds; a missing or different confirmCount is CONFIRMATION_MISMATCH and nothing is sent. Accepting an insert keeps its text and accepting a delete removes it; rejecting an insert removes its text and rejecting a delete restores it. A tracked replacement is an insert and a delete linked by pairedChangeId: pass both ids. Checked in this order before anything is sent: access (only the owner and collaborators who can edit may decide; review-only and read-only access is PERMISSION_DENIED), whether track changes is available for the project (REVIEW_UNSUPPORTED, details.kind "feature_disabled"; review may need a plan that includes it), the revision (REVISION_CONFLICT), that every id is a tracked change in this document (NOT_FOUND, details.missingChangeIds), and that no change left out overlaps a chosen one (INVALID_ARGUMENT, details.overlappingChangeIds). REVIEW_UNSUPPORTED with details.kind "route_unavailable" or "document_protocol" means this Overleaf cannot decide changes this way. The decision is sent once and verified on a fresh read of the document. One that timed out is observed, never resent: recoveredAfterTimeout: true when it applied, TIMEOUT or REMOTE_ERROR with details.outcome "not_applied" when it did not, REVISION_CONFLICT with details.outcome "unknown" when the document changed meanwhile, and OUTCOME_UNKNOWN when it could not be observed. A repeated decision changes nothing: it fails with REVISION_CONFLICT when the first one changed the document's revision, as every reject and every history-OT decision does, or with NOT_FOUND when it did not, as after an accept on a ShareJS document, which leaves the revision as it was. Rejecting on a ShareJS (legacy editor) document may notify the change's author; on a history-OT document it does not. Returns action, filePath, changeIds, the resulting revision and protocol, remainingChangeCount (tracked changes left in the document), trackChangesActive, and recoveredAfterTimeout. List again after every decision and after REVISION_CONFLICT or NOT_FOUND: ids merge and split, and history-OT ids are valid only with the revision they were listed with.`,
+    inputSchema: z.object({
+      projectId,
+      filePath,
+      revision: z.string().min(1).describe('The revision list_tracked_changes returned for this document'),
+      action: z.enum(['accept', 'reject']),
+      changeIds: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(MAX_CHANGE_IDS)
+        .describe('changeId values from list_tracked_changes, all in this document, each once'),
+      confirmCount: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe('Must equal the number of changeIds, after the user has confirmed them'),
+    }),
+    outputSchema: z.object({
+      action: z.enum(['accept', 'reject']),
+      filePath: z.string(),
+      changeIds: z.array(z.string()),
+      revision: z.string(),
+      protocol: otProtocolSchema,
+      remainingChangeCount: z.number().int().nonnegative(),
+      trackChangesActive: z.boolean(),
       recoveredAfterTimeout: z.literal(true).optional(),
     }),
     annotations: { destructiveHint: true, idempotentHint: true },

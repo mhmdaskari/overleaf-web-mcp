@@ -108,6 +108,8 @@ export interface SyncFailure {
   message: string
   /** The failed step's own error details, such as `reason`, `status`, or `outcome`. */
   details?: Record<string, unknown>
+  /** `applied_untracked`: a tracked step's text is live but was not recorded as tracked changes. */
+  kind?: 'applied_untracked'
 }
 
 export interface SyncDirectoryResult {
@@ -405,6 +407,7 @@ function syncFailure(destinationPath: string, action: SyncAction, failure: McpEr
     errorCode: failure.code,
     message: failure.message,
     ...(failure.details === undefined ? {} : { details: failure.details }),
+    ...(failure.details?.kind === 'applied_untracked' ? { kind: 'applied_untracked' as const } : {}),
   }
 }
 
