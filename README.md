@@ -150,7 +150,7 @@ An upload that would replace a file, and a folder sync without a `planToken`, ar
 | Project lifecycle | `update_project_settings` | Set the root document, TeX engine, TeX Live image, or spell-check language | | |
 | Files | `get_project_tree` | Read the file tree with the project's compile settings | read-only | |
 | Files | `read_file` | Read a text document and its revision | read-only | |
-| Files | `write_file` | Replace a document with a revision-checked, minimal edit | destructive | reads |
+| Files | `write_file` | Replace a document with a revision-checked edit of only the changed words | destructive | reads |
 | Files | `create_file` | Create a text document, optionally with content | | |
 | Files | `manage_entity` | Create a folder, or rename, move, or delete an entity | destructive | |
 | Files | `upload_file` | Upload a local file, replacing what is at that path when confirmed | destructive | reads |

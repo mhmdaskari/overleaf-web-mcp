@@ -10,7 +10,7 @@ Find the project first. list_projects returns ids, newest first. get_project_tre
 
 Projects. create_project, clone_project, and import_project_zip return a new projectId. A blank project's root is Overleaf's stub main.tex: after adding the manuscript, set rootFilePath with update_project_settings or delete the stub. manage_project trash, archive, and delete need confirmName equal to the project name; prefer trash, since delete is permanent.
 
-Editing text. Call read_file before write_file or write_section and pass back its revision unchanged. On REVISION_CONFLICT, read again and reconcile; never reuse a stale revision or retry a write blindly. Send the complete new text, or localPath for a local file; the server computes a minimal edit. writeMode "tracked" records Overleaf tracked changes and never falls back to untracked. On a legacy (ShareJS) document, adding emoji or other characters above U+FFFF is refused.
+Editing text. Call read_file before write_file or write_section and pass back its revision unchanged. On REVISION_CONFLICT, read again and reconcile; never reuse a stale revision or retry a write blindly. Send the complete new text, or localPath for a local file; the server edits only changed words. writeMode "tracked" records Overleaf tracked changes and never falls back to untracked. On a legacy (ShareJS) document, adding emoji or other characters above U+FFFF is refused.
 
 Uploads. upload_file and batch_upload have no revision check and replace nothing unless asked. To replace a binary, pass overwrite: true or expectedHash from get_project_tree; for a text document, prefer write_file with localPath.
 

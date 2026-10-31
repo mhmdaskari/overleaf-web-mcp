@@ -97,7 +97,8 @@ export function fakeOverleaf(
   }
 }
 
-function snapshotOf(document: ServerDocument): HistorySnapshot {
+/** The raw snapshot a history-OT join returns: tracked ranges as runs of one mark, all by `user`. */
+export function snapshotOf(document: ServerDocument): HistorySnapshot {
   const trackedChanges: NonNullable<HistorySnapshot['trackedChanges']> = []
   let start = 0
   for (let index = 1; index <= document.marks.length; index += 1) {
@@ -233,10 +234,11 @@ export function encodedRanges(document: { changes?: ShareChange[] }): Record<str
   }
 }
 
-type TextComponent = number | string | { i: string; tracking: { type: Mark } } | { r: number; tracking: { type: Mark } }
+export type TextComponent =
+  number | string | { i: string; tracking: { type: Mark } } | { r: number; tracking: { type: Mark } }
 
 /** Applies one history-OT text operation, which must span the whole raw content. */
-function applyTextOperation(document: ServerDocument, operation: TextComponent[]): void {
+export function applyTextOperation(document: ServerDocument, operation: TextComponent[]): void {
   let cursor = 0
   let content = ''
   const marks: Mark[] = []
@@ -443,7 +445,11 @@ export async function openFakeRuntime(server: FakeOverleaf) {
 
 /** The text an editor shows: history-OT tracked deletions left out. */
 export function visible(server: FakeOverleaf, id: string): string {
-  const document = server.documents.get(id)!
+  return visibleText(server.documents.get(id)!)
+}
+
+/** The text an editor shows of one document: history-OT tracked deletions left out. */
+export function visibleText(document: ServerDocument): string {
   return document.content
     .split('')
     .filter((_, index) => document.marks[index] !== 'delete')

@@ -86,8 +86,13 @@ it runs `test/live/tracked-review-live.test.ts` on a throwaway project it create
 `list_tracked_changes` lists them with the account's own user id as `authorId`; that rejecting an
 insert restores the original text; that accepting a tracked replacement in a second file keeps the
 new text and empties the listing; that both halves of a tracked replacement, on non-ASCII text, are
-listed as a pair and rejected in one call; and that `add_comment` on non-ASCII text verifies and
-`list_comments` quotes it exactly. New documents in a new project use ShareJS today, so history-OT
+listed as a pair and rejected in one call; that a tracked write changing two separated words in
+one line lists two inserts and two deletes, each insert paired with its delete, and that
+rejecting all four restores the original; that `add_comment` on non-ASCII text verifies and
+`list_comments` quotes it exactly; that a comment keeps its whole words through a tracked and then
+an untracked typo fix inside them, the tracked fix recorded as only the swapped letters; and that a
+tracked word change inside the account's own tracked sentence merges into that one insertion, which
+rejecting removes. New documents in a new project use ShareJS today, so history-OT
 decisions run only if Overleaf created the documents as history-OT; otherwise that test is skipped.
 It never looks at any other project.
 

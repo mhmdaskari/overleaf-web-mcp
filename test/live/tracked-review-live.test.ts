@@ -6,9 +6,11 @@ import { asMcpError } from '../../src/core/errors.js'
 
 /**
  * Tracked-change review against a throwaway project this test creates and trashes, through the
- * SDK client: listing, rejecting, accepting, a replacement pair on non-ASCII text, and a comment
- * on non-ASCII text. It never opens any other project. New documents in a new project are ShareJS
- * documents today, so the history-OT test runs only when Overleaf created them as history-OT.
+ * SDK client: listing, rejecting, accepting, a replacement pair on non-ASCII text, a tracked write
+ * of two separated words, a comment on non-ASCII text, a comment kept through typo fixes inside it,
+ * and a tracked word change inside the account's own tracked insertion. It never opens any other
+ * project. New documents in a new project are ShareJS documents today, so the history-OT test runs
+ * only when Overleaf created them as history-OT.
  */
 const enabled =
   process.env.RUN_OVERLEAF_LIVE_TESTS === '1' && process.env.RUN_OVERLEAF_LIVE_TRACKED_REVIEW_TESTS === '1'
@@ -230,6 +232,43 @@ describe.skipIf(!enabled)('tracked-change review on a throwaway project', () => 
   )
 
   test(
+    'lists a tracked write of two separated words as two paired replacements and rejects all four',
+    async () => {
+      const filePath = 'granular.tex'
+      const original = 'The quick brown fox jumps over the dog.\n'
+      await writeTracked(filePath, original, 'The slow brown fox leaps over the dog.\n')
+
+      const document = await listDocument(filePath)
+      expect(document.totalChanges).toBe(4)
+      expect(document.changes.map(change => [change.type, change.excerpt, change.authorId])).toEqual(
+        expect.arrayContaining([
+          ['insert', 'slow', userId],
+          ['delete', 'quick', userId],
+          ['insert', 'leaps', userId],
+          ['delete', 'jumps', userId],
+        ])
+      )
+      for (const insert of document.changes.filter(change => change.type === 'insert')) {
+        const deletion = document.changes.find(change => change.changeId === insert.pairedChangeId)
+        expect(deletion).toMatchObject({ type: 'delete', pairedChangeId: insert.changeId })
+      }
+
+      const changeIds = document.changes.map(change => change.changeId)
+      const rejected = await client.manageTrackedChanges({
+        projectId: project(),
+        filePath,
+        revision: document.revision,
+        action: 'reject',
+        changeIds,
+        confirmCount: 4,
+      })
+      expect(rejected.remainingChangeCount).toBe(0)
+      await expect(client.readFile({ projectId: project(), filePath })).resolves.toMatchObject({ content: original })
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  test(
     'adds a comment on non-ASCII text, verifies it, and lists its exact range and quote',
     async () => {
       const filePath = 'comment-unicode.tex'
@@ -257,6 +296,94 @@ describe.skipIf(!enabled)('tracked-change review on a throwaway project', () => 
       const listed = await client.listComments({ projectId: project(), filePath, status: 'all' })
       const thread = listed.threads.find(candidate => candidate.id === added.threadId)
       expect(thread).toMatchObject({ filePath, start: range.start, end: range.end, quotedText: anchor })
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  test(
+    'keeps a comment on its words through a tracked and an untracked typo fix inside them',
+    async () => {
+      const filePath = 'comment-typo.tex'
+      // The comment runs past both typos: Overleaf never grows a comment at its end, so a fix of the
+      // last letters of a comment leaves them outside it, as a single span always did.
+      const anchor = 'recieve teh data'
+      await client.createFile({ projectId: project(), filePath, content: `We ${anchor}.\n` })
+      const read = await client.readFile({ projectId: project(), filePath })
+      const added = await client.addComment({
+        projectId: project(),
+        filePath,
+        revision: read.revision,
+        ...locate(read.content, anchor),
+        expectedText: anchor,
+        content: 'Disposable live-test comment.',
+      })
+      const quoted = async (): Promise<string | undefined> => {
+        const listed = await client.listComments({ projectId: project(), filePath, status: 'all' })
+        return listed.threads.find(thread => thread.id === added.threadId)?.quotedText
+      }
+
+      const tracked = await client.writeFile({
+        projectId: project(),
+        filePath,
+        revision: added.revision,
+        content: 'We receive teh data.\n',
+        writeMode: 'tracked',
+      })
+      // The fix touches the comment, so the write is the single span: only the swapped letters, and
+      // the comment keeps the whole word.
+      const document = await listDocument(filePath)
+      expect(document.changes.map(change => [change.type, change.excerpt, change.authorId])).toEqual(
+        expect.arrayContaining([
+          ['insert', 'ei', userId],
+          ['delete', 'ie', userId],
+        ])
+      )
+      expect(document.totalChanges).toBe(2)
+      await expect(quoted()).resolves.toBe('receive teh data')
+
+      await client.writeFile({
+        projectId: project(),
+        filePath,
+        revision: tracked.revision,
+        content: 'We receive the data.\n',
+      })
+      await expect(quoted()).resolves.toBe('receive the data')
+      await expect(listDocument(filePath)).resolves.toMatchObject({ totalChanges: 2 })
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  test(
+    'merges a tracked word change inside its own tracked sentence into that insertion',
+    async () => {
+      const filePath = 'own-insert.tex'
+      const original = 'Alpha.\n'
+      await writeTracked(filePath, original, 'Alpha. A new sentence here.\n')
+      const first = await listDocument(filePath)
+      expect(first.changes).toEqual([expect.objectContaining({ type: 'insert', excerpt: ' A new sentence here.' })])
+
+      await client.writeFile({
+        projectId: project(),
+        filePath,
+        revision: first.revision,
+        content: 'Alpha. A fresh sentence here.\n',
+        writeMode: 'tracked',
+      })
+      const second = await listDocument(filePath)
+      expect(second.changes).toEqual([
+        expect.objectContaining({ type: 'insert', excerpt: ' A fresh sentence here.', authorId: userId }),
+      ])
+
+      const changeIds = second.changes.map(change => change.changeId)
+      await client.manageTrackedChanges({
+        projectId: project(),
+        filePath,
+        revision: second.revision,
+        action: 'reject',
+        changeIds,
+        confirmCount: changeIds.length,
+      })
+      await expect(client.readFile({ projectId: project(), filePath })).resolves.toMatchObject({ content: original })
     },
     TEST_TIMEOUT_MS
   )
