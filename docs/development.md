@@ -12,8 +12,9 @@ npm run build        # emits dist/
 npx tsx scripts/check-pack.ts  # after a build: checks the published file list
 ```
 
-Every push and pull request runs the same steps in CI on Node 20 and 24. Releases run them again
-before publishing.
+Every push and pull request runs the same steps in CI on Ubuntu with Node 20 and 24, and the
+type-check, tests, and build on Windows and macOS with Node 24. Releases run them again before
+publishing.
 
 Unit and deterministic integration tests cover revision identity, Unicode positions, section
 parsing, tracked and untracked OT operations, history normalization, update limits, queue and
@@ -203,20 +204,23 @@ touches.
 
 ## Releasing
 
-Before starting, check that npm, the latest tag, `package.json`, `SERVER_VERSION`, and
-`server.json` agree on the last release, that `npm ls @modelcontextprotocol/sdk` prints
-`(empty)`, that the server instructions are still under the length bound `test/server.test.ts`
-sets, and that `overleaf-web-mcp doctor <projectId>` passes against a disposable project.
+Before starting, run `npx tsx scripts/preflight.ts`. It checks that npm, the latest tag,
+`package.json`, `SERVER_VERSION`, and `server.json` agree on the last release, that the MCP SDK is
+still 2.x with no `@modelcontextprotocol/sdk` and one copy each of `zod` and
+`@modelcontextprotocol/core`, and that the server instructions are under the length bound
+`test/server.test.ts` sets, printing one line per check and exiting 1 when one fails. Then check
+that `overleaf-web-mcp doctor <projectId>` passes against a disposable project.
 
 1. Turn the next version's `CHANGELOG.md` section from `Unreleased` into the version and date,
    with the date as `YYYY-MM-DD`, a summary, and the sections that apply: `Added`, `Changed`,
    `Deprecated`, `Removed`, `Fixed`, `Documentation`, `Internal`. The section opens with the first
    change on the release branch as `## [X.Y.Z] - Unreleased`; the publish workflow accepts it
-   undated, so check the date yourself. Set the same version in `package.json` and
-   `package-lock.json`, for example with `npm version X.Y.Z --no-git-tag-version`, in
-   `SERVER_VERSION` in `src/version.ts`, and in both `version` fields of `server.json`. A major or
-   minor release also moves the `npx --yes overleaf-web-mcp@X.Y` pin in `skills/*/SKILL.md`,
-   `docs/cli.md`, and `test/skills.test.ts`, which fails until it matches.
+   undated, so check the date yourself. Then run `npx tsx scripts/bump-version.ts X.Y.Z`, which
+   sets the version in `package.json`, `package-lock.json`, `SERVER_VERSION` in
+   `src/version.ts`, and both `version` fields of `server.json`, and for a major or minor release
+   also moves the `npx --yes overleaf-web-mcp@X.Y` pin in `skills/*/SKILL.md`, `docs/cli.md`, and
+   `test/skills.test.ts`. It prints the files it changed and refuses a version that is not greater
+   than the current one.
 2. Bring the pages that describe what changed in line with the code: the tool reference, the
    error table in the safety model, the exit codes on the command line page, the configuration
    variables, the private API catalogue, the SDK's stable surface, and every tool count AGENTS.md

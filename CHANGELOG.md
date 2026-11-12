@@ -23,6 +23,19 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
   directory. A malformed `OVERLEAF_BASE_URL` that is not blank is still `INVALID_ARGUMENT`.
   ([#53](https://github.com/mhmdaskari/overleaf-web-mcp/issues/53))
 
+### Internal
+
+- CI also runs the type-check, the tests, and the build on Windows and macOS with Node 24, beside
+  every step on Ubuntu with Node 20 and 24. A `.gitattributes` checks text files out with LF
+  endings on every system, and the interface-boundary test finds the repository root and compares
+  paths in a way that works on Windows.
+  ([#57](https://github.com/mhmdaskari/overleaf-web-mcp/issues/57))
+- `scripts/bump-version.ts X.Y.Z` sets a release version in every file that carries it, and moves
+  the skills' `@X.Y` pin on a major or minor release; `scripts/preflight.ts` runs the pre-release
+  checks that need no Overleaf session (versions agree with npm and the latest tag, the MCP SDK's
+  major version and single copies, the length of the server instructions) and exits 1 when one
+  fails. ([#49](https://github.com/mhmdaskari/overleaf-web-mcp/issues/49))
+
 ## [1.1.0] - 2026-11-09
 
 Project tags. The labels that organize projects on the Overleaf dashboard can now be read with

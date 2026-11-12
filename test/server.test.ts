@@ -4,6 +4,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client'
 import { McpServer, type ServerContext } from '@modelcontextprotocol/server'
 import { describe, expect, test, vi } from 'vitest'
 
+import { INSTRUCTION_WORD_LIMIT, instructionWords } from '../scripts/preflight.js'
 import { McpError } from '../src/core/errors.js'
 import { SERVER_INSTRUCTIONS } from '../src/mcp/instructions.js'
 import { ToolActivity, TOOL_NAMES, type ToolCallExtra } from '../src/mcp/tools.js'
@@ -338,7 +339,7 @@ describe('MCP server', () => {
       expect(instructions).toContain(term)
     }
     // Instructions ride along on every session; keep them short enough to be read.
-    expect(instructions!.split(/\s+/u).length).toBeLessThan(450)
+    expect(instructionWords(instructions!)).toBeLessThan(INSTRUCTION_WORD_LIMIT)
     await client.close()
     await server.close()
   })
