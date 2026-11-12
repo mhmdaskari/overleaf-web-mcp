@@ -1,0 +1,5 @@
+# Check out every text file with LF endings on every system, so the fixtures, golden results,
+# snapshots, and Prettier's formatting check match on Windows as they do on Linux and macOS.
+* text=auto eol=lf
+
+*.webp binary
