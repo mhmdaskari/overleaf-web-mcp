@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { chmod, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, isAbsolute, join } from 'node:path'
+import { basename, isAbsolute, join, sep } from 'node:path'
 
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
 
@@ -274,16 +274,26 @@ describe('operation commands never open a browser or print a secret', () => {
   })
 
   test('every local path in the sweep is inside its own temporary folder', () => {
-    const paths = commands().flatMap(command =>
+    const strings = (value: unknown): string[] =>
+      typeof value === 'string'
+        ? [value]
+        : typeof value === 'object' && value !== null
+          ? Object.values(value).flatMap(strings)
+          : []
+    // A request's absolute paths, and any plain argument with a separator, `/` or the platform's.
+    const found = commands().flatMap(command =>
       command.argv.flatMap(arg =>
-        arg.startsWith('{') ? (JSON.stringify(JSON.parse(arg)).match(/"\/[^"]*"/gu) ?? []) : [arg]
+        arg.startsWith('{')
+          ? strings(JSON.parse(arg)).filter(value => isAbsolute(value))
+          : arg.includes('/') || arg.includes(sep)
+            ? [arg]
+            : []
       )
     )
-    const found = paths.map(path => path.replace(/^"|"$/gu, '')).filter(path => path.includes('/'))
     expect(found.length).toBeGreaterThan(10)
     for (const path of found) {
       expect(isAbsolute(path), path).toBe(true)
-      expect(path.startsWith(`${base}/`), path).toBe(true)
+      expect(path.startsWith(`${base}${sep}`), path).toBe(true)
     }
   })
 

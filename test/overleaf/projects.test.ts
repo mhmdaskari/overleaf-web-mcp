@@ -512,17 +512,20 @@ describe('download_project_zip', () => {
     const { api, http } = harness()
     const dir = await folder()
 
-    // A folder that cannot be written fails before the rate-limited request is spent.
-    const locked = join(dir, 'locked')
-    await mkdir(locked)
-    await chmod(locked, 0o555)
-    try {
-      await expect(api.downloadProjectZip('p', join(locked, 'backup.zip'))).rejects.toMatchObject({
-        code: 'INVALID_ARGUMENT',
-        details: { errno: expect.stringMatching(/^E/u) },
-      })
-    } finally {
-      await chmod(locked, 0o755)
+    // A folder that cannot be written fails before the rate-limited request is spent. chmod cannot
+    // make a folder unwritable for its owner on Windows, so that half runs elsewhere only.
+    if (process.platform !== 'win32') {
+      const locked = join(dir, 'locked')
+      await mkdir(locked)
+      await chmod(locked, 0o555)
+      try {
+        await expect(api.downloadProjectZip('p', join(locked, 'backup.zip'))).rejects.toMatchObject({
+          code: 'INVALID_ARGUMENT',
+          details: { errno: expect.stringMatching(/^E/u) },
+        })
+      } finally {
+        await chmod(locked, 0o755)
+      }
     }
 
     await expect(api.downloadProjectZip('p', join(dir, 'missing', 'backup.zip'))).rejects.toMatchObject({
