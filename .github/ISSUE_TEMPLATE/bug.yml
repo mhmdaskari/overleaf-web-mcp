@@ -1,0 +1,80 @@
+name: Bug report
+description: Something did not work as the documentation says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste** your `cookies.txt` or any cookie value, document or manuscript text, review comments, or collaborators' names and email addresses. Replace project, document, and user IDs with placeholders such as `<projectId>`. If the bug needs particular text, reproduce it in a new, disposable project and describe that text instead.
+
+        Anything that could expose a session or a document, or get around a safety check, is a security problem: report it privately as [SECURITY.md](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/SECURITY.md) explains, not here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "The `version` that `overleaf-web-mcp capabilities` prints, run the same way you run the server or command (with npx, keep the version you pin), or `npm ls overleaf-web-mcp`."
+      placeholder: "1.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      options:
+        - MCP server
+        - Command line
+        - TypeScript SDK
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client
+      description: For the MCP server, the client and its version. For the command line or SDK, what runs it.
+      placeholder: "the MCP client's name and version, a shell script, a Node.js service, ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      description: "`node --version`"
+      placeholder: "v24.11.0"
+  - type: input
+    id: overleaf
+    attributes:
+      label: Overleaf
+      description: "`www.overleaf.com`, or a self-hosted edition and version."
+      placeholder: "www.overleaf.com"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The tool or command, the arguments you passed (with placeholders), what you expected, and what happened instead. Say when it last worked if it used to.
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error
+      description: "The error object, `{ code, message, retryable, details }`, and for the command line its exit code. Errors never carry cookies, document text, or Overleaf's responses, though they can name a local path you passed."
+      render: json
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`doctor` output"
+      description: "The output of `overleaf-web-mcp doctor <projectId>`, run the same way you run the server or command, against the project involved or a disposable one. It is read-only and built to be safe to paste."
+      render: json

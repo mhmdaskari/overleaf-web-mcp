@@ -1,0 +1,29 @@
+name: Feature or change
+description: Propose a change, in the form planned work uses.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Planned work is one issue per change, with acceptance criteria that can be checked mechanically. A new tool costs every MCP client context on every turn, so say whether an existing tool could take it, for example as a new `action`. For an open-ended idea, start a [discussion](https://github.com/mhmdaskari/overleaf-web-mcp/discussions) instead.
+  - type: textarea
+    id: fails-today
+    attributes:
+      label: What fails today
+      description: What you tried to do, and what is missing or goes wrong now.
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Design
+      description: The change you propose, as a caller would see it, and the Overleaf routes or messages it needs if you know them.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checks anyone can run, such as a test that passes or a command whose output or exit code is stated.
+    validations:
+      required: true
