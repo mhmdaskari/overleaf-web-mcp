@@ -9,7 +9,13 @@ format, output framing, and exit codes; the `overleaf-web-mcp/core` surface the
 is announced at least one minor version ahead with both names working, and every change is listed
 below. Before 1.0.0, a minor or patch release could change them, and each such change is listed.
 
-## [1.1.1] - Unreleased
+## [1.1.1] - 2026-11-11
+
+Foundations. A blank environment variable now counts as unset, and the work around the code is
+sturdier: CI runs on Windows and macOS, a weekly check compares the private API with Overleaf's
+source, releases are bumped and checked by script, and the repository has a security policy and
+issue forms. No tool was added or removed, and no result shape changed; the server still
+registers 35 tools.
 
 ### Fixed
 
