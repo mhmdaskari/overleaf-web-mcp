@@ -268,7 +268,9 @@ When in doubt, it is the larger one.
 ### Before starting a release
 
 The code moves on between releases. Check these before writing anything, and say in the pull
-request what you found:
+request what you found. `npx tsx scripts/preflight.ts` runs the checks in the first three items,
+all but noting the MCP protocol versions, prints one line per check, and exits 1 when one fails;
+the rest need a person:
 
 - `npm view overleaf-web-mcp version`, the latest `vX.Y.Z` tag, `package.json`, `SERVER_VERSION`
   in `src/version.ts`, and both `version` fields of `server.json` agree on the last release.
@@ -294,11 +296,13 @@ request what you found:
    to the public contract is listed, and each entry says what a caller sees, with codes, keys, and
    exit codes named. Write the date as `YYYY-MM-DD`: the publish workflow only checks that a line
    starting `## [X.Y.Z]` exists, so it accepts a heading still marked `Unreleased`.
-2. **Version.** Set the same version in `package.json` and `package-lock.json` (for example
-   `npm version X.Y.Z --no-git-tag-version`), `SERVER_VERSION` in `src/version.ts`, and both
-   `version` fields of `server.json`. A major or minor release also moves the
+2. **Version.** Run `npx tsx scripts/bump-version.ts X.Y.Z`. It sets the same version in
+   `package.json` and `package-lock.json`, `SERVER_VERSION` in `src/version.ts`, and both
+   `version` fields of `server.json`, and for a major or minor release also moves the
    `npx --yes overleaf-web-mcp@X.Y` pin in `skills/*/SKILL.md`, `docs/cli.md`, and
-   `test/skills.test.ts`, which fails until it matches.
+   `test/skills.test.ts`, which fails until it matches. It prints the files it changed, refuses a
+   version that is not greater than the current one, and changes nothing if a place it expects is
+   missing. It does not touch `CHANGELOG.md`, commit, or tag.
 3. **Documentation.** The pages that describe what changed agree with the code: `docs/tools.md`,
    the error table in `docs/safety.md`, the exit-code table in `docs/cli.md`, the variables in
    `docs/configuration.md`, `docs/private-api.md`, the stable surface in `docs/sdk.md`, and the
