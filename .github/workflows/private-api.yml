@@ -1,0 +1,78 @@
+name: Private API check
+
+# Once a week, checks that every Overleaf route and socket message docs/private-api.md lists is
+# still declared in overleaf/overleaf, so a change upstream is found before a user's call fails
+# with PROTOCOL_UNSUPPORTED. It needs no Overleaf account and no secret. A failure on the schedule
+# or a manual run opens an issue labelled `private-api`, or updates the one already open; a pull
+# request that touches the catalogue or the script runs the check without touching issues.
+on:
+  schedule:
+    - cron: "41 7 * * 1" # Mondays, 07:41 UTC
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - docs/private-api.md
+      - scripts/check-private-api.ts
+      - .github/workflows/private-api.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check the private API against Overleaf's source
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      # The script has no dependencies and Node 24 runs TypeScript directly, so nothing is installed.
+      - name: Check routes and socket messages
+        id: check
+        run: |
+          set +e
+          node scripts/check-private-api.ts > "$RUNNER_TEMP/report.txt" 2>&1
+          status=$?
+          cat "$RUNNER_TEMP/report.txt"
+          exit $status
+
+      - name: Open or update the drift issue
+        if: failure() && steps.check.outcome == 'failure' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          report="$RUNNER_TEMP/report.txt"
+          missing=$(grep -E '^missing (route|socket message) ' "$report" | sed -E 's/^missing (route|socket message) ([^ ]+( [^ ]+)?) \(.*$/\2/' | paste -sd ',' - | sed 's/,/, /g')
+          if [ -z "$missing" ]; then
+            title="Private API check failed: Overleaf's source could not be read or parsed"
+          else
+            title="Private API drift: ${missing}"
+          fi
+          title=$(printf '%s' "$title" | cut -c1-200)
+          body=$(printf 'The weekly check found entries of `docs/private-api.md` that are no longer declared in `overleaf/overleaf`, or could not complete.\n\n```\n%s\n```\n\nRun: %s\n\nConfirm each in Overleaf'"'"'s source, then update the code and `docs/private-api.md`, or the check if it misread the source.\n' "$(cat "$report")" "$RUN_URL")
+          gh label create private-api --color B60205 --description "Overleaf's private API changed" --force >/dev/null
+          number=$(gh issue list --label private-api --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --title "$title" --body "$body"
+            echo "Updated issue #$number."
+          else
+            gh issue create --label private-api --title "$title" --body "$body"
+          fi

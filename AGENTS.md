@@ -37,7 +37,8 @@ npm run build        # emits dist/
 npx tsx scripts/check-pack.ts  # after a build: checks the published file list, the three skills/*/SKILL.md included
 ```
 
-CI runs all of these on Node 20 and 24 for every push and pull request. For the docs site,
+CI runs all of these on Ubuntu with Node 20 and 24, and the type-check, tests, and build on
+Windows and macOS with Node 24, for every push and pull request. For the docs site,
 `pip install mkdocs-material` then `mkdocs serve` from the repository root.
 
 ## Rules that must keep holding
@@ -184,7 +185,9 @@ These held through every release so far; keep them.
   that failed before Overleaf answered. A new read that goes through POST passes `{ read: true }`.
 - Every endpoint or socket message the code relies on is confirmed in Overleaf's own source
   (`overleaf/overleaf`, `services/web` and `services/real-time`) before it is used, and listed in
-  `docs/private-api.md`. Anything not yet confirmed is marked *(verify in code)* in the issue or
+  `docs/private-api.md`: a route as its own `METHOD /path` code span, marked † when its handler
+  is not in the public source, and a socket message with the file that declares it.
+  `scripts/check-private-api.ts` reads that page, and a weekly workflow runs it. Anything not yet confirmed is marked *(verify in code)* in the issue or
   pull request until it is.
 
 ### Adding to the public surface
