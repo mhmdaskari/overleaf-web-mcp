@@ -13,7 +13,10 @@ wrong.
 
 ## Report a bug
 
-Open an [issue](https://github.com/mhmdaskari/overleaf-web-mcp/issues/new) and include:
+Open an issue with the
+[bug report form](https://github.com/mhmdaskari/overleaf-web-mcp/issues/new?template=bug.yml),
+which asks for the following, and the output of `overleaf-web-mcp doctor <projectId>`, which is
+read-only and built to be safe to paste:
 
 - the package version (`npm ls overleaf-web-mcp`, or `npm ls -g overleaf-web-mcp` for a global
   install; `npx -y overleaf-web-mcp` runs the latest release) and `node --version`;
@@ -37,12 +40,15 @@ worked. The endpoints this project depends on are listed in the
 
 Do not open a public issue for anything that could expose a session, a document, or a way around
 the access policy or the confirmation checks. Report it privately through the repository's
-[security advisories](https://github.com/mhmdaskari/overleaf-web-mcp/security/advisories/new).
+[security advisories](https://github.com/mhmdaskari/overleaf-web-mcp/security/advisories/new), as
+the [security policy](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/SECURITY.md)
+explains, along with which versions get fixes and what counts.
 
 ## Propose a change
 
-For anything larger than a small fix, open an issue or a discussion first, so we can agree on the
-design before you write the code. A new tool in particular costs every MCP client context on every
+For anything larger than a small fix, open an issue with the
+[feature form](https://github.com/mhmdaskari/overleaf-web-mcp/issues/new?template=feature.yml) or a
+discussion first, so we can agree on the design before you write the code. A new tool in particular costs every MCP client context on every
 turn, so we look for a way to extend an existing one first.
 
 ### Set up
@@ -60,7 +66,8 @@ npm test               # vitest, no network needed
 npm run build          # emits dist/
 ```
 
-CI runs these on Node 20 and 24 for every pull request. The
+CI runs these on Ubuntu with Node 20 and 24, and the type-check, tests, and build on Windows and
+macOS, for every pull request. The
 [development guide](https://mhmdaskari.github.io/overleaf-web-mcp/development/) covers the test
 suites, the live tests, and the documentation site in more detail.
 

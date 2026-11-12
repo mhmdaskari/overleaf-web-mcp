@@ -23,6 +23,17 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
   directory. A malformed `OVERLEAF_BASE_URL` that is not blank is still `INVALID_ARGUMENT`.
   ([#53](https://github.com/mhmdaskari/overleaf-web-mcp/issues/53))
 
+### Documentation
+
+- `SECURITY.md` says which versions get fixes, how to report a vulnerability privately, and what
+  counts. New issues offer a bug report form, which asks for the version, interface, client,
+  operating system, error object, and `doctor` output and warns against pasting cookies or
+  document text, and a feature form in the shape planned work uses; the chooser points security
+  reports at the private channel. Dependabot proposes npm and GitHub Actions updates weekly, minor
+  and patch together, and leaves majors of the MCP SDK, `zod`, and `@types/node` to the
+  maintainer. `CONTRIBUTING.md` links to all of it.
+  ([#58](https://github.com/mhmdaskari/overleaf-web-mcp/issues/58))
+
 ### Internal
 
 - CI also runs the type-check, the tests, and the build on Windows and macOS with Node 24, beside

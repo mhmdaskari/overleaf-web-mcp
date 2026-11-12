@@ -1,0 +1,32 @@
+# Weekly dependency updates. Minor and patch updates arrive together as one pull request for npm
+# and one for GitHub Actions. Majors arrive one per pull request, except those AGENTS.md has
+# handled by hand: the MCP SDK's major is pinned and one copy each of it and zod is required, and
+# @types/node follows the lowest supported Node.js, not the latest.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "@modelcontextprotocol/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: zod
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]

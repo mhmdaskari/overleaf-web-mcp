@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/mhmdaskari/overleaf-web-mcp/security/advisories/new
+    about: Anything that could expose a session or a document, or get around a safety check. See SECURITY.md; do not open a public issue.
+  - name: Ask a question or share feedback
+    url: https://github.com/mhmdaskari/overleaf-web-mcp/discussions
+    about: Questions, ideas, and how the tools worked for you.
