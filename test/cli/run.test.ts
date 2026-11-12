@@ -837,6 +837,12 @@ describe('capabilities', () => {
     expect(unsafe.exitCode).toBe(2)
   })
 
+  test('treats a blank OVERLEAF_BASE_URL as unset', async () => {
+    const run = await cli(['capabilities'], { env: { OVERLEAF_BASE_URL: '' } })
+    expect(run.exitCode).toBe(0)
+    expect(expectResult(run)).toHaveProperty('operations')
+  })
+
   test('lists every operation without opening a session', async () => {
     const run = await cli(['capabilities'])
     expect(run.exitCode).toBe(0)

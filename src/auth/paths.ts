@@ -12,6 +12,11 @@ export interface AuthPaths {
   browserProfileDir: string
 }
 
+/** An empty or blank variable counts as unset, as the XDG Base Directory specification asks. */
+function present(value: string | undefined): string | undefined {
+  return value === undefined || value.trim() === '' ? undefined : value
+}
+
 export function resolveAuthPaths(options: AuthPathOptions = {}): AuthPaths {
   const env = options.env ?? process.env
   const platform = options.platform ?? process.platform
@@ -22,9 +27,9 @@ export function resolveAuthPaths(options: AuthPathOptions = {}): AuthPaths {
   if (platform === 'darwin') {
     configRoot = path.join(homeDir, 'Library', 'Application Support')
   } else if (platform === 'win32') {
-    configRoot = env.APPDATA ?? path.join(homeDir, 'AppData', 'Roaming')
+    configRoot = present(env.APPDATA) ?? path.join(homeDir, 'AppData', 'Roaming')
   } else {
-    configRoot = env.XDG_CONFIG_HOME ?? path.join(homeDir, '.config')
+    configRoot = present(env.XDG_CONFIG_HOME) ?? path.join(homeDir, '.config')
   }
 
   const authRoot = path.join(configRoot, 'overleaf-web-mcp')

@@ -37,9 +37,15 @@ export interface AppConfig {
   allowedEffects?: Effect[]
 }
 
-function positiveInteger(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+/** The variable's value, or `undefined` when it is unset, empty, or only whitespace. */
+function text(env: NodeJS.ProcessEnv, name: string): string | undefined {
   const raw = env[name]
-  if (raw === undefined || raw === '') return fallback
+  return raw === undefined || raw.trim() === '' ? undefined : raw
+}
+
+function positiveInteger(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const raw = text(env, name)
+  if (raw === undefined) return fallback
   const parsed = Number(raw)
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new McpError('INVALID_ARGUMENT', `${name} must be a positive integer.`)
@@ -48,8 +54,8 @@ function positiveInteger(env: NodeJS.ProcessEnv, name: string, fallback: number)
 }
 
 function nonNegativeInteger(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
-  const raw = env[name]
-  if (raw === undefined || raw === '') return fallback
+  const raw = text(env, name)
+  if (raw === undefined) return fallback
   const parsed = Number(raw)
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
     throw new McpError('INVALID_ARGUMENT', `${name} must be zero or a positive integer.`)
@@ -57,10 +63,10 @@ function nonNegativeInteger(env: NodeJS.ProcessEnv, name: string, fallback: numb
   return parsed
 }
 
-/** A comma-separated list, or `undefined` when the variable is unset or empty. */
+/** A comma-separated list, or `undefined` when the variable is unset or blank. */
 function list(env: NodeJS.ProcessEnv, name: string): string[] | undefined {
-  const raw = env[name]
-  if (raw === undefined || raw.trim() === '') return undefined
+  const raw = text(env, name)
+  if (raw === undefined) return undefined
   const values = raw.split(',').map(value => value.trim())
   if (values.some(value => value === '')) {
     throw new McpError('INVALID_ARGUMENT', `${name} must be a comma-separated list without empty entries.`)
@@ -70,8 +76,8 @@ function list(env: NodeJS.ProcessEnv, name: string): string[] | undefined {
 
 /** Absolute folders separated by the platform path delimiter, `:` on POSIX and `;` on Windows. */
 function roots(env: NodeJS.ProcessEnv, name: string): string[] | undefined {
-  const raw = env[name]
-  if (raw === undefined || raw.trim() === '') return undefined
+  const raw = text(env, name)
+  if (raw === undefined) return undefined
   const values = raw.split(delimiter).filter(value => value !== '')
   if (values.some(value => !isAbsolute(value))) {
     throw new McpError('INVALID_ARGUMENT', `${name} must list absolute folder paths separated by "${delimiter}".`)
@@ -96,11 +102,11 @@ export interface ConfigContext {
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env, context: ConfigContext = {}): AppConfig {
   const authPaths = resolveAuthPaths({ env, ...context })
-  const cookieJarFile = env.OVERLEAF_COOKIE_JAR_FILE ?? authPaths.cookieJarFile
+  const cookieJarFile = text(env, 'OVERLEAF_COOKIE_JAR_FILE') ?? authPaths.cookieJarFile
 
   let baseUrl: URL
   try {
-    baseUrl = new URL(env.OVERLEAF_BASE_URL ?? 'https://www.overleaf.com')
+    baseUrl = new URL(text(env, 'OVERLEAF_BASE_URL') ?? 'https://www.overleaf.com')
   } catch (error) {
     throw new McpError('INVALID_ARGUMENT', 'OVERLEAF_BASE_URL is invalid.', { cause: error })
   }
@@ -108,13 +114,14 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env, context: Config
     throw new McpError('INVALID_ARGUMENT', 'OVERLEAF_BASE_URL must use HTTP or HTTPS.')
   }
 
-  const supportedProtocolVersions = (env.OVERLEAF_PROTOCOL_VERSIONS ?? '2')
+  const supportedProtocolVersions = (text(env, 'OVERLEAF_PROTOCOL_VERSIONS') ?? '2')
     .split(',')
     .map(value => Number(value.trim()))
   if (supportedProtocolVersions.some(value => !Number.isSafeInteger(value))) {
     throw new McpError('INVALID_ARGUMENT', 'OVERLEAF_PROTOCOL_VERSIONS must be integers.')
   }
 
+  const browserPath = text(env, 'OVERLEAF_BROWSER_PATH')
   const proxyUrl = resolveProxyUrl(baseUrl, env)
   const allowedProjects = list(env, 'OVERLEAF_ALLOWED_PROJECTS')
   const localReadRoots = roots(env, 'OVERLEAF_LOCAL_READ_ROOTS')
@@ -124,8 +131,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env, context: Config
   return {
     baseUrl: baseUrl.href.replace(/\/$/u, ''),
     cookieJarFile,
-    ...(env.OVERLEAF_BROWSER_PATH ? { browserPath: env.OVERLEAF_BROWSER_PATH } : {}),
-    browserProfileDir: env.OVERLEAF_BROWSER_PROFILE_DIR ?? authPaths.browserProfileDir,
+    ...(browserPath === undefined ? {} : { browserPath }),
+    browserProfileDir: text(env, 'OVERLEAF_BROWSER_PROFILE_DIR') ?? authPaths.browserProfileDir,
     loginTimeoutMs: Math.min(positiveInteger(env, 'OVERLEAF_LOGIN_TIMEOUT_MS', 5 * 60_000), 15 * 60_000),
     maxDocLength: positiveInteger(env, 'OVERLEAF_MAX_DOC_LENGTH', 2 * 1024 * 1024),
     maxUpdateChars: positiveInteger(env, 'OVERLEAF_MAX_UPDATE_CHARS', 7 * 1024 * 1024),
