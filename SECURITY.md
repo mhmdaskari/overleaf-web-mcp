@@ -6,7 +6,9 @@ it, so a flaw can expose more than this package. Please report one privately.
 ## Supported versions
 
 Fixes are released for the latest minor version of the current major release. Older versions get
-none: update to the latest release, which `npm view overleaf-web-mcp version` names.
+none: update to the latest release, which `npm view overleaf-web-mcp version` names. The Agent
+Skills pin a minor version (`overleaf-web-mcp@X.Y`), so a skill copied from an older release keeps
+running that release; copy the skills again from the latest one.
 
 | Version | Fixes |
 | --- | --- |
@@ -34,8 +36,9 @@ Anything that breaks a guarantee in the
 - document text, diffs, file names, review comments, or Overleaf's responses reaching a log or an
   error message;
 - a write that skips its checks: a destructive call applied without its confirm value or expected
-  state, a write retried after a timeout, a tracked write applied untracked, or a write returned
-  as successful without being verified;
+  state, a write retried after a timeout, a tracked write applied untracked, or a document edit,
+  tracked-change decision, or tag change reported as done without the check against a fresh read
+  that the [safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) describes;
 - a call that gets around `OVERLEAF_ALLOWED_PROJECTS`, `OVERLEAF_ALLOWED_EFFECTS`, or the local
   read and write roots;
 - caller-supplied input run as code with access to the session.
