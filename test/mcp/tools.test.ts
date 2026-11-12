@@ -88,6 +88,8 @@ describe('MCP tool registration', () => {
     expect(allCounts).toHaveLength(2)
     expect(allCounts).toEqual([String(TOOL_NAMES.length), String(TOOL_NAMES.length)])
     expect(/^\| Tools \| (\d+) \|/mu.exec(readme)?.[1]).toBe(String(TOOL_NAMES.length))
+    const comparison = await readFile(new URL('../../docs/comparison.md', import.meta.url), 'utf8')
+    expect(/^\| Tools \| (\d+) \|/mu.exec(comparison)?.[1]).toBe(String(TOOL_NAMES.length))
     // The README's tool table must name every registered tool, or it rots like the count would.
     for (const name of TOOL_NAMES) expect(readme).toContain(`| \`${name}\` |`)
   })

@@ -105,8 +105,8 @@ Windows and macOS with Node 24, for every push and pull request. For the docs si
   keep them free of cookies, user data, IDs, and document content.
 - Live tests are opt-in with `RUN_OVERLEAF_LIVE_TESTS=1` and must target a disposable project
   the maintainer owns. Never point them at a real manuscript.
-- `test/mcp/tools.test.ts` asserts the README badge, every "All N tools", the comparison's Tools
-  cell, and `docs/tools.md` agree with `TOOL_NAMES`. Update them when adding or removing a tool.
+- `test/mcp/tools.test.ts` asserts the README badge, every "All N tools", the Tools cell of the
+  README's comparison and of `docs/comparison.md`, and `docs/tools.md` agree with `TOOL_NAMES`. Update them when adding or removing a tool.
 - `test/server.test.ts` compares `tools/list` with `test/__snapshots__/list-tools.json`. Update the
   snapshot (`npx vitest run -u`) only for a change listed in `CHANGELOG.md`.
 - The golden tests in `test/golden/` (with `test/helpers/golden.ts`) snapshot tool results taken
@@ -204,8 +204,8 @@ Each addition touches several files, and the tests fail until they agree.
   `test/helpers/operation-outputs.ts`, golden results under `test/golden/` (its area's file, or a
   new one), the `tools/list` snapshot, and `docs/tools.md`. Counts: the length in
   `test/contracts/operations.test.ts`; the no-project count in `test/policy-runtime.test.ts` when
-  the operation takes no `projectId`; the README badge, both "All N tools", the comparison's Tools
-  cell, and `docs/tools.md`, which `test/mcp/tools.test.ts` holds; and, held by no test, the
+  the operation takes no `projectId`; the README badge, both "All N tools", the Tools cell of both
+  comparisons, and `docs/tools.md`, which `test/mcp/tools.test.ts` holds; and, held by no test, the
   README's "N tools in eight groups" and the opening line of `docs/cli.md`. A command line
   shorthand only if scripts will use it often. The SDK client and `call <tool>` derive their names
   from the operation, so they need nothing more.
