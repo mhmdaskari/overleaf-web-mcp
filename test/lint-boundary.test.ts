@@ -1,10 +1,11 @@
 import { readdir, readFile } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { join, relative, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { ESLint } from 'eslint'
 import { describe, expect, test } from 'vitest'
 
-const root = new URL('..', import.meta.url).pathname
+const root = fileURLToPath(new URL('..', import.meta.url))
 
 async function sourceFiles(folder: string): Promise<string[]> {
   const entries = await readdir(folder, { withFileTypes: true })
@@ -24,7 +25,7 @@ describe('interface boundary', () => {
   test('only the MCP adapter and its entry points import the MCP SDK or the adapter', async () => {
     const offenders: string[] = []
     for (const file of await sourceFiles(join(root, 'src'))) {
-      const path = relative(root, file)
+      const path = relative(root, file).split(sep).join('/')
       if (ADAPTER_FILES.test(path)) continue
       const text = await readFile(file, 'utf8')
       if (/from '(\.\.\/)*\.?\/?mcp\/|@modelcontextprotocol|from '(\.\.\/)*\.?\/?server\.js'/u.test(text)) {
