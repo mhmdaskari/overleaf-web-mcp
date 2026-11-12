@@ -9,6 +9,20 @@ format, output framing, and exit codes; the `overleaf-web-mcp/core` surface the
 is announced at least one minor version ahead with both names working, and every change is listed
 below. Before 1.0.0, a minor or patch release could change them, and each such change is listed.
 
+## [1.1.1] - Unreleased
+
+### Fixed
+
+- **A blank environment variable counts as unset.** `OVERLEAF_BASE_URL=""` failed with
+  `INVALID_ARGUMENT` (exit 2) instead of using `https://www.overleaf.com`, and
+  `OVERLEAF_COOKIE_JAR_FILE=""` was used as the saved-session path instead of the platform
+  configuration directory. Every variable `readConfig` reads now takes its default when it is
+  empty or only whitespace, as the list and folder variables already did: the paths,
+  `OVERLEAF_PROTOCOL_VERSIONS` (which became `[0]`), and the numeric settings (which failed with
+  `INVALID_ARGUMENT` on spaces). A blank `XDG_CONFIG_HOME` or `APPDATA` falls back to the platform
+  directory. A malformed `OVERLEAF_BASE_URL` that is not blank is still `INVALID_ARGUMENT`.
+  ([#53](https://github.com/mhmdaskari/overleaf-web-mcp/issues/53))
+
 ## [1.1.0] - 2026-11-09
 
 Project tags. The labels that organize projects on the Overleaf dashboard can now be read with

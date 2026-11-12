@@ -59,6 +59,60 @@ describe('configuration', () => {
     }
   })
 
+  test('treats an empty or blank variable as unset', () => {
+    const context = { platform: 'linux', homeDir: '/home/alice' } as const
+    const defaults = readConfig({}, context)
+    const strings = [
+      'OVERLEAF_BASE_URL',
+      'OVERLEAF_COOKIE_JAR_FILE',
+      'OVERLEAF_BROWSER_PATH',
+      'OVERLEAF_BROWSER_PROFILE_DIR',
+      'OVERLEAF_PROTOCOL_VERSIONS',
+    ]
+    const numbers = [
+      'OVERLEAF_LOGIN_TIMEOUT_MS',
+      'OVERLEAF_MAX_DOC_LENGTH',
+      'OVERLEAF_MAX_UPDATE_CHARS',
+      'OVERLEAF_SOCKET_CACHE_SIZE',
+      'OVERLEAF_SOCKET_IDLE_TTL_MS',
+      'OVERLEAF_REQUEST_TIMEOUT_MS',
+      'OVERLEAF_APPLY_TIMEOUT_MS',
+      'OVERLEAF_RECOVERY_TIMEOUT_MS',
+      'OVERLEAF_COMPILE_TIMEOUT_MS',
+      'OVERLEAF_READ_ATTEMPTS',
+      'OVERLEAF_MIN_REQUEST_INTERVAL_MS',
+    ]
+    for (const name of [...strings, ...numbers]) {
+      for (const blank of ['', '   ', '\t']) {
+        expect(readConfig({ [name]: blank }, context), `${name}=${JSON.stringify(blank)}`).toEqual(defaults)
+      }
+    }
+    expect(defaults).toMatchObject({
+      baseUrl: 'https://www.overleaf.com',
+      cookieJarFile: '/home/alice/.config/overleaf-web-mcp/cookies.txt',
+      supportedProtocolVersions: [2],
+    })
+    expect(defaults).not.toHaveProperty('browserPath')
+  })
+
+  test('still refuses a malformed base URL that is not blank', () => {
+    for (const value of ['not a url', ' :// ', 'ftp://example.test']) {
+      expect(() => readConfig({ OVERLEAF_BASE_URL: value }), value).toThrow(
+        expect.objectContaining({ code: 'INVALID_ARGUMENT' })
+      )
+    }
+  })
+
+  test('falls back to the platform directory when APPDATA or XDG_CONFIG_HOME is blank', () => {
+    expect(resolveAuthPaths({ platform: 'linux', homeDir: '/home/alice', env: { XDG_CONFIG_HOME: ' ' } })).toEqual(
+      resolveAuthPaths({ platform: 'linux', homeDir: '/home/alice', env: {} })
+    )
+    expect(resolveAuthPaths({ platform: 'win32', homeDir: 'C:\\Users\\alice', env: { APPDATA: '' } })).toEqual({
+      cookieJarFile: 'C:\\Users\\alice\\AppData\\Roaming\\overleaf-web-mcp\\cookies.txt',
+      browserProfileDir: 'C:\\Users\\alice\\AppData\\Roaming\\overleaf-web-mcp\\chrome-profile',
+    })
+  })
+
   test('resolves platform-specific authentication paths', () => {
     expect(resolveAuthPaths({ platform: 'darwin', homeDir: '/Users/alice', env: {} })).toEqual({
       cookieJarFile: '/Users/alice/Library/Application Support/overleaf-web-mcp/cookies.txt',

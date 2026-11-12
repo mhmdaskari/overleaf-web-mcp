@@ -5,6 +5,10 @@ starts it, for example in the `env` block of the client's MCP configuration; for
 [command line](cli.md), in the shell that runs each command; for the [SDK](sdk.md), in the
 process, which `readConfig()` reads from `process.env`. Defaults suit `www.overleaf.com`.
 
+A variable that is set but empty, or only spaces, counts as unset and takes its default, so a
+launcher that passes every declared variable, such as a generated client configuration or a
+container, can leave an optional setting blank.
+
 ## Reference
 
 | Variable | Default | Purpose | Since |
