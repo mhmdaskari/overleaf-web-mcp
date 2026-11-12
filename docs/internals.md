@@ -225,9 +225,9 @@ provides messages; live document state provides attachment and status.
 
 ## Related projects
 
-Representative rather than exhaustive; capabilities change over time. The README's
-[comparison table](https://github.com/mhmdaskari/overleaf-web-mcp#how-it-compares) checks each
-capability against the source of the most widely used servers.
+Representative rather than exhaustive; capabilities change over time. The
+[comparison](comparison.md) checks each capability against the source of the most widely used
+servers.
 
 | Implementation | Connection model | Focus |
 | --- | --- | --- |

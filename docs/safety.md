@@ -145,8 +145,10 @@ single rename, so a failed or interrupted download leaves the existing file as i
 it, a file that appeared at `localPath` in the meantime is not replaced. The temporary file is
 removed on every failure, and neither the archive nor the names inside it are logged.
 
-**Your session stays yours.** Cookies are saved in a file only your user can read, are never
-returned by any tool, command, or SDK method, and are never logged. No tool reads or writes the
+**Your session stays yours.** Only cookies for the Overleaf origin are saved, in a file only your
+user can read, and the session is refused if that file becomes readable by others; on Windows,
+where this cannot be checked, `auth_status` says so. Cookies are never returned by any tool,
+command, or SDK method, and are never logged. No tool reads or writes the
 cookie jar, its lock and temporary files, or the browser profile `login` uses as a local file, and
 no folder sync takes a folder that holds them, whatever the access policy says. The server
 logs no document content, diffs, filenames, quoted context, or review-message bodies.

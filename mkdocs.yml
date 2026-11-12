@@ -46,6 +46,7 @@ nav:
   - Safety model: safety.md
   - Configuration: configuration.md
   - Internals: internals.md
+  - Comparison: comparison.md
   - Private API: private-api.md
   - Development: development.md
   - Contributing: contributing.md

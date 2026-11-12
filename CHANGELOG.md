@@ -33,6 +33,12 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
   and patch together, and leaves majors of the MCP SDK, `zod`, and `@types/node` to the
   maintainer. `CONTRIBUTING.md` links to all of it.
   ([#58](https://github.com/mhmdaskari/overleaf-web-mcp/issues/58))
+- The full comparison with other Overleaf MCP servers, with its notes, moved to a new
+  [Comparison](https://mhmdaskari.github.io/overleaf-web-mcp/comparison/) page; the README keeps
+  the rows that decide a choice and the date they were checked. Its security model, the note on
+  Overleaf changing, and versioning are cut to a summary with a link, and the safety model now
+  holds the session-file details the README had alone.
+  ([#50](https://github.com/mhmdaskari/overleaf-web-mcp/issues/50))
 
 ### Internal
 

@@ -193,10 +193,7 @@ An upload that would replace a file, and a folder sync without a `planToken`, ar
 
 ### Security model
 
-- **Your session.** Only cookies for the Overleaf origin are saved, to a file created readable by your user alone, and the session is refused if that file becomes readable by others (on Windows, where this cannot be checked, `auth_status` says so). No request leaves `OVERLEAF_BASE_URL` with them.
-- **What it prints.** Under `serve`, stdout carries MCP protocol frames and nothing else. `--help` prints plain text. Every other command prints one JSON value on stdout when it succeeds; when it fails, stdout stays empty and stderr gets one JSON error line. The exceptions are `login`'s plain-text status lines on stderr, `--progress` lines on stderr, and `doctor`, whose report is printed even when a check fails. Errors carry codes, counts, short identifiers, and the project or local paths the call involved; progress lines and `serve` diagnostics carry only counts, tool names, and codes. None of them carries cookies, document text, diffs, comment bodies, or Overleaf's own response text.
-- **Retries.** A write is never sent twice by the server, the command line, or the library. Only reads are tried again after a network failure or a server error, at most three attempts in all ([retries and pacing](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/#retries-and-pacing)).
-- **The access policy's limits.** `OVERLEAF_ALLOWED_PROJECTS`, the local folder roots, and `OVERLEAF_ALLOWED_EFFECTS` are checked before any request, through every interface. They keep a cooperative assistant inside what you gave it. They do not protect against code running as your user, which can read the session file directly.
+Your session stays in a file only your user can read and is sent nowhere but `OVERLEAF_BASE_URL`; nothing the server, command line, or library prints carries cookies, document text, or Overleaf's own responses; and only reads are ever retried. The [safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) has the full contract, including what the access policy does not protect against.
 
 ### Terms of Service
 
@@ -204,15 +201,15 @@ This is an unofficial client, not affiliated with Overleaf. It drives the same b
 
 ### When Overleaf changes
 
-Overleaf can change its private endpoints at any time. When a response no longer has the shape this release reads, the call fails with `PROTOCOL_UNSUPPORTED` and nothing is guessed: no write goes ahead on a response it does not understand, and every document write is checked against a fresh read of the document before it is reported as done. Run `npx overleaf-web-mcp doctor <projectId>` to see which step fails. Its output names no project, file, or person, so it is safe to paste into an [issue](https://github.com/mhmdaskari/overleaf-web-mcp/issues).
+Overleaf can change its private endpoints at any time; a response this release cannot read fails with `PROTOCOL_UNSUPPORTED`, and nothing is guessed or written on it. Run `npx overleaf-web-mcp doctor <projectId>` to see which step fails, and paste its output, which names no project, file, or person, into an [issue](https://github.com/mhmdaskari/overleaf-web-mcp/issues/new?template=bug.yml).
 
 ### Versioning
 
-From 1.0.0, [Semantic Versioning](https://semver.org) covers the tool names, input schemas, result shapes, and error codes; the command line's commands, flags, request format, output framing, and exit codes; the stable `overleaf-web-mcp/core` surface the [SDK page](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) lists; and the `capabilities` report. A breaking change waits for a major version, a deprecation is announced at least one minor version ahead with both names working, and the [changelog](https://mhmdaskari.github.io/overleaf-web-mcp/changelog/) records every change.
+From 1.0.0 the tools, the command line, the stable `overleaf-web-mcp/core` surface, and the `capabilities` report follow [Semantic Versioning](https://semver.org): a breaking change waits for a major version, and a deprecation is announced a minor version ahead. The [changelog](https://mhmdaskari.github.io/overleaf-web-mcp/changelog/) records every change.
 
 ## How it compares
 
-The three most-starred Overleaf MCP servers and the two closest in design to this one, each checked against its own source code on 2026-11-09. They change often, so follow the links for their current state. The capability rows describe each project's MCP tools. ✅ supported, 🟡 partly (see the numbered notes), ❌ not supported.
+Against the three most-starred Overleaf MCP servers and the two closest in design, each checked against its own source code on 2026-11-09. ✅ supported, 🟡 partly, ❌ not supported; the [full comparison](https://mhmdaskari.github.io/overleaf-web-mcp/comparison/) has every capability checked and what each 🟡 means.
 
 | | **This project** | [OverleafMCP](https://github.com/mjyoo2/OverleafMCP) | [olcli](https://github.com/aloth/olcli) | [overleaf-mcp-server](https://github.com/YounesBensafia/overleaf-mcp-server) | [overleaf-mcp-rt](https://github.com/DanielHou315/overleaf-mcp-rt) | [netique/overleaf-mcp](https://github.com/netique/overleaf-mcp) |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -220,45 +217,12 @@ The three most-starred Overleaf MCP servers and the two closest in design to thi
 | Tools | 35 | 8 | 21 | 5 | 22 | 17 |
 | Works without an MCP client (command line or library) | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
-| Self-hosted Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹ |
-| List and search your projects | ✅ | 🟡² | 🟡³ | ❌ | 🟡⁴ | ✅ |
-| Returns a document's text to the assistant | ✅ | ✅ | 🟡⁵ | ✅ | ✅ | ✅ |
+| Self-hosted Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡 |
 | Sends edits as collaborative OT operations, not whole files | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Refuses an edit if the document changed since it was read | ✅ | 🟡⁶ | ❌ | 🟡⁶ | ✅ | 🟡⁷ |
+| Refuses an edit if the document changed since it was read | ✅ | 🟡 | ❌ | 🟡 | ✅ | 🟡 |
 | Writes as tracked changes when asked | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Accepts or rejects tracked changes | ✅ | ❌ | 🟡⁸ | ❌ | ❌ | ✅ |
-| Reads and replaces one `\section` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Creates, renames, moves, and deletes files and folders | ✅ | 🟡⁹ | ✅ | 🟡⁹ | ✅ | ❌ |
-| Uploads and downloads binary files | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹⁰ |
-| Compares a local folder with the project | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| Compiles on Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
-| Reads the compile log and errors | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Review comments: list, reply, add, resolve | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹¹ |
-| Creates, clones, imports, archives, and deletes projects | ✅ | ❌ | 🟡¹² | ❌ | ❌ | ❌ |
-| Organizes projects with tags | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Saves the root document, compiler, and TeX Live image | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Reads project history | ✅ | ❌ | ❌ | ❌ | 🟡¹³ | ❌ |
-| Installs from | npm | npm | npm, Homebrew | PyPI | npm | npm |
+| Accepts or rejects tracked changes | ✅ | ❌ | 🟡 | ❌ | ❌ | ✅ |
 | License | MIT | MIT | MIT | MIT | AGPL-3.0 | AGPL-3.0 |
-
-<details>
-<summary>Notes 1–13</summary>
-
-1. Documented, but sign-in appears to require overleaf.com's `overleaf_session2` cookie, which Community Edition does not set by default.
-2. Only the projects named in its own configuration.
-3. Lists projects without search, and leaves out archived and trashed ones.
-4. Lists projects, with no search or filter.
-5. Files are saved to the server's disk; no tool returns a document's text.
-6. Git rejects the push if Overleaf moved on after the tool's own pull, but an edit made between the assistant's read and that pull is overwritten.
-7. Only with `strict_version: true`; by default a concurrent edit is reported after the write.
-8. Accepts any tracked change, but rejects only in documents that use Overleaf's older ShareJS text OT, not history-ot.
-9. Creates files by writing them; no rename, move, or delete.
-10. Downloads binary files; no upload.
-11. Lists, replies to, resolves, and reopens threads, but cannot add a comment.
-12. Creates and renames projects.
-13. Reports what collaborators changed during the session.
-
-</details>
 
 ## Documentation
 
