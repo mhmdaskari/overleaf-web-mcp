@@ -10,12 +10,42 @@ Responses are private API shapes. The server reads only the fields listed here, 
 ones it depends on, and never logs or returns a response body. Where a response is validated, an
 unexpected shape surfaces as `PROTOCOL_UNSUPPORTED` rather than a parse exception.
 
+Each route is written once per code span in the first column of a table headed *Method and route*,
+as a method and a path, with `:name` for a value the server fills in and the query string, if any,
+after it. A † marks a route whose handler is not in Overleaf's public source, such as the review
+routes, which come from a private module, and the Socket.IO handshake, which the library serves.
+A scheduled check (`scripts/check-private-api.ts`, weekly) confirms that every other route here,
+and every message under [socket messages](#socket-messages), is still declared in
+`overleaf/overleaf`, and opens an issue naming any that are gone. It checks presence only; a
+changed response shape is caught at runtime by the validation above.
+
 ## Session and bootstrap
 
 | Method and route | Sent | Read | Notes |
 | --- | --- | --- | --- |
 | `GET /project` | session cookie | `<meta name="ol-csrfToken">`, `ol-user_id`, `ol-maxDocLength` from the HTML | Runs once at startup. A missing or empty CSRF token on a page with no signed-in user means the session expired (`AUTH_EXPIRED`); on a page that names one (`ol-user_id`) it is `PROTOCOL_UNSUPPORTED` with `details.kind: "response_shape"`. |
-| `GET /socket.io/1/?...` and `WS /socket.io/1/websocket/:sessionId` | session cookie, `projectId` | Socket.IO 0.9 handshake, then the `joinProject` payload: `project.rootFolder`, `rootDoc_id`, `compiler`, `imageName`, `spellCheckLanguage`, `trackChangesState`, `features.trackChanges`, `features.trackChangesVisible`, `permissionsLevel`, `protocolVersion` | One cached socket per project; document text goes over this channel as OT. Each join counts against web's join-project limiter: 45 a minute for one user on one project. Past it the socket sends `connectionRejected` `{ message: "rate-limit hit when joining project", code: "TooManyRequests" }` (captured live), reported as `RATE_LIMITED` with `details.reason: "join_rate_limited"`. |
+| `GET /socket.io/1/?...` and `WS /socket.io/1/websocket/:sessionId` † | session cookie, `projectId` | Socket.IO 0.9 handshake, then the `joinProject` payload: `project.rootFolder`, `rootDoc_id`, `compiler`, `imageName`, `spellCheckLanguage`, `trackChangesState`, `features.trackChanges`, `features.trackChangesVisible`, `permissionsLevel`, `protocolVersion` | One cached socket per project; document text goes over this channel as OT. Each join counts against web's join-project limiter: 45 a minute for one user on one project. Past it the socket sends `connectionRejected` `{ message: "rate-limit hit when joining project", code: "TooManyRequests" }` (captured live), reported as `RATE_LIMITED` with `details.reason: "join_rate_limited"`. |
+
+## Socket messages
+
+The messages the server sends and listens for on a project's socket, each with the file of
+`overleaf/overleaf` that declares it. The `recive` spelling is Overleaf's own.
+
+| Message | Direction | Declared in | Used for |
+| --- | --- | --- | --- |
+| `joinProjectResponse` | received | `services/real-time/app/js/Router.js` | the project tree, settings, and access level at join |
+| `connectionRejected` | received | `services/real-time/app/js/Router.js` | a refused join, classified under [HTTP status mapping](#http-status-mapping) |
+| `joinDoc` | sent | `services/real-time/app/js/Router.js` | a document's text, version, and ranges |
+| `leaveDoc` | sent | `services/real-time/app/js/Router.js` | releasing a document after a read or write |
+| `applyOtUpdate` | sent | `services/real-time/app/js/Router.js` | every OT write |
+| `otUpdateApplied` | received | `services/real-time/app/js/DocumentUpdaterController.js` | confirming a write |
+| `otUpdateError` | received | `services/real-time/app/js/DocumentUpdaterController.js` | a refused or failed update, under [tracked changes](#tracked-changes) |
+| `reciveNewDoc` | received | `services/web/app/src/Features/Editor/EditorController.mjs` | keeping the cached project tree current |
+| `reciveNewFile` | received | `services/web/app/src/Features/Editor/EditorController.mjs` | keeping the cached project tree current |
+| `reciveNewFolder` | received | `services/web/app/src/Features/Editor/EditorController.mjs` | keeping the cached project tree current |
+| `reciveEntityRename` | received | `services/web/app/src/Features/Editor/EditorController.mjs` | keeping the cached project tree current |
+| `reciveEntityMove` | received | `services/web/app/src/Features/Editor/EditorController.mjs` | keeping the cached project tree current |
+| `removeEntity` | received | `services/web/app/src/Features/Editor/EditorController.mjs` | keeping the cached project tree current |
 
 ## Projects
 
@@ -71,7 +101,7 @@ while building the archive is left out without an error.
 | `POST /project/:id/folder` | `{ parent_folder_id, name }` | `_id`; HTTP 429 past about 60 a minute per project | `manage_entity` `create_folder` |
 | `POST /project/:id/:type/:entityId/rename` | `{ name }` | nothing | `manage_entity` `rename` |
 | `POST /project/:id/:type/:entityId/move` | `{ folder_id }` | nothing | `manage_entity` `move` |
-| `DELETE /project/:id/:type/:entityId` | nothing | nothing | `manage_entity` `delete`; deleting a folder removes its subtree |
+| `DELETE /project/:id/doc/:entityId`, `DELETE /project/:id/file/:entityId`, `DELETE /project/:id/folder/:entityId` | nothing | nothing | `manage_entity` `delete`; deleting a folder removes its subtree |
 | `POST /project/:id/upload?folder_id=` | multipart `qqfile` and `name` | `success`, `entity_id`, `entity_type`, `hash`; HTTP 422 with a short `error` code on rejection; HTTP 429 past about 500 a project in 15 minutes | `upload_file`, `batch_upload` |
 | `GET /Project/:id/doc/:entityId/download`, `GET /Project/:id/file/:entityId` | nothing | raw bytes | `download_file` |
 
@@ -96,7 +126,7 @@ import). Only a value matching `^[a-z][a-z0-9_]{0,63}$` is ever propagated, unde
 | Method and route | Sent | Read | Used by |
 | --- | --- | --- | --- |
 | `POST /project/:id/compile?file_line_errors=true` | `{ rootDoc_id, rootResourcePath, check: "silent", incrementalCompilesEnabled: true }` (overleaf.com builds `rootResourcePath`, and the configured root without it), plus `stopOnFirstError: true` and `draft: true` when asked | `status`; `outputFiles[]` reduced to `path`, `type`, and `build`; numeric `stats`; `clsiServerId`; the user ID of a per-user compile, taken from `url` only when it has the shape `/project/<this project>/user/<id>/build/<this build>/output/` for every file that names one. Everything else, `url` itself, `timings`, and `pdfDownloadDomain` included, is dropped | `compile_project` |
-| `GET /project/:id[/user/:userId]/build/:buildId/output/:file` | `/user/:userId` when the compile was per user (Overleaf CE and Server Pro by default); `?clsiserverid=` when the compile response named one | the output file: `output.log` and `.blg` logs, at most 1 MB, for the summary and `get_compile_log`; any output for `download_compile_output` | `compile_project`, `get_compile_log`, `download_compile_output`, the compile output resources |
+| `GET /project/:id/build/:buildId/output/:file`, `GET /project/:id/user/:userId/build/:buildId/output/:file` | `/user/:userId` when the compile was per user (Overleaf CE and Server Pro by default); `?clsiserverid=` when the compile response named one | the output file: `output.log` and `.blg` logs, at most 1 MB, for the summary and `get_compile_log`; any output for `download_compile_output` | `compile_project`, `get_compile_log`, `download_compile_output`, the compile output resources |
 | `POST /project/:id/compile/stop` | nothing | nothing | `stop_compile` |
 
 `file_line_errors` makes TeX run with `-file-line-error`, so each error names its file as
@@ -116,12 +146,12 @@ a while; a 404 from the output route is `BUILD_NOT_FOUND`.
 
 | Method and route | Sent | Read | Used by |
 | --- | --- | --- | --- |
-| `GET /project/:id/threads` | nothing | thread ids, messages, authors, resolution state | `list_comments` |
-| `GET /project/:id/ranges` | nothing | a top-level array `[{ id, ranges }]` with each document's comment and tracked-change ranges, when the deployment exposes it | `list_comments`, `list_tracked_changes` without `filePath` |
-| `POST /project/:id/thread/:threadId/messages` | `{ content }` | nothing | `add_comment`, `reply_to_comment` |
-| `DELETE /project/:id/doc/:docId/thread/:threadId` | nothing | nothing | orphan cleanup after a failed `add_comment` attachment |
-| `POST /project/:id/doc/:docId/thread/:threadId/resolve` and `/reopen` | nothing | nothing | `set_comment_status` on ShareJS documents |
-| `POST /project/:id/doc/:docId/changes/accept` | `{ change_ids }` | the status only; the body is never read | `manage_tracked_changes` `accept` on ShareJS documents |
+| `GET /project/:id/threads` † | nothing | thread ids, messages, authors, resolution state | `list_comments` |
+| `GET /project/:id/ranges` † | nothing | a top-level array `[{ id, ranges }]` with each document's comment and tracked-change ranges, when the deployment exposes it | `list_comments`, `list_tracked_changes` without `filePath` |
+| `POST /project/:id/thread/:threadId/messages` † | `{ content }` | nothing | `add_comment`, `reply_to_comment` |
+| `DELETE /project/:id/doc/:docId/thread/:threadId` † | nothing | nothing | orphan cleanup after a failed `add_comment` attachment |
+| `POST /project/:id/doc/:docId/thread/:threadId/resolve`, `POST /project/:id/doc/:docId/thread/:threadId/reopen` † | nothing | nothing | `set_comment_status` on ShareJS documents |
+| `POST /project/:id/doc/:docId/changes/accept` † | `{ change_ids }` | the status only; the body is never read | `manage_tracked_changes` `accept` on ShareJS documents |
 
 Comment and tracked-change ranges themselves travel over the OT channel, not REST. The `/ranges`
 handler is not in Overleaf's public source. Live, it answers 200 with a `ranges` of `{}` for a

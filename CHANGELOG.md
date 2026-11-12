@@ -35,6 +35,13 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
   checks that need no Overleaf session (versions agree with npm and the latest tag, the MCP SDK's
   major version and single copies, the length of the server instructions) and exits 1 when one
   fails. ([#49](https://github.com/mhmdaskari/overleaf-web-mcp/issues/49))
+- A weekly `Private API check` workflow runs `scripts/check-private-api.ts`, which reads every
+  route and socket message `docs/private-api.md` lists and confirms each is still declared in
+  `overleaf/overleaf`, and opens or updates an issue labelled `private-api` naming any that are
+  gone. It needs no account or secret and checks presence only. The catalogue now writes each
+  route as its own code span, marks with † the routes Overleaf's public source does not hold (the
+  review routes and the Socket.IO handshake), and lists the socket messages with the file that
+  declares each. ([#48](https://github.com/mhmdaskari/overleaf-web-mcp/issues/48))
 
 ## [1.1.0] - 2026-11-09
 
