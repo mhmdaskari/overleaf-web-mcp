@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 
 import { describe, expect, test } from 'vitest'
 
@@ -428,7 +428,8 @@ describe('manage_entity golden results', () => {
 })
 
 describe('download_file golden results', () => {
-  // localPath is echoed as given, so the temporary folder is replaced by a fixed token for the snapshot.
+  // localPath is echoed as given, so the temporary folder is replaced by a fixed token for the snapshot,
+  // and the platform separator after it by `/`, so the snapshot is the same on Windows.
   const FOLDER = '<download-folder>'
 
   test('a text document to a new local file', async () => {
@@ -449,7 +450,7 @@ describe('download_file golden results', () => {
       })) as { localPath: string }
       expect(result.localPath).toBe(localPath)
       await expect(readFile(localPath, 'utf8')).resolves.toBe(MAIN_TEXT)
-      expectGolden('download_file', { ...result, localPath: result.localPath.replace(folder, FOLDER) })
+      expectGolden('download_file', { ...result, localPath: result.localPath.replace(`${folder}${sep}`, `${FOLDER}/`) })
     } finally {
       await harness.close()
       await rm(folder, { recursive: true, force: true })
@@ -476,7 +477,7 @@ describe('download_file golden results', () => {
       })) as { localPath: string }
       expect(result.localPath).toBe(localPath)
       await expect(readFile(localPath)).resolves.toEqual(PLOT_BYTES)
-      expectGolden('download_file', { ...result, localPath: result.localPath.replace(folder, FOLDER) })
+      expectGolden('download_file', { ...result, localPath: result.localPath.replace(`${folder}${sep}`, `${FOLDER}/`) })
     } finally {
       await harness.close()
       await rm(folder, { recursive: true, force: true })

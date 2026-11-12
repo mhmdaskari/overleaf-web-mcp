@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'vitest'
 
@@ -40,7 +40,8 @@ describe('access policy', () => {
     const policy = await AccessPolicy.create({})
     expect(() => policy.assertProject('any')).not.toThrow()
     expect(() => policy.assertEffect('overleaf-delete', 'local-write')).not.toThrow()
-    await expect(policy.resolveLocalRead('/no/such/file')).resolves.toBe('/no/such/file')
+    // resolve() adds the current drive on Windows, as the file system would.
+    await expect(policy.resolveLocalRead('/no/such/file')).resolves.toBe(resolve('/no/such/file'))
     expect(() => policy.assertProject('../x')).toThrow(expect.objectContaining({ code: 'INVALID_ARGUMENT' }))
   })
 
@@ -115,31 +116,36 @@ describe('access policy', () => {
     })
   })
 
-  test('judges a path the way the file system resolves it, a link before the .. after it', async () => {
-    const { base } = await folders()
-    await mkdir(join(base, 'a', 'b'), { recursive: true })
-    await mkdir(join(base, 'a', 'session'))
-    const jar = join(base, 'a', 'session', 'cookies.txt')
-    await writeFile(jar, 'secret')
-    await symlink(join(base, 'a', 'b'), join(base, 'link'))
-    const policy = await AccessPolicy.create({ cookieJarFile: jar })
+  // Windows collapses `..` as text before following links (Node resolves every path first), so
+  // `link/..` is the folder holding the link there, and the jar is never reached this way.
+  test.skipIf(process.platform === 'win32')(
+    'judges a path the way the file system resolves it, a link before the .. after it',
+    async () => {
+      const { base } = await folders()
+      await mkdir(join(base, 'a', 'b'), { recursive: true })
+      await mkdir(join(base, 'a', 'session'))
+      const jar = join(base, 'a', 'session', 'cookies.txt')
+      await writeFile(jar, 'secret')
+      await symlink(join(base, 'a', 'b'), join(base, 'link'))
+      const policy = await AccessPolicy.create({ cookieJarFile: jar })
 
-    // Text-wise this is base/session/cookies.txt; the file system reaches the jar through the link.
-    const throughLink = join(base, 'link') + '/../session/cookies.txt'
-    await expect(policy.resolveLocalWrite(throughLink)).rejects.toMatchObject({ details: { kind: 'session_files' } })
-    await expect(policy.resolveLocalRead(throughLink)).rejects.toMatchObject({ details: { kind: 'session_files' } })
+      // Text-wise this is base/session/cookies.txt; the file system reaches the jar through the link.
+      const throughLink = join(base, 'link') + '/../session/cookies.txt'
+      await expect(policy.resolveLocalWrite(throughLink)).rejects.toMatchObject({ details: { kind: 'session_files' } })
+      await expect(policy.resolveLocalRead(throughLink)).rejects.toMatchObject({ details: { kind: 'session_files' } })
 
-    // The reverse: text-wise the jar, but the file system goes elsewhere, so that is where it writes.
-    await mkdir(join(base, 'c', 'd'), { recursive: true })
-    await symlink(join(base, 'c', 'd'), join(base, 'x'))
-    const textuallyTheJar = join(base, 'x') + '/../a/session/cookies.txt'
-    const written = await policy.resolveLocalWrite(textuallyTheJar)
-    expect(written).toBe(join(await realpath(join(base, 'c')), 'a', 'session', 'cookies.txt'))
-    // Two steps up from the link does reach the jar, and is refused.
-    await expect(policy.resolveLocalWrite(join(base, 'x') + '/../../a/session/cookies.txt')).rejects.toMatchObject({
-      details: { kind: 'session_files' },
-    })
-  })
+      // The reverse: text-wise the jar, but the file system goes elsewhere, so that is where it writes.
+      await mkdir(join(base, 'c', 'd'), { recursive: true })
+      await symlink(join(base, 'c', 'd'), join(base, 'x'))
+      const textuallyTheJar = join(base, 'x') + '/../a/session/cookies.txt'
+      const written = await policy.resolveLocalWrite(textuallyTheJar)
+      expect(written).toBe(join(await realpath(join(base, 'c')), 'a', 'session', 'cookies.txt'))
+      // Two steps up from the link does reach the jar, and is refused.
+      await expect(policy.resolveLocalWrite(join(base, 'x') + '/../../a/session/cookies.txt')).rejects.toMatchObject({
+        details: { kind: 'session_files' },
+      })
+    }
+  )
 
   test('judges a dangling link by where it leads', async () => {
     const { inside, outside } = await folders()

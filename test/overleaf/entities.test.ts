@@ -260,8 +260,8 @@ describe('entity API', () => {
     })
     await expect(readFile(target)).resolves.toEqual(Buffer.from([1, 2, 3]))
     await expect(readFile(join(directory, 'alias.tex'), 'utf8')).resolves.toBe('old text')
-    // The new file keeps the old one's permissions.
-    expect((await lstat(target)).mode & 0o777).toBe(0o640)
+    // The new file keeps the old one's permissions; Windows has no POSIX modes to keep.
+    if (process.platform !== 'win32') expect((await lstat(target)).mode & 0o777).toBe(0o640)
     expect((await readdir(directory)).sort()).toEqual(['alias.tex', 'existing.tex'])
   })
 
@@ -280,7 +280,8 @@ describe('entity API', () => {
     expect((await readdir(directory)).sort()).toEqual(['linked.tex', 'real.tex'])
   })
 
-  test.skipIf(process.getuid?.() === 0)(
+  // chmod cannot make a folder unwritable for its owner on Windows, nor for root anywhere.
+  test.skipIf(process.getuid?.() === 0 || process.platform === 'win32')(
     'with overwrite, refuses an unwritable folder before fetching and keeps the file',
     async () => {
       const { api, http } = harness()
@@ -371,7 +372,8 @@ describe('entity API', () => {
     expect(http.getBytes).not.toHaveBeenCalled()
   })
 
-  test.skipIf(process.getuid?.() === 0)(
+  // chmod cannot make a folder unwritable for its owner on Windows, nor for root anywhere.
+  test.skipIf(process.getuid?.() === 0 || process.platform === 'win32')(
     'reports an unwritable local folder as an argument error before fetching',
     async () => {
       const { api, http } = harness()
