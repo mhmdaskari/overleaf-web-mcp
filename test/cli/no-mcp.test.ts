@@ -94,7 +94,7 @@ describe('operation commands never load MCP', () => {
     expect(await runCommandLine(['tree', 'p'], tree.io, { env: ENV, createRuntime: async () => runtime })).toBe(0)
     expect(tree.stderr()).toBe('')
     expect(JSON.parse(tree.stdout())).toEqual(OUTPUTS.get_project_tree)
-    expect(runtime.entities.getProjectTree).toHaveBeenCalledWith('p')
+    expect(runtime.entities.getProjectTree).toHaveBeenCalledWith('p', { includeTags: false })
   })
 
   test('the SDK client opens a session and lists projects', async () => {

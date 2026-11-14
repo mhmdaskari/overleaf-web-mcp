@@ -48,7 +48,7 @@ overleaf-web-mcp tags edit <tagId> [--name <n>] [--color <c>]
 overleaf-web-mcp tags delete <tagId> --confirm-name <name>
 overleaf-web-mcp tags add <tagId> --project <id>...
 overleaf-web-mcp tags remove <tagId> --project <id>...
-overleaf-web-mcp tree <projectId>
+overleaf-web-mcp tree <projectId> [--include-tags]
 overleaf-web-mcp files read <projectId> <path>
 overleaf-web-mcp files write <projectId> <path> --revision <r> (--content-file <f> | --stdin) [--tracked]
 overleaf-web-mcp files download <projectId> <path> <localPath> [--overwrite]
@@ -92,7 +92,7 @@ prints the help and exits 0.
 | `tags delete` | `manage_tags` | `action: "delete"`, `<tagId>` `tagId`, `--confirm-name` `confirmName` | <!-- md:version 1.2.0 --> |
 | `tags add` | `manage_tags` | `action: "add_projects"`, `<tagId>` `tagId`, each `--project` one `projectIds` entry | <!-- md:version 1.2.0 --> |
 | `tags remove` | `manage_tags` | as `tags add`, with `action: "remove_projects"` | <!-- md:version 1.2.0 --> |
-| `tree` | `get_project_tree` | `<projectId>` `projectId` | <!-- md:version 0.7.0 --> |
+| `tree` | `get_project_tree` | `<projectId>` `projectId`, `--include-tags` `includeTags: true` <!-- md:version 1.2.0 --> | <!-- md:version 0.7.0 --> |
 | `files read` | `read_file` | `<path>` `filePath` | <!-- md:version 0.7.0 --> |
 | `files write` | `write_file` | `<path>` `filePath`, `--revision` `revision`, `--content-file` `localPath`, `--stdin` `content`, `--tracked` `writeMode: "tracked"` | <!-- md:version 0.7.0 --> |
 | `files download` | `download_file` | `<path>` `filePath`, `<localPath>` `localPath`, `--overwrite` `overwrite: true` | <!-- md:version 0.7.0 --> |

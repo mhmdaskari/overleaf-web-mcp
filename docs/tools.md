@@ -234,12 +234,16 @@ Return the file and folder tree together with the project's compile settings.
 | Parameter | Required | Meaning |
 | --- | :---: | --- |
 | `projectId` | yes | Project id |
+| `includeTags` | no | `true` adds `tags`, this account's tags on the project, from one more request. Default `false` <!-- md:version 1.2.0 --> |
 
 Returns `entities`, an array of `{ id, name, path, type, parentFolderId, hash? }` where `type` is
 `doc` (text), `file` (binary), or `folder`, plus `rootDocPath` (the document Overleaf compiles by
 default), `compiler`, `imageName` (the TeX Live image), `spellCheckLanguage` when spell checking
 is on, `trackChangesActive`, and `hashNote`. `rootDocPath`, `compiler`, and `imageName` are absent
-when the project has none, for example a project without a root document.
+when the project has none, for example a project without a root document. With `includeTags`,
+`tags` lists the account's tags on the project as `{ id, name }`, the same shape as each project's
+`tags` in `list_projects`, and is empty when the project is in no tag; without it there is no
+`tags` key. Change tags with [`manage_tags`](#manage_tags-destructive).
 
 `hash` is present only on binary `file` entities and is a git blob hash:
 `sha1("blob " + byteLength + "\0" + content)`, exactly what `git hash-object <file>` prints. Plain

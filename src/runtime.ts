@@ -239,7 +239,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       ...(bootstrap.userId === undefined ? {} : { currentUserId: bootstrap.userId }),
       policy,
     })
-    const entities = new EntitiesApi(http, connections, policy)
+    const entities = new EntitiesApi(http, connections, policy, async () => await tags.listTags())
     // A fresh join before flattening, so includes are never resolved against a stale tree.
     const sections = new SectionsApi(documents, {
       getProjectTree: async projectId => {

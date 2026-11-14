@@ -622,7 +622,7 @@
   },
   {
     "name": "get_project_tree",
-    "description": "Return the project file/folder tree with entity IDs and paths, plus the root document, compiler, TeX Live image, and spell-check language Overleaf uses. Each binary file entity carries hash, a git blob hash equal to `git hash-object <file>`; text documents have no hash and must be compared by reading their content.",
+    "description": "Return the project file/folder tree with entity IDs and paths, plus the root document, compiler, TeX Live image, and spell-check language Overleaf uses. Each binary file entity carries hash, a git blob hash equal to `git hash-object <file>`; text documents have no hash and must be compared by reading their content. includeTags adds tags, this account's dashboard tags on the project as { id, name }, from one more request; change them with manage_tags.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -630,6 +630,11 @@
           "type": "string",
           "minLength": 1,
           "description": "Overleaf project ID"
+        },
+        "includeTags": {
+          "default": false,
+          "description": "Add this account's tags on the project; one more request to Overleaf",
+          "type": "boolean"
         }
       },
       "required": [
@@ -696,6 +701,25 @@
         },
         "hashNote": {
           "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [

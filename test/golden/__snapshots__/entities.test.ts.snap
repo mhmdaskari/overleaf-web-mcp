@@ -124,6 +124,166 @@ exports[`get_project_tree golden results > an empty project with no settings, em
 }
 `;
 
+exports[`get_project_tree golden results > includeTags adds the tags of this project as { id, name }, from one GET /tag 1`] = `
+{
+  "entities": [
+    {
+      "id": "doc-main",
+      "name": "main.tex",
+      "parentFolderId": "folder-root",
+      "path": "main.tex",
+      "type": "doc",
+    },
+    {
+      "hash": "555b33f8c5a4d3b1abff8b4393d9a2908cd43554",
+      "id": "file-plot",
+      "name": "plot.png",
+      "parentFolderId": "folder-root",
+      "path": "plot.png",
+      "type": "file",
+    },
+    {
+      "id": "folder-chapters",
+      "name": "chapters",
+      "parentFolderId": "folder-root",
+      "path": "chapters",
+      "type": "folder",
+    },
+    {
+      "id": "doc-intro",
+      "name": "intro.tex",
+      "parentFolderId": "folder-chapters",
+      "path": "chapters/intro.tex",
+      "type": "doc",
+    },
+    {
+      "id": "folder-appendix",
+      "name": "appendix",
+      "parentFolderId": "folder-chapters",
+      "path": "chapters/appendix",
+      "type": "folder",
+    },
+    {
+      "id": "doc-proofs",
+      "name": "proofs.tex",
+      "parentFolderId": "folder-appendix",
+      "path": "chapters/appendix/proofs.tex",
+      "type": "doc",
+    },
+    {
+      "hash": "cfa20f81071245f292f0b52b37beb7adf9259a26",
+      "id": "file-data",
+      "name": "data.csv",
+      "parentFolderId": "folder-appendix",
+      "path": "chapters/appendix/data.csv",
+      "type": "file",
+    },
+    {
+      "id": "folder-figures",
+      "name": "figures",
+      "parentFolderId": "folder-root",
+      "path": "figures",
+      "type": "folder",
+    },
+    {
+      "id": "file-legacy",
+      "name": "legacy.pdf",
+      "parentFolderId": "folder-figures",
+      "path": "figures/legacy.pdf",
+      "type": "file",
+    },
+  ],
+  "hashNote": "hash is a git blob hash, sha1("blob " + byteLength + "\\0" + content), identical to \`git hash-object <file>\`. It is present only on binary file entities; doc entities have no hash.",
+  "rootDocPath": "main.tex",
+  "tags": [
+    {
+      "id": "64b000000000000000000003",
+      "name": "Grant",
+    },
+    {
+      "id": "64b000000000000000000001",
+      "name": "Thesis",
+    },
+  ],
+  "trackChangesActive": false,
+}
+`;
+
+exports[`get_project_tree golden results > includeTags on a project in no tag gives an empty tags list 1`] = `
+{
+  "entities": [
+    {
+      "id": "doc-main",
+      "name": "main.tex",
+      "parentFolderId": "folder-root",
+      "path": "main.tex",
+      "type": "doc",
+    },
+    {
+      "hash": "555b33f8c5a4d3b1abff8b4393d9a2908cd43554",
+      "id": "file-plot",
+      "name": "plot.png",
+      "parentFolderId": "folder-root",
+      "path": "plot.png",
+      "type": "file",
+    },
+    {
+      "id": "folder-chapters",
+      "name": "chapters",
+      "parentFolderId": "folder-root",
+      "path": "chapters",
+      "type": "folder",
+    },
+    {
+      "id": "doc-intro",
+      "name": "intro.tex",
+      "parentFolderId": "folder-chapters",
+      "path": "chapters/intro.tex",
+      "type": "doc",
+    },
+    {
+      "id": "folder-appendix",
+      "name": "appendix",
+      "parentFolderId": "folder-chapters",
+      "path": "chapters/appendix",
+      "type": "folder",
+    },
+    {
+      "id": "doc-proofs",
+      "name": "proofs.tex",
+      "parentFolderId": "folder-appendix",
+      "path": "chapters/appendix/proofs.tex",
+      "type": "doc",
+    },
+    {
+      "hash": "cfa20f81071245f292f0b52b37beb7adf9259a26",
+      "id": "file-data",
+      "name": "data.csv",
+      "parentFolderId": "folder-appendix",
+      "path": "chapters/appendix/data.csv",
+      "type": "file",
+    },
+    {
+      "id": "folder-figures",
+      "name": "figures",
+      "parentFolderId": "folder-root",
+      "path": "figures",
+      "type": "folder",
+    },
+    {
+      "id": "file-legacy",
+      "name": "legacy.pdf",
+      "parentFolderId": "folder-figures",
+      "path": "figures/legacy.pdf",
+      "type": "file",
+    },
+  ],
+  "hashNote": "hash is a git blob hash, sha1("blob " + byteLength + "\\0" + content), identical to \`git hash-object <file>\`. It is present only on binary file entities; doc entities have no hash.",
+  "tags": [],
+  "trackChangesActive": false,
+}
+`;
+
 exports[`get_project_tree golden results > track changes on for this account only 1`] = `
 {
   "entities": [

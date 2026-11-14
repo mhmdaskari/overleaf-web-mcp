@@ -12,7 +12,7 @@ export const INPUTS: Record<OperationName, Record<string, unknown>> = {
   manage_project: { projectId: 'p', action: 'trash', confirmName: 'Paper' },
   manage_tags: { action: 'add_projects', tagId: 't1', projectIds: ['p'] },
   update_project_settings: { projectId: 'p', compiler: 'xelatex' },
-  get_project_tree: { projectId: 'p' },
+  get_project_tree: { projectId: 'p', includeTags: true },
   read_file: { projectId: 'p', filePath: 'main.tex' },
   write_file: { projectId: 'p', filePath: 'main.tex', revision: 'r', content: 'text' },
   create_file: { projectId: 'p', filePath: 'new.tex' },

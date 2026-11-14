@@ -58,6 +58,7 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
     compiler: 'pdflatex',
     trackChangesActive: false,
     hashNote: 'note',
+    tags: [{ id: 't1', name: 'Thesis' }],
   },
   read_file: { content: 'Hello', revision: 'r', newline: 'LF', protocol: 'sharejs', trackChangesActive: false },
   write_file: { revision: 'r2', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },

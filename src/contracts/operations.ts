@@ -179,6 +179,9 @@ const logEntrySchema = z.object({
   message: z.string(),
 })
 
+/** A tag on one project: its id and name. Colour and project count are in list_projects' account-wide tags. */
+const projectTagNameSchema = z.object({ id: z.string(), name: z.string() })
+
 const projectSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -186,7 +189,7 @@ const projectSummarySchema = z.object({
   lastUpdated: z.string().optional(),
   archived: z.boolean(),
   trashed: z.boolean(),
-  tags: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
+  tags: z.array(projectTagNameSchema).optional(),
 })
 
 const tagName = z.string().min(1).max(MAX_TAG_NAME_LENGTH).describe(`Tag name, 1 to ${MAX_TAG_NAME_LENGTH} characters`)
@@ -450,8 +453,14 @@ export const OPERATIONS = {
   },
   get_project_tree: {
     description:
-      'Return the project file/folder tree with entity IDs and paths, plus the root document, compiler, TeX Live image, and spell-check language Overleaf uses. Each binary file entity carries hash, a git blob hash equal to `git hash-object <file>`; text documents have no hash and must be compared by reading their content.',
-    inputSchema: z.object({ projectId }),
+      "Return the project file/folder tree with entity IDs and paths, plus the root document, compiler, TeX Live image, and spell-check language Overleaf uses. Each binary file entity carries hash, a git blob hash equal to `git hash-object <file>`; text documents have no hash and must be compared by reading their content. includeTags adds tags, this account's dashboard tags on the project as { id, name }, from one more request; change them with manage_tags.",
+    inputSchema: z.object({
+      projectId,
+      includeTags: z
+        .boolean()
+        .default(false)
+        .describe("Add this account's tags on the project; one more request to Overleaf"),
+    }),
     outputSchema: z.object({
       entities: z.array(projectEntitySchema),
       rootDocPath: z.string().optional(),
@@ -460,6 +469,7 @@ export const OPERATIONS = {
       spellCheckLanguage: z.string().optional(),
       trackChangesActive: z.boolean(),
       hashNote: z.string(),
+      tags: z.array(projectTagNameSchema).optional(),
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],

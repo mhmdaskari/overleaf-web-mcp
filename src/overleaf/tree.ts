@@ -44,6 +44,8 @@ export interface ProjectTree {
   spellCheckLanguage?: string
   trackChangesActive: boolean
   hashNote: string
+  /** The account's tags on this project, with `includeTags`. */
+  tags?: { id: string; name: string }[]
 }
 
 export const TREE_HASH_NOTE =
