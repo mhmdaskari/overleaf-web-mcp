@@ -1,6 +1,6 @@
 # Command line
 
-Every tool is also a command. `overleaf-web-mcp` reaches the same 35 operations as the MCP
+Every tool is also a command. `overleaf-web-mcp` reaches the same 36 operations as the MCP
 server, through the same service, checks, and safety defaults, and prints one JSON result whose
 exit code says what is safe to do next. Use it from a shell, a script, a CI job, or a coding
 agent that works in a terminal; no MCP client is involved. Three [Agent Skills](#agent-skills)
@@ -50,6 +50,7 @@ overleaf-web-mcp tags add <tagId> --project <id>...
 overleaf-web-mcp tags remove <tagId> --project <id>...
 overleaf-web-mcp tree <projectId> [--include-tags]
 overleaf-web-mcp files read <projectId> <path>
+overleaf-web-mcp files search <projectId> <query> [--path <p>] [--case-sensitive] [--limit <n>]
 overleaf-web-mcp files write <projectId> <path> --revision <r> (--content-file <f> | --stdin | --edits-file <f>) [--tracked]
 overleaf-web-mcp files download <projectId> <path> <localPath> [--overwrite]
 overleaf-web-mcp sync plan <projectId> <localFolder> [--destination <path>] [--ignore <glob>]... [--verbose] [--progress]
@@ -94,6 +95,7 @@ prints the help and exits 0.
 | `tags remove` | `manage_tags` | as `tags add`, with `action: "remove_projects"` | <!-- md:version 1.2.0 --> |
 | `tree` | `get_project_tree` | `<projectId>` `projectId`, `--include-tags` `includeTags: true` <!-- md:version 1.2.0 --> | <!-- md:version 0.7.0 --> |
 | `files read` | `read_file` | `<path>` `filePath` | <!-- md:version 0.7.0 --> |
+| `files search` | `search_project` | `<query>` `query`, `--path` `path`, `--case-sensitive` `caseSensitive: true`, `--limit` `limit` | <!-- md:version 1.2.0 --> |
 | `files write` | `write_file` | `<path>` `filePath`, `--revision` `revision`, `--content-file` `localPath`, `--stdin` `content`, `--edits-file` `edits` <!-- md:version 1.2.0 -->, `--tracked` `writeMode: "tracked"` | <!-- md:version 0.7.0 --> |
 | `files download` | `download_file` | `<path>` `filePath`, `<localPath>` `localPath`, `--overwrite` `overwrite: true` | <!-- md:version 0.7.0 --> |
 | `sync plan` | `plan_sync` | `<localFolder>` `localFolderPath`, `--destination` `destinationFolderPath`, each `--ignore` one `ignore` pattern, `--verbose` `verbose: true` | <!-- md:version 0.7.0 --> |

@@ -91,6 +91,19 @@ describe('CLI command line', () => {
     const fromStdin = parseCommandLine(['files', 'write', 'p', 'main.tex', '--revision', 'r', '--stdin'])
     expect(fromStdin).toMatchObject({ tool: 'write_file', contentFromStdin: true })
     expect((fromStdin as { input: object }).input).not.toHaveProperty('writeMode')
+    expect(
+      parseCommandLine(['files', 'search', 'p', '\\cite{', '--path', 'chapters', '--case-sensitive', '--limit', '5'])
+    ).toEqual({
+      kind: 'alias',
+      command: 'files search',
+      tool: 'search_project',
+      input: { projectId: 'p', query: '\\cite{', path: 'chapters', caseSensitive: true, limit: 5 },
+      progress: false,
+    })
+    expect(parseCommandLine(['files', 'search', 'p', 'text'])).toMatchObject({
+      input: { projectId: 'p', query: 'text' },
+    })
+    expect(parseCommandLine(['files', 'search', 'p', 'text'])).not.toHaveProperty('input.caseSensitive')
     const fromEdits = parseCommandLine(['files', 'write', 'p', 'main.tex', '--revision', 'r', '--edits-file', 'e.json'])
     expect(fromEdits).toMatchObject({ tool: 'write_file', editsFile: 'e.json', input: { revision: 'r' } })
     expect(fromEdits).not.toHaveProperty('contentFromStdin')
@@ -269,6 +282,8 @@ describe('CLI command line', () => {
       ['tracked-changes', 'decide', 'p'],
       ['tracked-changes', 'reject', 'p', '--revision', 'r', '--change', 'c', '--confirm-count', '1'],
       ['tags', 'frobnicate'],
+      ['files', 'search', 'p'],
+      ['files', 'search', 'p', 'text', '--limit', 'all'],
       ['tags', 'create'],
       ['tags', 'delete', 't1', '--confirm-name'],
       ['tags', 'add', 't1', 'p1'],

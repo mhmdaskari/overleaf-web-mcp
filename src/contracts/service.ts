@@ -6,6 +6,7 @@ import type { DocumentsApi, WriteFileResult, WriteMode } from '../overleaf/docum
 import type { EntitiesApi } from '../overleaf/entities.js'
 import type { HistoryApi } from '../overleaf/history.js'
 import type { ProjectsApi } from '../overleaf/projects.js'
+import type { SearchApi } from '../overleaf/search.js'
 import type { SectionsApi } from '../overleaf/sections-api.js'
 import type { SyncApi } from '../overleaf/sync.js'
 import type { TagsApi } from '../overleaf/tags.js'
@@ -42,6 +43,7 @@ export interface OverleafServiceRuntime {
   history: Pick<HistoryApi, 'monitorProjectHistory'>
   sync: Pick<SyncApi, 'planSync' | 'syncDirectory' | 'deleteEntities' | 'batchUpload'>
   tags: Pick<TagsApi, 'manageTags'>
+  search: Pick<SearchApi, 'searchProject'>
   /** Checks local paths the service reads itself; without one, only ids are checked. */
   policy?: AccessPolicy
 }

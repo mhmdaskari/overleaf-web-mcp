@@ -53,6 +53,7 @@ function fakeRuntime() {
     history: { monitorProjectHistory: vi.fn() },
     sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn(), batchUpload: vi.fn() },
     tags: { manageTags: vi.fn() },
+    search: { searchProject: vi.fn() },
   }
 }
 

@@ -17,7 +17,7 @@
   <a href="https://www.npmjs.com/package/overleaf-web-mcp"><img alt="Total npm installs" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmhmdaskari%2Foverleaf-web-mcp%2Fbadges%2Fnpm-downloads.json&amp;style=flat-square&amp;label=installs"></a>
   <a href="https://github.com/mhmdaskari/overleaf-web-mcp/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/mhmdaskari/overleaf-web-mcp/ci.yml?branch=main&amp;style=flat-square&amp;logo=githubactions&amp;logoColor=white&amp;label=CI"></a>
   <img alt="Node.js 20 or newer" src="https://img.shields.io/badge/Node.js-20%2B-339933?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white">
-  <a href="#tools"><img alt="35 MCP tools" src="https://img.shields.io/badge/MCP-35_tools-1F6FEB?style=flat-square"></a>
+  <a href="#tools"><img alt="36 MCP tools" src="https://img.shields.io/badge/MCP-36_tools-1F6FEB?style=flat-square"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-0F766E?style=flat-square"></a>
   <br>
   <a href="https://mhmdaskari.github.io/overleaf-web-mcp/install/"><img alt="Works with Claude Code, Codex, Cursor, and VS Code" src="https://img.shields.io/badge/works_with-Claude_Code_%7C_Codex_%7C_Cursor_%7C_VS_Code-7C3AED?style=flat-square"></a>
@@ -122,7 +122,7 @@ try {
 ## What it can do
 
 - **Start and manage projects.** Create a blank or example project, clone one, or import a zip; rename, trash, restore, or archive projects with the name confirmed first; set the root document, TeX engine, and TeX Live image so the web editor's Recompile follows; and organize projects with your dashboard tags.
-- **Browse and organize.** List and search projects, read the file tree with the configured root document and compiler, create folders and files, rename, move, upload one file or a list of them, download a file or the whole project as a zip, and delete with confirmation.
+- **Browse and organize.** List and search projects, find text across a project's documents, read the file tree with the configured root document and compiler, create folders and files, rename, move, upload one file or a list of them, download a file or the whole project as a zip, and delete with confirmation.
 - **Sync a folder.** Compare a local folder with the project without changing anything, then upload only what changed, and optionally delete what you removed locally, in one confirmed call. Changed text files go through the same revision-checked edits as a single write, so a collaborator's concurrent edit is never overwritten.
 - **Write safely.** Replace a whole document or a single section. Every edit is checked against the revision you read first, so a collaborator's concurrent change is reported instead of overwritten. Edits can be recorded as Overleaf tracked changes.
 - **Work by section.** Parse `\section` headings in a file, read one section, replace one section. For a manuscript split across files, read it as one flattened document with a map back to each file, and list, read, and replace sections across `\input`, `\include`, `\subfile`, and `\import`, each write going to the one file that holds the section.
@@ -132,10 +132,10 @@ try {
 
 ## Tools
 
-35 tools in eight groups: account, project lifecycle, files, folder sync, sections, compilation, review, and history. Read-only tools change nothing on Overleaf and write nothing on your computer. Destructive tools can replace or remove existing content, and all but `stop_compile` need a value repeated back first: the path, name, or count of what they delete, the revision of the document they replace, the `planToken` of a folder sync, or `overwrite` for a file that exists.
+36 tools in eight groups: account, project lifecycle, files, folder sync, sections, compilation, review, and history. Read-only tools change nothing on Overleaf and write nothing on your computer. Destructive tools can replace or remove existing content, and all but `stop_compile` need a value repeated back first: the path, name, or count of what they delete, the revision of the document they replace, the `planToken` of a folder sync, or `overwrite` for a file that exists.
 
 <details>
-<summary><strong>All 35 tools</strong>, with their annotations and local effects</summary>
+<summary><strong>All 36 tools</strong>, with their annotations and local effects</summary>
 
 An upload that would replace a file, and a folder sync without a `planToken`, are refused unless that replacement or unplanned sync is asked for by name. The last column shows which tools read or write files on the computer the server runs on. Every parameter and result is in the [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/); each tool is also `overleaf-web-mcp call <name>` and a method of `createOverleafClient`.
 
@@ -151,6 +151,7 @@ An upload that would replace a file, and a folder sync without a `planToken`, ar
 | Project lifecycle | `manage_tags` | Create, rename, recolour, or delete your dashboard tags, and add projects to them or remove them | destructive | |
 | Files | `get_project_tree` | Read the file tree with the project's compile settings | read-only | |
 | Files | `read_file` | Read a text document and its revision | read-only | |
+| Files | `search_project` | Find a literal string in the project's documents, with line, column, and a preview | read-only | |
 | Files | `write_file` | Replace a document with a revision-checked edit of only the changed words | destructive | reads |
 | Files | `create_file` | Create a text document, optionally with content | | |
 | Files | `manage_entity` | Create a folder, or rename, move, or delete an entity | destructive | |
@@ -214,7 +215,7 @@ Against the three most-starred Overleaf MCP servers and the two closest in desig
 | | **This project** | [OverleafMCP](https://github.com/mjyoo2/OverleafMCP) | [olcli](https://github.com/aloth/olcli) | [overleaf-mcp-server](https://github.com/YounesBensafia/overleaf-mcp-server) | [overleaf-mcp-rt](https://github.com/DanielHou315/overleaf-mcp-rt) | [netique/overleaf-mcp](https://github.com/netique/overleaf-mcp) |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
-| Tools | 35 | 8 | 21 | 5 | 22 | 17 |
+| Tools | 36 | 8 | 21 | 5 | 22 | 17 |
 | Works without an MCP client (command line or library) | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Self-hosted Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡 |
@@ -230,7 +231,7 @@ Against the three most-starred Overleaf MCP servers and the two closest in desig
 | --- | --- |
 | [Install](https://mhmdaskari.github.io/overleaf-web-mcp/install/) | Claude Code, Codex, Claude Desktop, Cursor, VS Code, the command line alone, self-hosted Overleaf, troubleshooting |
 | [Using it](https://mhmdaskari.github.io/overleaf-web-mcp/using/) | Example prompts and what happens underneath |
-| [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 35 tools with parameters and results |
+| [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 36 tools with parameters and results |
 | [Command line](https://mhmdaskari.github.io/overleaf-web-mcp/cli/) | Every command, request formats, output, exit codes, and the Agent Skills |
 | [TypeScript SDK](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) | `createOverleafClient`, results and errors, and the stable surface |
 | [Safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) | Revisions, tracked changes, confirmations, error codes |

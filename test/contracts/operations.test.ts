@@ -101,7 +101,7 @@ describe('operation contracts', () => {
   test('register the two tracked-change operations after set_comment_status, annotated exactly', () => {
     const at = OPERATION_NAMES.indexOf('set_comment_status')
     expect(OPERATION_NAMES.slice(at + 1, at + 3)).toEqual(['list_tracked_changes', 'manage_tracked_changes'])
-    expect(OPERATION_NAMES).toHaveLength(35)
+    expect(OPERATION_NAMES).toHaveLength(36)
     expect(OPERATIONS.list_tracked_changes.annotations).toStrictEqual({ readOnlyHint: true })
     expect(OPERATIONS.list_tracked_changes.effects).toEqual(['overleaf-read'])
     expect(OPERATIONS.manage_tracked_changes.annotations).toStrictEqual({ destructiveHint: true, idempotentHint: true })

@@ -8,7 +8,7 @@ follow the links for their current state. The capability rows describe each proj
 | | **This project** | [OverleafMCP](https://github.com/mjyoo2/OverleafMCP) | [olcli](https://github.com/aloth/olcli) | [overleaf-mcp-server](https://github.com/YounesBensafia/overleaf-mcp-server) | [overleaf-mcp-rt](https://github.com/DanielHou315/overleaf-mcp-rt) | [netique/overleaf-mcp](https://github.com/netique/overleaf-mcp) |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
-| Tools | 35 | 8 | 21 | 5 | 22 | 17 |
+| Tools | 36 | 8 | 21 | 5 | 22 | 17 |
 | Works without an MCP client (command line or library) | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Self-hosted Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹ |

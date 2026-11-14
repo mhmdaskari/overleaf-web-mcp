@@ -14,6 +14,7 @@ import { DocumentsApi, type WriteFileResult, type WriteMode } from './overleaf/d
 import { EntitiesApi } from './overleaf/entities.js'
 import { HistoryApi } from './overleaf/history.js'
 import { ProjectsApi } from './overleaf/projects.js'
+import { SearchApi } from './overleaf/search.js'
 import { SectionsApi } from './overleaf/sections-api.js'
 import { SyncApi } from './overleaf/sync.js'
 import { TagsApi } from './overleaf/tags.js'
@@ -109,6 +110,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
   readonly projects: ProjectsApi
   readonly sync: SyncApi
   readonly tags: TagsApi
+  readonly search: SearchApi
   readonly connections: ProjectConnectionCache<ProjectConnection>
   /** Decides which projects, local paths, and effects every operation may touch. */
   readonly policy: AccessPolicy
@@ -130,6 +132,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     projects: ProjectsApi
     sync: SyncApi
     tags: TagsApi
+    search: SearchApi
     connections: ProjectConnectionCache<ProjectConnection>
     policy: AccessPolicy
     userId?: string
@@ -149,6 +152,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
     this.projects = options.projects
     this.sync = options.sync
     this.tags = options.tags
+    this.search = options.search
     this.connections = options.connections
     this.policy = options.policy
     if (options.userId !== undefined) this.userId = options.userId
@@ -307,6 +311,15 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       currentUserId: bootstrap.userId,
       policy,
     })
+    // A search is a composition of a fresh tree and read_file's own reads.
+    const search = new SearchApi({
+      getProjectTree: async projectId => {
+        await connections.invalidate(projectId)
+        return await entities.getProjectTree(projectId)
+      },
+      readFile: async (projectId, filePath) => await documents.readFile(projectId, filePath),
+      policy,
+    })
 
     const runtime = new OverleafRuntime({
       config,
@@ -323,6 +336,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       projects,
       sync,
       tags,
+      search,
       connections,
       policy,
       ...(bootstrap.userId === undefined ? {} : { userId: bootstrap.userId }),

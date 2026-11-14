@@ -6,6 +6,13 @@ import { MAX_LOG_ENTRIES, MAX_MESSAGE_LENGTH } from '../overleaf/compile-log.js'
 import { DEFAULT_INCLUDE_DEPTH, MAX_FLATTENED_LENGTH, MAX_INCLUDE_DEPTH, MAX_INCLUDE_VISITS } from '../core/includes.js'
 import { SECTION_COMMANDS } from '../core/sections.js'
 import { COMPILERS, DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS } from '../overleaf/projects.js'
+import {
+  DEFAULT_SEARCH_LIMIT,
+  MAX_SEARCH_DOCUMENTS,
+  MAX_SEARCH_LIMIT,
+  MAX_SEARCH_QUERY_LENGTH,
+  SEARCH_PREVIEW_CHARS,
+} from '../overleaf/search.js'
 import { BATCH_UPLOAD_LIMIT } from '../overleaf/sync.js'
 import { MAX_TAG_NAME_LENGTH, MAX_TAG_PROJECT_IDS, TAG_COLOR_PATTERN } from '../overleaf/tags.js'
 import {
@@ -35,6 +42,7 @@ export const OPERATION_NAMES = [
   'manage_tags',
   'get_project_tree',
   'read_file',
+  'search_project',
   'write_file',
   'create_file',
   'manage_entity',
@@ -492,6 +500,42 @@ export const OPERATIONS = {
       newline: z.literal('LF'),
       protocol: otProtocolSchema,
       trackChangesActive: z.boolean(),
+    }),
+    annotations: { readOnlyHint: true },
+    effects: ['overleaf-read'],
+  },
+  search_project: {
+    description: `Search a project's text documents for a literal string and return where it occurs, instead of reading every document. Returns matches [{ filePath, line, column, preview }], with 1-based line and column (UTF-16 units, as the editor counts) and preview the matching line cut to ${SEARCH_PREVIEW_CHARS} characters around the match, with … where cut; totalMatches, every match including those past limit; truncated; filesSearched; and binaryFilesSkipped. query is matched literally, never as a regular expression, and ignoring case unless caseSensitive. path narrows the search to one document or a folder; one that names nothing is NOT_FOUND. Documents are read one at a time as read_file reads them, so text in a tracked deletion is not found, and at most ${MAX_SEARCH_DOCUMENTS} per call: it saves calls and context, not wall-clock time. A larger scope, or more matches than limit, returns what was found with truncated true.`,
+    inputSchema: z.object({
+      projectId,
+      query: z
+        .string()
+        .min(1)
+        .max(MAX_SEARCH_QUERY_LENGTH)
+        .describe(`Literal text to find, 1 to ${MAX_SEARCH_QUERY_LENGTH} characters`),
+      caseSensitive: z.boolean().default(false).describe('Match case exactly; by default case is ignored'),
+      path: z.string().min(1).optional().describe('A document, or a folder whose documents are searched'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_SEARCH_LIMIT)
+        .default(DEFAULT_SEARCH_LIMIT)
+        .describe(`Most matches returned, 1 to ${MAX_SEARCH_LIMIT}; totalMatches still counts every one`),
+    }),
+    outputSchema: z.object({
+      matches: z.array(
+        z.object({
+          filePath: z.string(),
+          line: z.number().int().positive(),
+          column: z.number().int().positive(),
+          preview: z.string(),
+        })
+      ),
+      totalMatches: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+      filesSearched: z.number().int().nonnegative(),
+      binaryFilesSkipped: z.number().int().nonnegative(),
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],

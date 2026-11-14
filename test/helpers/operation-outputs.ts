@@ -61,6 +61,13 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
     tags: [{ id: 't1', name: 'Thesis' }],
   },
   read_file: { content: 'Hello', revision: 'r', newline: 'LF', protocol: 'sharejs', trackChangesActive: false },
+  search_project: {
+    matches: [{ filePath: 'chapters/intro.tex', line: 3, column: 5, preview: 'See \\cite{key}.' }],
+    totalMatches: 1,
+    truncated: false,
+    filesSearched: 2,
+    binaryFilesSkipped: 0,
+  },
   write_file: { revision: 'r2', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },
   create_file: { revision: 'r1', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },
   manage_entity: { action: 'delete', id: 'd1', trackChangesActive: false, writeMode: 'untracked' },

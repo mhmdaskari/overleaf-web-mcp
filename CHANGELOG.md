@@ -13,6 +13,15 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
 
 ### Added
 
+- `search_project` (#55), a read-only tool that finds a literal string in the project's text
+  documents and returns `matches` as `{ filePath, line, column, preview }`, with `totalMatches`,
+  `truncated`, `filesSearched`, and `binaryFilesSkipped`. `query` is 1 to 200 characters, matched
+  literally and ignoring case unless `caseSensitive`; `path` narrows the search to a document or a
+  folder, and one that names nothing is `NOT_FOUND`; `limit` is 1 to 500, default 50. It reads at
+  most 300 documents, one at a time through `read_file`'s reads, and a larger scope or more
+  matches than `limit` returns what it found with `truncated: true`. The server now registers 36
+  tools. The command line gains `files search <projectId> <query>`, and the SDK
+  `client.searchProject`.
 - `write_file` takes `edits` (#45), 1 to 100 `{ oldText, newText }` applied in order to the
   document at `revision`, as the third way to give the new text beside `content` and `localPath`.
   Each `oldText` must occur exactly once in the text the edits before it left, matched exactly; one
