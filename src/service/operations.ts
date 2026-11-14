@@ -173,6 +173,15 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
       async input => await runtime.entities.getProjectTree(input.projectId, { includeTags: input.includeTags })
     ),
     read_file: operation('read_file', async input => await runtime.documents.readFile(input.projectId, input.filePath)),
+    search_project: operation(
+      'search_project',
+      async input =>
+        await runtime.search.searchProject(input.projectId, input.query, {
+          caseSensitive: input.caseSensitive,
+          path: input.path,
+          limit: input.limit,
+        })
+    ),
     write_file: operation(
       'write_file',
       async input =>

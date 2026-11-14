@@ -199,6 +199,22 @@ export const ALIASES: readonly AliasCommand[] = [
     build: ([projectId, filePath]) => call('read_file', { projectId, filePath }),
   },
   {
+    words: ['files', 'search'],
+    tool: 'search_project',
+    usage: 'files search <projectId> <query> [--path <p>] [--case-sensitive] [--limit <n>]',
+    summary: "Find a literal string in the project's documents, with line, column, and a preview",
+    positionals: ['projectId', 'query'],
+    options: { path: { type: 'string' }, 'case-sensitive': { type: 'boolean' }, limit: { type: 'string' } },
+    build: ([projectId, query], values) =>
+      call('search_project', {
+        projectId,
+        query,
+        path: text(values, 'path'),
+        caseSensitive: flag(values, 'case-sensitive') || undefined,
+        limit: wholeNumber(values, 'limit'),
+      }),
+  },
+  {
     words: ['files', 'write'],
     tool: 'write_file',
     usage:

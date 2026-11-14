@@ -1,0 +1,76 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`search_project golden results > finds every match across three documents with 1-based lines and columns, binaries skipped 1`] = `
+{
+  "binaryFilesSkipped": 1,
+  "filesSearched": 3,
+  "matches": [
+    {
+      "column": 12,
+      "filePath": "chapters/intro.tex",
+      "line": 2,
+      "preview": "Prior work \\cite{knuth84}.",
+    },
+    {
+      "column": 302,
+      "filePath": "chapters/methods.tex",
+      "line": 2,
+      "preview": "…xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \\cite{long} yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy…",
+    },
+    {
+      "column": 5,
+      "filePath": "main.tex",
+      "line": 3,
+      "preview": "See \\cite{knuth} and \\Cite{lamport}.",
+    },
+    {
+      "column": 22,
+      "filePath": "main.tex",
+      "line": 3,
+      "preview": "See \\cite{knuth} and \\Cite{lamport}.",
+    },
+  ],
+  "totalMatches": 4,
+  "truncated": false,
+}
+`;
+
+exports[`search_project golden results > honours limit while still counting every match 1`] = `
+{
+  "binaryFilesSkipped": 1,
+  "filesSearched": 3,
+  "matches": [
+    {
+      "column": 12,
+      "filePath": "chapters/intro.tex",
+      "line": 2,
+      "preview": "Prior work \\cite{knuth84}.",
+    },
+    {
+      "column": 302,
+      "filePath": "chapters/methods.tex",
+      "line": 2,
+      "preview": "…xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \\cite{long} yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy…",
+    },
+  ],
+  "totalMatches": 4,
+  "truncated": true,
+}
+`;
+
+exports[`search_project golden results > narrows to a folder or a document, and refuses a path that names nothing 1`] = `
+{
+  "binaryFilesSkipped": 0,
+  "filesSearched": 1,
+  "matches": [
+    {
+      "column": 2,
+      "filePath": "chapters/intro.tex",
+      "line": 1,
+      "preview": "\\section{Intro}",
+    },
+  ],
+  "totalMatches": 1,
+  "truncated": false,
+}
+`;

@@ -146,6 +146,7 @@ describe('allowed projects through the real runtime', () => {
       // The domain engine refuses it too, so the exported runtime is no way around the policy.
       await expect(runtime.documents.readFile('b', 'main.tex')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
       await expect(runtime.compile.stopCompile('b')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
+      await expect(runtime.search.searchProject('b', 'text')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
       await expect(runtime.connections.withConnection('b', async () => undefined)).rejects.toMatchObject({
         code: 'POLICY_DENIED',
       })

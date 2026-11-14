@@ -14,6 +14,7 @@ export const INPUTS: Record<OperationName, Record<string, unknown>> = {
   update_project_settings: { projectId: 'p', compiler: 'xelatex' },
   get_project_tree: { projectId: 'p', includeTags: true },
   read_file: { projectId: 'p', filePath: 'main.tex' },
+  search_project: { projectId: 'p', query: 'cite', path: 'chapters', limit: 10 },
   write_file: { projectId: 'p', filePath: 'main.tex', revision: 'r', content: 'text' },
   create_file: { projectId: 'p', filePath: 'new.tex' },
   manage_entity: { projectId: 'p', action: 'delete', path: 'old.tex', confirmPath: 'old.tex' },

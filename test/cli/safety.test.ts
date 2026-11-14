@@ -109,6 +109,7 @@ function commands(): Command[] {
     { label: 'tags remove', argv: ['tags', 'remove', 't1', '--project', 'p'] },
     { label: 'tree', argv: ['tree', 'p'] },
     { label: 'files read', argv: ['files', 'read', 'p', 'main.tex'] },
+    { label: 'files search', argv: ['files', 'search', 'p', 'cite', '--path', 'chapters', '--limit', '5'] },
     {
       label: 'files write --stdin',
       argv: ['files', 'write', 'p', 'main.tex', '--revision', 'r', '--stdin', '--tracked'],

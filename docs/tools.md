@@ -1,6 +1,6 @@
 # Tool reference
 
-The server registers 35 tools. Names are `snake_case`. Each tool is also
+The server registers 36 tools. Names are `snake_case`. Each tool is also
 `overleaf-web-mcp call <name>` on the [command line](cli.md) and a camelCase method of
 `createOverleafClient` in the [TypeScript SDK](sdk.md), with the same parameters, results, and
 errors. Every tool except `auth_status`,
@@ -266,6 +266,35 @@ Read a text document.
 Returns `content` with line endings normalized to LF, the opaque `revision` needed for any write,
 `newline: "LF"`, the document's OT `protocol` (`sharejs` or `history-ot`), and
 `trackChangesActive`.
+
+### `search_project` <small>read-only</small>
+
+<!-- md:version 1.2.0 -->
+
+Find where a literal string occurs in the project's text documents, without reading each one into
+the conversation.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `query` | yes | The text to find, 1 to 200 characters, matched literally |
+| `caseSensitive` | no | `true` matches case exactly. Default `false` |
+| `path` | no | A document, or a folder whose documents are searched. Default: the whole project |
+| `limit` | no | Most matches returned, 1 to 500. Default 50 |
+
+Returns `matches`, an array of `{ filePath, line, column, preview }`; `totalMatches`, every match
+in the documents searched, including those past `limit`; `truncated`; `filesSearched`; and
+`binaryFilesSkipped`, the binary files in scope, which are never read. `line` and `column` are
+1-based, and `column` counts UTF-16 code units, as the editor does. `preview` is the matching line,
+cut to 160 characters around the match with `…` where it was cut. Matches are listed by document
+path, then position, and do not overlap. A query that matches nothing returns an empty `matches`.
+
+`query` is never a regular expression: a pattern supplied by the caller could run without bound.
+Documents are read one at a time, as `read_file` reads them, so text in a tracked deletion of a
+history-OT document is not found. A search reads at most 300 documents; a larger scope, or more
+matches than `limit`, returns what was found with `truncated: true`. It saves calls and context,
+not wall-clock time. A `path` that names nothing is `NOT_FOUND`. `preview` is document text and,
+like `read_file`'s `content`, is never logged; errors carry counts, never text.
 
 ### `write_file` <small>destructive</small>
 

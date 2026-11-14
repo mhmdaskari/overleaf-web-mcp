@@ -57,6 +57,7 @@ export function fakeServiceRuntime() {
     },
     history: { monitorProjectHistory: resolved(OUTPUTS.monitor_project_history) },
     tags: { manageTags: resolved(OUTPUTS.manage_tags) },
+    search: { searchProject: resolved(OUTPUTS.search_project) },
     sync: {
       planSync: resolved(OUTPUTS.plan_sync),
       syncDirectory: resolved(OUTPUTS.sync_directory),
