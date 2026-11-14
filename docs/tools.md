@@ -198,7 +198,7 @@ Read them, with their ids, through `list_projects` with `includeTags: true`.
 | `tagId` | all but `create` | The tag to change, from `list_projects` |
 | `name` | `create`; or `edit` | The tag's name, 1 to 50 characters and unique among the account's tags; for `edit`, the new name |
 | `color` | no | `#rrggbb`, or `hsl(H, 70%, 45%)` as Overleaf's colour picker writes it; for `create` and `edit` |
-| `projectIds` | `add_projects`, `remove_projects` | 1 to 100 projects the account can access |
+| `projectIds` | `add_projects`, `remove_projects` | 1 to 100 projects the account can access; `remove_projects` also takes an id the tag holds that the account can no longer open <!-- md:version 1.2.0 --> |
 | `confirmName` | `delete` | The tag's current name, repeated exactly |
 
 `edit` takes a new `name`, `color`, or both, and keeps whatever it is not given. `delete` removes
@@ -208,7 +208,10 @@ Returns `action`, `tag` as `{ id, name, color?, projectIds }` (for `delete`, the
 `deleted`, and `verified`. Before anything is sent the tags are read: an unknown `tagId` is
 `NOT_FOUND` with `details.tagId`, a name another tag has is `INVALID_ARGUMENT` with
 `details.kind: "tag_name_taken"` and that tag's `details.tagId`, and a project the account cannot
-access is `NOT_FOUND` with `details.projectIds`. After the change the tags are read again: `tag` is
+access is `NOT_FOUND` with `details.projectIds`, except that `remove_projects` takes an id the tag
+holds even when the account can no longer open it. Overleaf keeps such an id in the tag after the
+project's link sharing is turned off, while the project list no longer shows the project; removing
+it grants nothing. A call with any other id is refused whole, and nothing is sent. After the change the tags are read again: `tag` is
 what that read shows and `verified` is `true`. When Overleaf accepted the change but the read
 failed, `tag` is what was asked for and `verified` is `false`.
 

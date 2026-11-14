@@ -225,19 +225,22 @@ export class TagsApi {
       }
       case 'add_projects':
       case 'remove_projects': {
+        const adding = input.action === 'add_projects'
         const requested = [...new Set(input.projectIds)]
         const accessible = await this.#accessibleProjectIds()
-        const missing = requested.filter(id => !accessible.has(id))
+        // Overleaf keeps an id in a tag after link sharing is turned off, while its project list
+        // drops the project, so removing takes an id the tag holds even when it cannot be opened.
+        // Removing never grants anything; adding still needs access.
+        const missing = requested.filter(id => !accessible.has(id) && (adding || !current.projectIds.includes(id)))
         if (missing.length > 0) {
           throw new McpError(
             'NOT_FOUND',
-            'Some projectIds are not projects this account can access; nothing was sent.',
-            {
-              details: { projectIds: missing },
-            }
+            adding
+              ? 'Some projectIds are not projects this account can access; nothing was sent.'
+              : 'Some projectIds are neither projects this account can access nor in the tag; nothing was sent.',
+            { details: { projectIds: missing } }
           )
         }
-        const adding = input.action === 'add_projects'
         const route = adding ? 'projects' : 'projects/remove'
         const expected: StoredTag = {
           ...current,

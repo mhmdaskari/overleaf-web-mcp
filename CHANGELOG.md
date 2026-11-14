@@ -24,6 +24,16 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
   the `manage_tags` input, and its result, errors, and exit codes are those of
   `call manage_tags`.
 
+### Changed
+
+- `manage_tags` `remove_projects` now removes a project id the tag holds even when the account can
+  no longer open the project (#43). Overleaf keeps such an id in the tag after the project's link
+  sharing is turned off, and its project list drops the project, so the call used to be refused
+  with `NOT_FOUND` and the id could not be cleared. An id that is neither accessible nor in the tag
+  is still `NOT_FOUND`, named in `details.projectIds`, and a call with one sends nothing.
+  `add_projects` still requires access, and `OVERLEAF_ALLOWED_PROJECTS` still refuses an id outside
+  it with `POLICY_DENIED` before any request.
+
 ### Fixed
 
 - `manage_tags` `delete` without `confirmName` is now `CONFIRMATION_MISMATCH` with

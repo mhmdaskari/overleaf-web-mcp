@@ -73,7 +73,7 @@ belong to the signed-in user. Each change route is rate-limited to 30 requests a
 
 | Method and route | Sent | Read | Used by |
 | --- | --- | --- | --- |
-| `GET /tag` | nothing | `[{ _id, name, color?, project_ids }]` (validated; `user_id` and `__v` are ignored) | `list_projects` with `includeTags` or `tag`, and the checks before and after every `manage_tags` change |
+| `GET /tag` | nothing | `[{ _id, name, color?, project_ids }]` (validated; `user_id` and `__v` are ignored) | `list_projects` with `includeTags` or `tag`, `get_project_tree` with `includeTags`, and the checks before and after every `manage_tags` change |
 | `POST /tag` | `{ name, color? }` | the created tag's `_id`; the read-back finds it by name | `manage_tags` `create` |
 | `POST /tag/:tagId/edit` | `{ name, color? }` | nothing (204) | `manage_tags` `edit` |
 | `DELETE /tag/:tagId` | nothing | nothing (204) | `manage_tags` `delete` |
@@ -88,6 +88,24 @@ so the server reads the tags first, checks the tag and each project, and reads t
 afterwards. `POST /tag` with a name the user already has returns the existing tag; the server
 refuses the duplicate before sending it. `POST /api/project` carries no tags; the dashboard reads
 them from its page, and this server from `GET /tag`.
+
+A project id can stay in a tag after the account loses access to the project. Read at
+`overleaf/overleaf` commit `e039ad26c5bf5422eb57b89fc7e57c75055e631d`:
+
+- These paths clear it: `TagsHandler.removeProjectFromAllTags` runs when a collaborator is removed
+  or leaves (`_removeUserIdFromProject` in `Collaborators/CollaboratorsController.mjs`, behind both
+  `removeUserFromProject` and `removeSelfFromProject`), and for every member when a project is
+  deleted (`ProjectDeleter.mjs`, in the background, so a failure there is only logged).
+- This path does not: turning link sharing off (`ProjectDetailsHandler.setPublicAccessLevel` to
+  `private`) changes only `publicAccesLevel`, leaving link-sharing members in
+  `tokenAccessReadOnly_refs` and `tokenAccessReadAndWrite_refs` and their tags untouched.
+  `CollaboratorsGetter.getProjectsUserIsMemberOf`, which the project list uses, requires
+  `publicAccesLevel: tokenBased` for those members, so the project disappears from the list while
+  its id stays in their tags.
+- `POST /tag/:tagId/projects/remove` checks only that the user is signed in, then `$pullAll`s the
+  ids from the user's own tag. So `manage_tags` `remove_projects` takes an id the fresh `GET /tag`
+  shows in the tag even when `POST /api/project` does not list it; any other inaccessible id is
+  `NOT_FOUND`.
 
 Overleaf builds the zip archive while it streams it, with no `Content-Length`, so a transfer cut
 short arrives with HTTP 200; only the missing end record shows it. A file Overleaf fails to read
