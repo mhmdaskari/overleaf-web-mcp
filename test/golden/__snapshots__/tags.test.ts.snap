@@ -87,3 +87,19 @@ exports[`golden tag results > manage_tags create, add_projects, and delete 3`] =
   "verified": true,
 }
 `;
+
+exports[`golden tag results > manage_tags remove_projects clears an id the account can no longer open 1`] = `
+{
+  "action": "remove_projects",
+  "deleted": false,
+  "tag": {
+    "color": "#336699",
+    "id": "64b000000000000000000001",
+    "name": "Thesis",
+    "projectIds": [
+      "p1",
+    ],
+  },
+  "verified": true,
+}
+`;

@@ -202,6 +202,37 @@ describe('tags API', () => {
     expect(writes).toEqual([])
   })
 
+  test('removes an id the tag holds that the account can no longer open, verified by the read-back', async () => {
+    const stale = 'p8'
+    const { api, http, writes } = tagsApi([{ ...thesis, project_ids: [P1, stale] }], { accessible: [P1] })
+    const removed = await api.manageTags({ action: 'remove_projects', tagId: THESIS, projectIds: [stale] })
+    expect(writes).toEqual([`POST /tag/${THESIS}/projects/remove`])
+    expect(http.postJson).toHaveBeenCalledWith(`/tag/${THESIS}/projects/remove`, { projectIds: [stale] })
+    expect(removed).toMatchObject({ action: 'remove_projects', tag: { projectIds: [P1] }, verified: true })
+  })
+
+  test('still refuses an inaccessible id outside the tag, all or nothing, and any inaccessible id to add', async () => {
+    const stale = 'p8'
+    const neither = 'p9'
+    const { api, writes } = tagsApi([{ ...thesis, project_ids: [P1, stale] }], { accessible: [P1, P2] })
+
+    const outside = await failure(api.manageTags({ action: 'remove_projects', tagId: THESIS, projectIds: [neither] }))
+    expect(outside.code).toBe('NOT_FOUND')
+    expect(outside.details).toEqual({ projectIds: [neither] })
+
+    // An accessible id, a stale id in the tag, and one that is neither: only the last is named.
+    const mixed = await failure(
+      api.manageTags({ action: 'remove_projects', tagId: THESIS, projectIds: [P2, stale, neither] })
+    )
+    expect(mixed.code).toBe('NOT_FOUND')
+    expect(mixed.details).toEqual({ projectIds: [neither] })
+
+    const adding = await failure(api.manageTags({ action: 'add_projects', tagId: THESIS, projectIds: [stale] }))
+    expect(adding.code).toBe('NOT_FOUND')
+    expect(adding.details).toEqual({ projectIds: [stale] })
+    expect(writes).toEqual([])
+  })
+
   test('keeps a refusal from Overleaf as it is, with nothing read back', async () => {
     const { api, http } = tagsApi([thesis])
     http.postJson.mockRejectedValueOnce(new McpError('RATE_LIMITED', 'slow down', { retryable: true }))
@@ -327,6 +358,20 @@ describe('tags API', () => {
       expect(error.code).toBe('POLICY_DENIED')
       expect(error.details).toEqual({ parameter: 'projectIds' })
       expect(http.getJson).toHaveBeenCalledTimes(1)
+    })
+
+    test('refuses a stale id outside the allowlist as POLICY_DENIED, even when the tag holds it', async () => {
+      const policy = await AccessPolicy.create({ allowedProjects: [P1] })
+      const { api, http, accessibleProjectIds } = tagsApi([{ ...thesis, project_ids: [P1, 'p8'] }], {
+        policy,
+        accessible: [P1],
+      })
+      const error = await failure(api.manageTags({ action: 'remove_projects', tagId: THESIS, projectIds: ['p8'] }))
+      expect(error.code).toBe('POLICY_DENIED')
+      expect(error.details).toEqual({ parameter: 'projectIds' })
+      expect(http.getJson).not.toHaveBeenCalled()
+      expect(accessibleProjectIds).not.toHaveBeenCalled()
+      expect(http.postJson).not.toHaveBeenCalled()
     })
 
     test('refuses to edit or delete a tag that holds projects outside the allowlist', async () => {

@@ -9,6 +9,8 @@ import { createTestRuntime } from '../helpers/runtime.js'
 const THESIS = '64b000000000000000000001'
 const EMPTY = '64b000000000000000000002'
 const CREATED = '64b000000000000000000003'
+/** A project this account can no longer open, as after its link sharing was turned off. */
+const STALE = '64b0000000000000000000ff'
 
 const projects = [
   { _id: 'p1', name: 'Paper', accessLevel: 'owner', lastUpdated: '2026-09-02T00:00:00.000Z' },
@@ -16,16 +18,19 @@ const projects = [
 ]
 
 /** Overleaf's answers for the project list and the tag routes, holding the tags in memory. */
-async function runtimeWithTags() {
+async function runtimeWithTags(thesisProjects: string[] = ['p1']) {
   const tags: { _id: string; user_id: string; name: string; color?: string; project_ids: string[]; __v: number }[] = [
-    { _id: THESIS, user_id: 'user', name: 'Thesis', color: '#336699', project_ids: ['p1'], __v: 0 },
+    { _id: THESIS, user_id: 'user', name: 'Thesis', color: '#336699', project_ids: [...thesisProjects], __v: 0 },
     { _id: EMPTY, user_id: 'user', name: 'Empty', project_ids: [], __v: 0 },
   ]
-  return await createTestRuntime({
+  /** The JSON body of every request that sent one, as `METHOD /path` and the body. */
+  const sent: { request: string; body: Record<string, unknown> }[] = []
+  const test = await createTestRuntime({
     fetcher: async (input, init) => {
       const url = new URL(input instanceof Request ? input.url : String(input))
       const method = init?.method ?? 'GET'
       const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : {}
+      if (typeof init?.body === 'string') sent.push({ request: `${method} ${url.pathname}`, body })
       if (method === 'POST' && url.pathname === '/api/project') {
         return Response.json({ totalSize: projects.length, projects })
       }
@@ -39,6 +44,10 @@ async function runtimeWithTags() {
         tags[0]!.project_ids.push(...(body.projectIds as string[]))
         return new Response(null, { status: 204 })
       }
+      if (method === 'POST' && url.pathname === `/tag/${THESIS}/projects/remove`) {
+        tags[0]!.project_ids = tags[0]!.project_ids.filter(id => !(body.projectIds as string[]).includes(id))
+        return new Response(null, { status: 204 })
+      }
       if (method === 'DELETE' && url.pathname === `/tag/${EMPTY}`) {
         tags.splice(1, 1)
         return new Response(null, { status: 204 })
@@ -46,6 +55,7 @@ async function runtimeWithTags() {
       throw new Error(`unexpected ${method} ${url.pathname}`)
     },
   })
+  return { ...test, sent }
 }
 
 describe('golden tag results', () => {
@@ -88,6 +98,25 @@ describe('golden tag results', () => {
         'GET /tag',
         `DELETE /tag/${EMPTY}`,
         'GET /tag',
+      ])
+    } finally {
+      await runtime.close()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('manage_tags remove_projects clears an id the account can no longer open', async () => {
+    const { runtime, fetches, sent, directory } = await runtimeWithTags(['p1', STALE])
+    try {
+      const removed = await createOverleafService(runtime).manage_tags({
+        action: 'remove_projects',
+        tagId: THESIS,
+        projectIds: [STALE],
+      })
+      expectGolden('manage_tags', removed)
+      expect(fetches).toEqual(['GET /tag', 'POST /api/project', `POST /tag/${THESIS}/projects/remove`, 'GET /tag'])
+      expect(sent.filter(entry => entry.request.startsWith('POST /tag'))).toEqual([
+        { request: `POST /tag/${THESIS}/projects/remove`, body: { projectIds: [STALE] } },
       ])
     } finally {
       await runtime.close()
