@@ -311,7 +311,8 @@ export class DocumentsApi {
           })
           if (textEdits !== undefined) {
             try {
-              target = applyTextEdits(normalizeLf(before.content), textEdits)
+              // Normalized as content is, so a CRLF in a newText never reaches the document.
+              target = normalizeLf(applyTextEdits(normalizeLf(before.content), textEdits))
               assertDocumentSize(target, this.#maxDocLength)
             } catch (error) {
               await safelyLeave(connection, entity.id)

@@ -89,7 +89,11 @@ export class SearchApi {
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SEARCH_LIMIT) {
       throw new McpError('INVALID_ARGUMENT', `limit must be an integer between 1 and ${MAX_SEARCH_LIMIT}.`)
     }
-    const scope = options.path === undefined || options.path === '' ? undefined : normalizeProjectPath(options.path)
+    // A folder may be named with a trailing slash.
+    const scope =
+      options.path === undefined || options.path === ''
+        ? undefined
+        : normalizeProjectPath(options.path).replace(/\/+$/u, '')
 
     const tree = await this.#options.getProjectTree(projectId)
     const inScope = tree.entities.filter(

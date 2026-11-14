@@ -326,7 +326,8 @@ matched exactly: case, whitespace, and line endings count, and nothing is fuzzy.
 `INVALID_ARGUMENT` with `details.kind: "edit_not_found"`, and one that occurs more than once,
 overlapping occurrences included, `details.kind: "edit_ambiguous"`; both carry the 0-based
 `details.editIndex` and nothing from the document, and nothing is sent. The text the edits
-produce is then written exactly as `content` with that text would be: the same update, the same
+produce, with line endings normalized to LF as `content`'s are, is then written exactly as
+`content` with that text would be: the same update, the same
 check against a fresh read, and the same tracked-change rules. Edits that leave the text as it was
 change nothing.
 
