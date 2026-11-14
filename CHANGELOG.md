@@ -13,6 +13,17 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
 
 ### Added
 
+- `write_file` takes `edits` (#45), 1 to 100 `{ oldText, newText }` applied in order to the
+  document at `revision`, as the third way to give the new text beside `content` and `localPath`.
+  Each `oldText` must occur exactly once in the text the edits before it left, matched exactly; one
+  that occurs nowhere is `INVALID_ARGUMENT` with `details.kind: "edit_not_found"`, one that occurs
+  more than once `details.kind: "edit_ambiguous"`, each with the 0-based `details.editIndex` and
+  nothing sent. The resulting text is written exactly as `content` would be. Giving more than one
+  of `content`, `localPath`, and `edits`, or none, is `INVALID_ARGUMENT` with
+  `details.parameters`; the command line and the SDK now refuse it when the input is parsed, before
+  any session is opened, where before the content-and-localPath case was refused after. The
+  `files write` shorthand gains `--edits-file <f>`, a JSON array, so document text never goes in
+  argv.
 - `get_project_tree` takes an optional `includeTags` (#42). When it is `true`, the result gains
   `tags`, the account's tags on the project as `{ id, name }`, read with one `GET /tag`, and an
   empty array when the project is in no tag. Left out or `false`, the result and the requests are

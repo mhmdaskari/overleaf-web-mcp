@@ -25,10 +25,11 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
 
 [Changelog](changelog.md#120-unreleased)
 
-- **MCP tools:** `includeTags` on [`get_project_tree`](tools.md#get_project_tree-read-only).
+- **MCP tools:** `edits` on [`write_file`](tools.md#write_file-destructive); `includeTags` on
+  [`get_project_tree`](tools.md#get_project_tree-read-only).
 - **Command line:** `tags create`, `tags edit`, `tags delete`, `tags add`, and `tags remove`
-  ([commands](cli.md#commands)); `--include-tags` on `tree`.
-- **SDK:** the same parameter on `client.getProjectTree`.
+  ([commands](cli.md#commands)); `--edits-file` on `files write`; `--include-tags` on `tree`.
+- **SDK:** the same parameters on `client.writeFile` and `client.getProjectTree`.
 
 ## 1.1.0
 

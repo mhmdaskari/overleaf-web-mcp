@@ -6,6 +6,7 @@ import { AccessPolicy } from '../core/policy.js'
 import type { FifoQueue } from '../core/queue.js'
 import { assertRevisionMatches, contentHash, createRevision, type OtProtocol } from '../core/revision.js'
 import { normalizeLf } from '../core/text.js'
+import { applyTextEdits, type DocumentEdit } from '../core/text-edits.js'
 import {
   buildHistoryTextOperation,
   buildShareJsOperation,
@@ -278,7 +279,8 @@ export class DocumentsApi {
     projectId: string,
     filePath: string,
     revision: string,
-    content: string,
+    /** The whole new text, or edits applied to the document as it stands at `revision`. */
+    content: string | { edits: readonly DocumentEdit[] },
     writeMode: WriteMode = 'untracked'
   ): Promise<WriteFileResult> {
     this.#policy.assertProject(projectId)
@@ -289,8 +291,10 @@ export class DocumentsApi {
         'Tracked writes require an authenticated Overleaf user ID from the project bootstrap.'
       )
     }
-    const target = normalizeLf(content)
-    assertDocumentSize(target, this.#maxDocLength)
+    const textEdits = typeof content === 'string' ? undefined : content.edits
+    // With edits, the target is known only once the document is joined and its revision checked.
+    let target = typeof content === 'string' ? normalizeLf(content) : ''
+    if (textEdits === undefined) assertDocumentSize(target, this.#maxDocLength)
 
     const submitted = await this.#connections.withConnection(
       projectId,
@@ -305,6 +309,15 @@ export class DocumentsApi {
             otVersion: before.version,
             content: before.content,
           })
+          if (textEdits !== undefined) {
+            try {
+              target = applyTextEdits(normalizeLf(before.content), textEdits)
+              assertDocumentSize(target, this.#maxDocLength)
+            } catch (error) {
+              await safelyLeave(connection, entity.id)
+              throw error
+            }
+          }
           if (before.protocol === 'sharejs') {
             // The legacy editor replaces each such character with U+FFFD, so the write could never verify.
             const line = insertedOutsideBmpLine(before.content, target)

@@ -280,12 +280,26 @@ Replace a text document with a revision-checked, verified edit of only the words
 | `revision` | yes | The revision from a prior `read_file` or write of this document |
 | `content` | one of | Complete replacement text |
 | `localPath` | one of | Local UTF-8 file holding the complete replacement. Non-UTF-8 content is rejected; a leading byte order mark is stripped <!-- md:version 0.1.3 --> |
+| `edits` | one of | 1 to 100 `{ oldText, newText }`, applied in order to the document at `revision` <!-- md:version 1.2.0 --> |
 | `writeMode` | no | `untracked` (default) or `tracked` to record the edit as Overleaf tracked changes <!-- md:version 0.1.2 --> |
 
-Exactly one of `content` and `localPath` must be given. Returns the new `revision`, `protocol`,
+Exactly one of `content`, `localPath`, and `edits` must be given; any other combination is
+`INVALID_ARGUMENT` with `details.parameters` naming those given, before anything is read. Returns the new `revision`, `protocol`,
 `trackChangesActive`, `writeMode`, and `recoveredAfterTimeout: true` when the write was confirmed
 during the recovery window after a timeout or a lost socket. A no-op write succeeds and records
 nothing. Fails with `REVISION_CONFLICT` if the document changed since the revision was read.
+
+`edits` saves sending the whole document to change a few words. Each edit is applied to the text
+the edits before it left, starting from the document as it stands at `revision`, so a stale
+revision is `REVISION_CONFLICT` before any edit is tried. Each `oldText` must occur exactly once,
+matched exactly: case, whitespace, and line endings count, and nothing is fuzzy. An empty
+`newText` deletes; an empty `oldText` is `INVALID_ARGUMENT`. An `oldText` that occurs nowhere is
+`INVALID_ARGUMENT` with `details.kind: "edit_not_found"`, and one that occurs more than once,
+overlapping occurrences included, `details.kind: "edit_ambiguous"`; both carry the 0-based
+`details.editIndex` and nothing from the document, and nothing is sent. The text the edits
+produce is then written exactly as `content` with that text would be: the same update, the same
+check against a fresh read, and the same tracked-change rules. Edits that leave the text as it was
+change nothing.
 
 The update changes only the words that differ, so text between two edits, and any comment or
 tracked change on it, is left alone. Word edits are sent only when none of them touches a comment

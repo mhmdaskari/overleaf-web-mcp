@@ -91,6 +91,10 @@ describe('CLI command line', () => {
     const fromStdin = parseCommandLine(['files', 'write', 'p', 'main.tex', '--revision', 'r', '--stdin'])
     expect(fromStdin).toMatchObject({ tool: 'write_file', contentFromStdin: true })
     expect((fromStdin as { input: object }).input).not.toHaveProperty('writeMode')
+    const fromEdits = parseCommandLine(['files', 'write', 'p', 'main.tex', '--revision', 'r', '--edits-file', 'e.json'])
+    expect(fromEdits).toMatchObject({ tool: 'write_file', editsFile: 'e.json', input: { revision: 'r' } })
+    expect(fromEdits).not.toHaveProperty('contentFromStdin')
+    expect((fromEdits as { input: object }).input).not.toHaveProperty('localPath')
     expect(parseCommandLine(['files', 'download', 'p', 'fig.png', './fig.png', '--overwrite'])).toMatchObject({
       tool: 'download_file',
       input: { projectId: 'p', filePath: 'fig.png', localPath: './fig.png', overwrite: true },
@@ -253,6 +257,8 @@ describe('CLI command line', () => {
     for (const argv of [
       ['files', 'write', 'p', 'main.tex', '--revision', 'r'],
       ['files', 'write', 'p', 'main.tex', '--revision', 'r', '--stdin', '--content-file', 'x'],
+      ['files', 'write', 'p', 'main.tex', '--revision', 'r', '--edits-file', 'e.json', '--stdin'],
+      ['files', 'write', 'p', 'main.tex', '--revision', 'r', '--edits-file', 'e.json', '--content-file', 'x'],
       ['compile', 'log', 'p'],
       ['compile', 'download', 'p', 'out.pdf'],
       ['compile', 'run', 'p', '--overwrite'],

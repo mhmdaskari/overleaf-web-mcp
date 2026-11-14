@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 
 import { McpError } from '../core/errors.js'
-import { OPERATIONS, type OperationInput, type OperationName } from './operations.js'
+import { OPERATIONS, type OperationContract, type OperationInput, type OperationName } from './operations.js'
 
 interface SchemaDefinition {
   type: string
@@ -72,7 +72,7 @@ export function parseOperationInput<N extends OperationName>(name: N, input: unk
   if (!isRecord(input)) {
     throw new McpError('INVALID_ARGUMENT', `The input for ${name} must be a JSON object.`)
   }
-  const contract = OPERATIONS[name] as { inputSchema?: z.ZodObject }
+  const contract: OperationContract = OPERATIONS[name]
   const schema = contract.inputSchema
   const unknown = schema === undefined ? Object.keys(input) : unknownKeys(schema, input)
   if (unknown.length > 0) {
@@ -92,6 +92,7 @@ export function parseOperationInput<N extends OperationName>(name: N, input: unk
       { details: { issues } }
     )
   }
+  contract.checkInput?.(parsed.data)
   // Parsed output, defaults applied, is a valid input.
   return parsed.data as OperationInput<N>
 }

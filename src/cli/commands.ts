@@ -12,6 +12,8 @@ export interface AliasCall {
   input: Record<string, unknown>
   /** Read the document text for `content` from stdin. */
   contentFromStdin?: true
+  /** Read `edits` from this JSON file, so document text never goes in argv. */
+  editsFile?: string
   /** `compile run --download`: save output.pdf from the same build afterwards. */
   download?: { localPath: string; overwrite: boolean }
   progress: boolean
@@ -199,20 +201,24 @@ export const ALIASES: readonly AliasCommand[] = [
   {
     words: ['files', 'write'],
     tool: 'write_file',
-    usage: 'files write <projectId> <path> --revision <r> (--content-file <f> | --stdin) [--tracked]',
-    summary: 'Replace a document with a revision-checked edit; the text never goes in argv',
+    usage:
+      'files write <projectId> <path> --revision <r> (--content-file <f> | --stdin | --edits-file <f>) [--tracked]',
+    summary:
+      'Replace a document, or apply targeted edits to it, with a revision-checked write; the text never goes in argv',
     positionals: ['projectId', 'path'],
     options: {
       revision: { type: 'string' },
       'content-file': { type: 'string' },
       stdin: { type: 'boolean' },
+      'edits-file': { type: 'string' },
       tracked: { type: 'boolean' },
     },
     build: ([projectId, filePath], values) => {
       const contentFile = text(values, 'content-file')
       const fromStdin = flag(values, 'stdin')
-      if ((contentFile === undefined) === !fromStdin) {
-        throw usageError('files write takes exactly one of --content-file <f> or --stdin.')
+      const editsFile = text(values, 'edits-file')
+      if ([contentFile !== undefined, fromStdin, editsFile !== undefined].filter(Boolean).length !== 1) {
+        throw usageError('files write takes exactly one of --content-file <f>, --stdin, or --edits-file <f>.')
       }
       return call(
         'write_file',
@@ -224,7 +230,7 @@ export const ALIASES: readonly AliasCommand[] = [
           localPath: contentFile,
           writeMode: flag(values, 'tracked') ? 'tracked' : undefined,
         },
-        fromStdin ? { contentFromStdin: true } : {}
+        fromStdin ? { contentFromStdin: true } : editsFile !== undefined ? { editsFile } : {}
       )
     },
   },

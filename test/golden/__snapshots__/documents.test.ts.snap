@@ -87,6 +87,33 @@ exports[`write_file > content from a local file 1`] = `
 }
 `;
 
+exports[`write_file > edits > tracked ShareJS: two edits send the update the resulting content would 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjQsInNoYTI1NiI6ImJiZTNkYzU5MWEwNmYxNmVmZGVmNTNjNTUzNGMzZjM2OWVmNTZiMTU1M2RlN2UyYTRkYjhkZjliZWU4ZTUyOTIifQ",
+  "trackChangesActive": false,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`write_file > edits > tracked history-OT: two edits send the update the resulting content would 1`] = `
+{
+  "protocol": "history-ot",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6Imhpc3Rvcnktb3QiLCJvdFZlcnNpb24iOjYsInNoYTI1NiI6ImJiZTNkYzU5MWEwNmYxNmVmZGVmNTNjNTUzNGMzZjM2OWVmNTZiMTU1M2RlN2UyYTRkYjhkZjliZWU4ZTUyOTIifQ",
+  "trackChangesActive": true,
+  "writeMode": "tracked",
+}
+`;
+
+exports[`write_file > edits > untracked ShareJS: two edits send the update the resulting content would 1`] = `
+{
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicHJvamVjdCIsImRvY0lkIjoiZDEiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjQsInNoYTI1NiI6ImJiZTNkYzU5MWEwNmYxNmVmZGVmNTNjNTUzNGMzZjM2OWVmNTZiMTU1M2RlN2UyYTRkYjhkZjliZWU4ZTUyOTIifQ",
+  "trackChangesActive": false,
+  "writeMode": "untracked",
+}
+`;
+
 exports[`write_file > emptying the document 1`] = `
 {
   "protocol": "sharejs",

@@ -828,6 +828,62 @@ describe('files write content sources', () => {
     }
   })
 
+  test('--edits-file passes its JSON array as edits, and the text never goes in argv', async () => {
+    const folder = await temporaryFolder()
+    const file = join(folder, 'edits.json')
+    const edits = [{ oldText: 'Old', newText: 'New' }]
+    await writeFile(file, JSON.stringify(edits))
+    const fake = fakeServiceRuntime()
+    const run = await cli(['files', 'write', 'p', 'main.tex', '--revision', 'r', '--edits-file', file], {
+      runtime: fake,
+    })
+    expect(run.exitCode).toBe(0)
+    expect(run.readStdin).not.toHaveBeenCalled()
+    expect(fake.documents.writeFile).toHaveBeenCalledWith('p', 'main.tex', 'r', { edits }, 'untracked')
+  })
+
+  test('an unreadable, malformed, or mixed edits request exits 2 before any session, never quoting it', async () => {
+    const folder = await temporaryFolder()
+    const sentinel = 'EDITS-SENTINEL-4b1d'
+    const files = {
+      'not-json.json': `[{ "oldText": "${sentinel}" `,
+      'object.json': JSON.stringify({ oldText: sentinel, newText: 'x' }),
+      'empty-old.json': JSON.stringify([{ oldText: '', newText: sentinel }]),
+    }
+    for (const [name, contents] of Object.entries(files)) await writeFile(join(folder, name), contents)
+    const argvs = [
+      ...[...Object.keys(files), 'missing.json'].map(name => [
+        'files',
+        'write',
+        'p',
+        'main.tex',
+        '--revision',
+        'r',
+        '--edits-file',
+        join(folder, name),
+      ]),
+      [
+        'call',
+        'write_file',
+        '--json',
+        JSON.stringify({
+          projectId: 'p',
+          filePath: 'main.tex',
+          revision: 'r',
+          content: sentinel,
+          edits: [{ oldText: sentinel, newText: 'x' }],
+        }),
+      ],
+    ]
+    for (const argv of argvs) {
+      const run = await cli(argv)
+      expect(run.exitCode, argv.join(' ')).toBe(2)
+      expect(expectError(run).code).toBe('INVALID_ARGUMENT')
+      expect(run.stderr).not.toContain(sentinel)
+      expect(run.createRuntime).not.toHaveBeenCalled()
+    }
+  })
+
   test('--content-file outside OVERLEAF_LOCAL_READ_ROOTS exits 2 with nothing sent', async () => {
     const base = await temporaryFolder()
     const allowed = join(base, 'allowed')
