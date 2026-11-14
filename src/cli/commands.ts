@@ -94,6 +94,60 @@ function decisionAlias(action: 'accept' | 'reject', summary: string): AliasComma
   }
 }
 
+/** `tags add` and `tags remove`, which differ only in the action. */
+function tagProjectsAlias(action: 'add' | 'remove', summary: string): AliasCommand {
+  return {
+    words: ['tags', action],
+    tool: 'manage_tags',
+    usage: `tags ${action} <tagId> --project <id>...`,
+    summary,
+    positionals: ['tagId'],
+    options: { project: { type: 'string', multiple: true } },
+    // The operation holds the number of projects; the shorthand adds no check of its own.
+    build: ([tagId], values) =>
+      call('manage_tags', {
+        action: action === 'add' ? 'add_projects' : 'remove_projects',
+        tagId,
+        projectIds: list(values, 'project'),
+      }),
+  }
+}
+
+const TAG_ALIASES: readonly AliasCommand[] = [
+  {
+    words: ['tags', 'create'],
+    tool: 'manage_tags',
+    usage: 'tags create <name> [--color <c>]',
+    summary: 'Create a dashboard tag',
+    positionals: ['name'],
+    options: { color: { type: 'string' } },
+    build: ([name], values) => call('manage_tags', { action: 'create', name, color: text(values, 'color') }),
+  },
+  {
+    words: ['tags', 'edit'],
+    tool: 'manage_tags',
+    usage: 'tags edit <tagId> [--name <n>] [--color <c>]',
+    summary: 'Rename or recolour a tag',
+    positionals: ['tagId'],
+    options: { name: { type: 'string' }, color: { type: 'string' } },
+    build: ([tagId], values) =>
+      call('manage_tags', { action: 'edit', tagId, name: text(values, 'name'), color: text(values, 'color') }),
+  },
+  {
+    words: ['tags', 'delete'],
+    tool: 'manage_tags',
+    usage: 'tags delete <tagId> --confirm-name <name>',
+    summary: 'Delete a tag, never its projects',
+    positionals: ['tagId'],
+    options: { 'confirm-name': { type: 'string' } },
+    // A missing --confirm-name is left to the operation, which refuses it with CONFIRMATION_MISMATCH.
+    build: ([tagId], values) =>
+      call('manage_tags', { action: 'delete', tagId, confirmName: text(values, 'confirm-name') }),
+  },
+  tagProjectsAlias('add', 'Add projects to a tag'),
+  tagProjectsAlias('remove', 'Remove projects from a tag'),
+]
+
 export const ALIASES: readonly AliasCommand[] = [
   {
     words: ['projects', 'list'],
@@ -122,6 +176,7 @@ export const ALIASES: readonly AliasCommand[] = [
         tag: text(values, 'tag'),
       }),
   },
+  ...TAG_ALIASES,
   {
     words: ['tree'],
     tool: 'get_project_tree',

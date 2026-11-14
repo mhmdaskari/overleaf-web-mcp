@@ -43,6 +43,11 @@ overleaf-web-mcp capabilities [projectId]
 overleaf-web-mcp doctor [projectId]
 
 overleaf-web-mcp projects list [--query <q>] [--limit <n>] [--sort lastUpdated|name] [--include-archived] [--include-trashed] [--include-tags] [--tag <name>]
+overleaf-web-mcp tags create <name> [--color <c>]
+overleaf-web-mcp tags edit <tagId> [--name <n>] [--color <c>]
+overleaf-web-mcp tags delete <tagId> --confirm-name <name>
+overleaf-web-mcp tags add <tagId> --project <id>...
+overleaf-web-mcp tags remove <tagId> --project <id>...
 overleaf-web-mcp tree <projectId>
 overleaf-web-mcp files read <projectId> <path>
 overleaf-web-mcp files write <projectId> <path> --revision <r> (--content-file <f> | --stdin) [--tracked]
@@ -82,6 +87,11 @@ prints the help and exits 0.
 | Command | Tool | Arguments and flags become | Since |
 | --- | --- | --- | --- |
 | `projects list` | `list_projects` | `--query` `query`, `--limit` `limit`, `--sort` `sort`, `--include-archived` `includeArchived: true`, `--include-trashed` `includeTrashed: true`, `--include-tags` `includeTags: true` <!-- md:version 1.1.0 -->, `--tag` `tag` <!-- md:version 1.1.0 --> | <!-- md:version 0.7.0 --> |
+| `tags create` | `manage_tags` | `action: "create"`, `<name>` `name`, `--color` `color` | <!-- md:version 1.2.0 --> |
+| `tags edit` | `manage_tags` | `action: "edit"`, `<tagId>` `tagId`, `--name` `name`, `--color` `color` | <!-- md:version 1.2.0 --> |
+| `tags delete` | `manage_tags` | `action: "delete"`, `<tagId>` `tagId`, `--confirm-name` `confirmName` | <!-- md:version 1.2.0 --> |
+| `tags add` | `manage_tags` | `action: "add_projects"`, `<tagId>` `tagId`, each `--project` one `projectIds` entry | <!-- md:version 1.2.0 --> |
+| `tags remove` | `manage_tags` | as `tags add`, with `action: "remove_projects"` | <!-- md:version 1.2.0 --> |
 | `tree` | `get_project_tree` | `<projectId>` `projectId` | <!-- md:version 0.7.0 --> |
 | `files read` | `read_file` | `<path>` `filePath` | <!-- md:version 0.7.0 --> |
 | `files write` | `write_file` | `<path>` `filePath`, `--revision` `revision`, `--content-file` `localPath`, `--stdin` `content`, `--tracked` `writeMode: "tracked"` | <!-- md:version 0.7.0 --> |
@@ -105,6 +115,10 @@ A few rules the table does not show:
 - A `planToken` is bound to the local folder, `--destination`, and `--ignore`, so `sync apply`
   needs the same values `sync plan` was given. Mirror mode needs `--confirm-delete-count`.
 - `compile log` and `compile download` require `--build-ref`.
+- The `tags` commands take the tag ids that `projects list --include-tags` prints. `tags delete`
+  needs `--confirm-name` equal to the tag's current name, after the user has confirmed it; without
+  it the call is refused with `CONFIRMATION_MISMATCH`, exit 2, and nothing is deleted. `tags edit`
+  with neither `--name` nor `--color` is `INVALID_ARGUMENT`, exit 2, and nothing is sent.
 - `tracked-changes accept` and `reject` take the `revision` that `tracked-changes list` printed for
   the document, and `--confirm-count` equal to the number of `--change` ids after the user has
   confirmed them; without it the call is refused with `CONFIRMATION_MISMATCH`, exit 2, and

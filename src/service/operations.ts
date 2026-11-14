@@ -102,9 +102,8 @@ function manageTagsAction(input: OperationInput<'manage_tags'>): TagAction {
   if (action === 'create' && input.name !== undefined) return { action, name: input.name, color: input.color }
   if (action !== 'create' && tagId !== undefined) {
     if (action === 'edit') return { action, tagId, name: input.name, color: input.color }
-    if (action === 'delete' && input.confirmName !== undefined) {
-      return { action, tagId, confirmName: input.confirmName }
-    }
+    // A missing confirmName goes on to the tag's name check, which refuses it with CONFIRMATION_MISMATCH.
+    if (action === 'delete') return { action, tagId, confirmName: input.confirmName }
     if ((action === 'add_projects' || action === 'remove_projects') && input.projectIds !== undefined) {
       return { action, tagId, projectIds: input.projectIds }
     }

@@ -166,6 +166,10 @@ describe('tags API', () => {
     const { api, writes, tags } = tagsApi([thesis])
     const mismatch = await failure(api.manageTags({ action: 'delete', tagId: THESIS, confirmName: 'thesis' }))
     expect(mismatch.code).toBe('CONFIRMATION_MISMATCH')
+    expect(mismatch.details).toBeUndefined()
+    const missing = await failure(api.manageTags({ action: 'delete', tagId: THESIS }))
+    expect(missing.code).toBe('CONFIRMATION_MISMATCH')
+    expect(missing.details).toEqual({ missing: 'confirmName' })
     expect(writes).toEqual([])
 
     const result = await api.manageTags({ action: 'delete', tagId: THESIS, confirmName: 'Thesis' })

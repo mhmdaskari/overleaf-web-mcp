@@ -22,7 +22,8 @@ export interface ProjectTag {
 export type TagAction =
   | { action: 'create'; name: string; color?: string | undefined }
   | { action: 'edit'; tagId: string; name?: string | undefined; color?: string | undefined }
-  | { action: 'delete'; tagId: string; confirmName: string }
+  /** A missing `confirmName` is refused with `CONFIRMATION_MISMATCH`, as a wrong one is. */
+  | { action: 'delete'; tagId: string; confirmName?: string | undefined }
   | { action: 'add_projects' | 'remove_projects'; tagId: string; projectIds: string[] }
 
 export type TagActionName = TagAction['action']
@@ -209,7 +210,8 @@ export class TagsApi {
         if (input.confirmName !== current.name) {
           throw new McpError(
             'CONFIRMATION_MISMATCH',
-            "confirmName must exactly match the tag's current name before it can be deleted."
+            "confirmName must exactly match the tag's current name before it can be deleted.",
+            input.confirmName === undefined ? { details: { missing: 'confirmName' } } : {}
           )
         }
         this.#assertWholeTagAllowed(current)

@@ -364,7 +364,6 @@ describe('MCP tool registration', () => {
 
     for (const input of [
       { action: 'create' },
-      { action: 'delete', tagId: 't' },
       { action: 'add_projects', tagId: 't' },
       { action: 'edit', name: 'No id' },
     ]) {
@@ -372,6 +371,10 @@ describe('MCP tool registration', () => {
       expect(JSON.parse(missing.content[0].text), input.action).toMatchObject({ code: 'INVALID_ARGUMENT' })
     }
     expect(runtime.tags.manageTags).not.toHaveBeenCalled()
+
+    // A delete without confirmName reaches the tag's name check, which refuses it with CONFIRMATION_MISMATCH.
+    await manage({ action: 'delete', tagId: 't' })
+    expect(runtime.tags.manageTags).toHaveBeenLastCalledWith({ action: 'delete', tagId: 't' })
 
     const deleted = await manage({ action: 'delete', tagId: 't', confirmName: 'Thesis', name: 'ignored' })
     expect(runtime.tags.manageTags).toHaveBeenLastCalledWith({ action: 'delete', tagId: 't', confirmName: 'Thesis' })
