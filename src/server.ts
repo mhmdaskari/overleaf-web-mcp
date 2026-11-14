@@ -77,6 +77,8 @@ export interface StdioServerOptions {
   exit?: (code: number) => void
   /** Receives `{ tool, code }` notices for failed or deprecated calls; the CLI writes them to stderr. */
   onDiagnostic?: ToolRegistrationOptions['onDiagnostic']
+  /** The tool groups to list, from `OVERLEAF_TOOLSETS`; absent lists every tool. */
+  toolsets?: ToolRegistrationOptions['toolsets']
 }
 
 /**
@@ -94,6 +96,7 @@ export function runStdioServer(
   const graceMs = options.stdinCloseGraceMs ?? STDIN_CLOSE_GRACE_MS
   const connection = serveOverStdio(runtime, new StdioServerTransport(input, options.output ?? process.stdout), {
     onDiagnostic: options.onDiagnostic,
+    toolsets: options.toolsets,
   })
   let closed: Promise<void> | undefined
   const close = (waitMs: number): Promise<void> =>

@@ -114,7 +114,10 @@ Windows and macOS with Node 24, for every push and pull request. For the docs si
 - `test/contracts/operations.test.ts` checks annotations against effects and that every
   destructive operation takes a confirm value or an expected state.
 - `test/server.test.ts` asserts the server instructions are present, bounded in length, and
-  delivered on both protocol eras (`initialize` and `server/discover`).
+  delivered on both protocol eras (`initialize` and `server/discover`). It also bounds the
+  names, descriptions, and input schemas of `tools/list` at 60,000 characters of compact JSON, what
+  a client loads every turn; a release that adds a tool or grows a description trims elsewhere,
+  or raises the bound in a change the changelog lists.
 - `test/overleaf/sync.test.ts` drives folder sync against an in-memory project. Keep its
   fault-injection, drift, and mid-sync edit cases passing when changing sync.
 - `test/cli/exit-codes.test.ts` and `test/cli/run.test.ts` hold the exit-code table over every
@@ -195,7 +198,7 @@ These held through every release so far; keep them.
 Each addition touches several files, and the tests fail until they agree.
 
 - **An operation:** its entry in `src/contracts/operations.ts` (input and output schemas,
-  description, annotations, effects) and its shaping in `src/service/operations.ts`. When it needs
+  description, annotations, effects, and the `toolset` its README group names) and its shaping in `src/service/operations.ts`. When it needs
   a new call to Overleaf, a domain method in `src/overleaf/` that checks the access policy before
   any request, listed in `OverleafServiceRuntime` (`src/contracts/service.ts`) and mocked in
   `test/helpers/fake-runtime.ts` and in the `fakeRuntime()` of `test/mcp/tools.test.ts` and
@@ -283,7 +286,7 @@ the rest need a person:
   MCP protocol versions the server answers and whether the SDK added one.
 - `SERVER_INSTRUCTIONS` (`src/mcp/instructions.ts`) is under the 450-word bound in
   `test/server.test.ts`; it was 445 words at 1.0.0, so a release that adds guidance trims
-  elsewhere.
+  elsewhere. The `tools/list` size cap in the same file was 58,992 of 60,000 characters at 1.2.0.
 - Every Overleaf route or socket message the release will touch is still in Overleaf's source as
   `docs/private-api.md` describes it.
 - The comparison in the README was checked on the date it states; re-check the projects it names

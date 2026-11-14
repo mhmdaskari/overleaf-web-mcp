@@ -956,6 +956,17 @@ describe('capabilities', () => {
       trashed: 'unknown',
     })
     expect(report.errorCodes).toEqual([...ERROR_CODES])
+    expect(report.toolsets).toEqual([
+      'account',
+      'projects',
+      'files',
+      'sync',
+      'sections',
+      'compile',
+      'review',
+      'history',
+    ])
+    expect(operation('search_project').toolset).toBe('files')
     expect(report.backend).toEqual({
       kind: 'web-session',
       liveRevisions: true,
@@ -965,6 +976,17 @@ describe('capabilities', () => {
       compile: true,
       history: true,
     })
+  })
+
+  test('reports the toolsets OVERLEAF_TOOLSETS leaves to serve, still listing every operation', async () => {
+    const run = await cli(['capabilities'], { env: { OVERLEAF_TOOLSETS: 'review,files' } })
+    expect(run.exitCode).toBe(0)
+    const { report } = capabilities(run)
+    expect(report.toolsets).toEqual(['files', 'review'])
+    expect(report.operations.map(entry => entry.name)).toEqual([...OPERATION_NAMES])
+    const unknown = await cli(['capabilities'], { env: { OVERLEAF_TOOLSETS: 'nope' } })
+    expect(unknown.exitCode).toBe(2)
+    expect(expectError(unknown).code).toBe('INVALID_ARGUMENT')
   })
 
   test.each([true, false])('reports review.decide %s from the joined project', async decide => {

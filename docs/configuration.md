@@ -36,6 +36,7 @@ container, can leave an optional setting blank.
 | `OVERLEAF_LOCAL_READ_ROOTS` | Unset, anywhere | Absolute folders local reads must stay inside, separated by `:` (`;` on Windows) | <!-- md:version 0.5.0 --> |
 | `OVERLEAF_LOCAL_WRITE_ROOTS` | Unset, anywhere but the session | Absolute folders local writes must stay inside, separated the same way | <!-- md:version 0.5.0 --> |
 | `OVERLEAF_ALLOWED_EFFECTS` | Unset, every effect | Comma-separated effects operations may have | <!-- md:version 0.5.0 --> |
+| `OVERLEAF_TOOLSETS` | Unset, every tool | Comma-separated tool groups `serve` lists to MCP clients; see [toolsets](#toolsets) | <!-- md:version 1.2.0 --> |
 
 An `ol-maxDocLength` value advertised by the Overleaf deployment takes precedence over the
 fallback. Content at or above the limit returns `DOC_TOO_LARGE`; an oversized serialized update
@@ -46,6 +47,34 @@ waits, not the account's server-side compile allowance.
 
 `download_project_zip.timeoutMs` (1 second to 15 minutes, default 5 minutes) bounds a whole-project
 download, the whole transfer included, in place of `OVERLEAF_REQUEST_TIMEOUT_MS`.
+
+## Toolsets
+
+<!-- md:version 1.2.0 -->
+
+An MCP client loads the name, description, and input schema of every tool on every turn, about
+59,000 characters for all 36. `OVERLEAF_TOOLSETS` lists the groups of tools `serve` offers, so a
+client that only edits and compiles does not carry folder sync, project lifecycle, and tags:
+
+| Group | Tools |
+| --- | --- |
+| `account` | `auth_status`, `list_projects` |
+| `projects` | `create_project`, `clone_project`, `import_project_zip`, `manage_project`, `update_project_settings`, `manage_tags` |
+| `files` | `get_project_tree`, `read_file`, `search_project`, `write_file`, `create_file`, `manage_entity`, `upload_file`, `batch_upload`, `download_file`, `download_project_zip` |
+| `sync` | `plan_sync`, `sync_directory`, `delete_entities` |
+| `sections` | `get_full_document`, `get_sections`, `get_section_content`, `write_section` |
+| `compile` | `compile_project`, `stop_compile`, `get_compile_log`, `download_compile_output` |
+| `review` | `list_comments`, `reply_to_comment`, `add_comment`, `set_comment_status`, `list_tracked_changes`, `manage_tracked_changes` |
+| `history` | `monitor_project_history` |
+
+For example, `OVERLEAF_TOOLSETS=files,compile` offers the 14 tools of those two groups; a call to
+any other is refused as an unknown tool. Unset or empty offers every tool. A name that is not one
+of the eight stops the server at startup with `INVALID_ARGUMENT`, and fails an operation command
+with exit 2. `capabilities` reports the groups in effect, and each operation's group.
+
+The filter only narrows what an MCP client sees. It is not an access control: the command line and
+the SDK reach every operation whatever it says, and the [access policy](#access-policy), such as
+`OVERLEAF_ALLOWED_EFFECTS`, is the way to forbid a kind of change.
 
 ## Retries and pacing
 

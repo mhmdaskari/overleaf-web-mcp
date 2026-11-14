@@ -2,6 +2,7 @@ import type { AppConfig } from '../config.js'
 import type { Effect } from '../contracts/effects.js'
 import { ERROR_CODES } from '../contracts/error-codes.js'
 import { OPERATION_NAMES, OPERATIONS, type OperationAnnotations } from '../contracts/operations.js'
+import { TOOLSETS, type Toolset } from '../contracts/toolsets.js'
 import type { ProjectSummary } from '../overleaf/account.js'
 import { SERVER_VERSION } from '../version.js'
 import { ALIASES } from './commands.js'
@@ -19,7 +20,14 @@ export interface CapabilitiesReport {
     blockedEffects: Effect[]
     /** Shorthand commands for this operation besides `call <name>`. */
     commands: string[]
+    /** Its group, which `OVERLEAF_TOOLSETS` selects by. */
+    toolset: Toolset
   }>
+  /**
+   * The groups whose tools `serve` lists to MCP clients: every one unless `OVERLEAF_TOOLSETS` narrows
+   * them. The command line and the SDK reach every operation either way.
+   */
+  toolsets: Toolset[]
   policy: {
     projectsRestricted: boolean
     effectsRestricted: boolean
@@ -73,8 +81,11 @@ export function buildCapabilities(config: AppConfig, lookup?: ProjectLookup): Ca
         annotations: contract.annotations,
         blockedEffects: allowed === undefined ? [] : contract.effects.filter(effect => !allowed.has(effect)),
         commands: ALIASES.filter(alias => alias.tool === name).map(alias => alias.words.join(' ')),
+        toolset: contract.toolset,
       }
     }),
+    toolsets:
+      config.toolsets === undefined ? [...TOOLSETS] : TOOLSETS.filter(group => config.toolsets!.includes(group)),
     policy: {
       projectsRestricted: config.allowedProjects !== undefined,
       effectsRestricted: config.allowedEffects !== undefined,

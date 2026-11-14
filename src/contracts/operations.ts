@@ -26,6 +26,7 @@ import { MAX_TEXT_EDITS } from '../core/text-edits.js'
 import type { Effect } from './effects.js'
 import { ERROR_CODES } from './error-codes.js'
 import { assertOneTextSource } from './text-source.js'
+import type { Toolset } from './toolsets.js'
 
 /**
  * Operation ids, in registration order. They are the MCP tool names and, from v0.7.0, the CLI
@@ -90,6 +91,8 @@ export interface OperationContract {
   annotations: OperationAnnotations
   /** Everything the operation can do; the access policy refuses it before any work otherwise. */
   effects: readonly Effect[]
+  /** The group `OVERLEAF_TOOLSETS` selects it by, as the README's tool table groups it. */
+  toolset: Toolset
   /**
    * A rule across parameters that the JSON Schema cannot state. `parseOperationInput` runs it, so
    * the command line and the SDK refuse before any session is opened, and every service call runs
@@ -318,6 +321,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'account',
   },
   list_projects: {
     description:
@@ -360,6 +364,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'account',
   },
   create_project: {
     description:
@@ -371,6 +376,7 @@ export const OPERATIONS = {
     outputSchema: createdProjectSchema.extend({ rootDocPath: z.string().optional() }),
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['project-lifecycle', 'overleaf-read'],
+    toolset: 'projects',
   },
   clone_project: {
     description:
@@ -379,6 +385,7 @@ export const OPERATIONS = {
     outputSchema: createdProjectSchema,
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['project-lifecycle'],
+    toolset: 'projects',
   },
   import_project_zip: {
     description:
@@ -390,6 +397,7 @@ export const OPERATIONS = {
     outputSchema: createdProjectSchema,
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['local-read', 'project-lifecycle', 'overleaf-read'],
+    toolset: 'projects',
   },
   manage_project: {
     description:
@@ -410,6 +418,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['project-lifecycle', 'overleaf-read', 'overleaf-delete'],
+    toolset: 'projects',
   },
   update_project_settings: {
     description:
@@ -435,6 +444,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: false, idempotentHint: true },
     effects: ['project-lifecycle', 'overleaf-read'],
+    toolset: 'projects',
   },
   manage_tags: {
     description: `Create, edit, or delete the tags that organize projects on the Overleaf dashboard, or add projects to a tag or remove them. Tags belong to this account; collaborators do not see them. Read tags and their ids with list_projects includeTags. create takes name (unique among the account's tags) and an optional color; edit takes tagId and a new name, color, or both; delete takes tagId and confirmName equal to the tag's current name, else CONFIRMATION_MISMATCH, and removes the tag, never its projects; add_projects and remove_projects take tagId and projectIds, 1 to ${MAX_TAG_PROJECT_IDS}: add_projects only projects this account can access, remove_projects also an id the tag holds that the account can no longer open (NOT_FOUND names any other in details.projectIds). A name another tag has is INVALID_ARGUMENT with details.kind tag_name_taken and details.tagId, and an unknown tagId is NOT_FOUND, both before anything is sent. Every change is read back: tag is the result, and verified says whether the read-back confirmed it. A change whose answer was lost is never resent: recoveredAfterTimeout means the read-back showed it applied, and OUTCOME_UNKNOWN means read the tags before acting. Overleaf allows about 30 tag changes of each kind a minute; RATE_LIMITED means wait. Confirm deletes with the user first.`,
@@ -466,6 +476,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['project-lifecycle', 'overleaf-read', 'overleaf-delete'],
+    toolset: 'projects',
   },
   get_project_tree: {
     description:
@@ -489,6 +500,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'files',
   },
   read_file: {
     description:
@@ -503,6 +515,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'files',
   },
   search_project: {
     description: `Search a project's text documents for a literal string and return where it occurs, instead of reading every document. Returns matches [{ filePath, line, column, preview }], with 1-based line and column (UTF-16 units, as the editor counts) and preview the matching line cut to ${SEARCH_PREVIEW_CHARS} characters around the match, with … where cut; totalMatches, every match including those past limit; truncated; filesSearched; and binaryFilesSkipped. query is matched literally, never as a regular expression, and ignoring case unless caseSensitive. path narrows the search to one document or a folder; one that names nothing is NOT_FOUND. Documents are read one at a time as read_file reads them, so text in a tracked deletion is not found, and at most ${MAX_SEARCH_DOCUMENTS} per call: it saves calls and context, not wall-clock time. A larger scope, or more matches than limit, returns what was found with truncated true.`,
@@ -539,6 +552,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'files',
   },
   write_file: {
     description: `Replace a text document with a verified OT update that changes only the words that differ, optionally recorded as tracked changes, one per changed group of words; where a changed word touches a comment or tracked change, the update is one edit from the first change to the last instead. Supply the new text through exactly one of content (the whole text), localPath (a local file holding it, never sent through the tool call), or edits: 1 to ${MAX_TEXT_EDITS} { oldText, newText } applied in order to the document at revision, each oldText matching exactly once in the text the edits before it left, with whitespace and line endings exact; an empty newText deletes. An oldText that does not match is INVALID_ARGUMENT with details.kind edit_not_found, one that matches more than once edit_ambiguous, each with details.editIndex (0-based), and nothing is sent; otherwise the result is written as content would be. A write that hit a timeout, a lost socket, or an error Overleaf reported on the document after the update was sent is never resent: the live document is observed instead, and recoveredAfterTimeout: true means the intended text was confirmed. An update Overleaf refused as too large is UPDATE_TOO_LARGE with details.outcome not_applied: nothing was stored. On a ShareJS (legacy editor) document, text that adds a character outside the Basic Multilingual Plane, such as an emoji, adds another copy of one the document holds, or changes their order is INVALID_ARGUMENT with details.line (1-based) and nothing is sent, because Overleaf would store it as U+FFFD; editing text on either side of one the document already holds is fine. With writeMode tracked, a write Overleaf applied without recording it as tracked changes by this account is PROTOCOL_UNSUPPORTED with details.kind applied_untracked and details.liveRevision: it is live and not reverted, so read the file before writing again; if another update followed the write before that check, it is REVISION_CONFLICT with details.outcome unknown instead. A review-only collaborator can write only with writeMode tracked, and a read-only one cannot write: either is PERMISSION_DENIED before anything is sent.`,
@@ -570,6 +584,7 @@ export const OPERATIONS = {
     outputSchema: documentWriteSchema,
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['local-read', 'overleaf-write'],
+    toolset: 'files',
     checkInput: assertOneTextSource,
   },
   create_file: {
@@ -579,6 +594,7 @@ export const OPERATIONS = {
     outputSchema: documentWriteSchema,
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['overleaf-write', 'overleaf-read'],
+    toolset: 'files',
   },
   manage_entity: {
     description:
@@ -600,6 +616,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-write', 'overleaf-delete'],
+    toolset: 'files',
   },
   upload_file: {
     description:
@@ -639,6 +656,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['local-read', 'overleaf-write', 'unchecked-replace'],
+    toolset: 'files',
   },
   batch_upload: {
     description:
@@ -693,6 +711,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['local-read', 'overleaf-read', 'overleaf-write', 'unchecked-replace'],
+    toolset: 'files',
   },
   download_file: {
     description:
@@ -707,6 +726,7 @@ export const OPERATIONS = {
     // It writes a local file and can replace one, so it is not read-only.
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'local-write'],
+    toolset: 'files',
   },
   download_project_zip: {
     description:
@@ -731,6 +751,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'local-write'],
+    toolset: 'files',
   },
   plan_sync: {
     description:
@@ -788,6 +809,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['local-read', 'overleaf-read'],
+    toolset: 'sync',
   },
   sync_directory: {
     description:
@@ -850,6 +872,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: true, idempotentHint: true },
     effects: ['local-read', 'overleaf-read', 'overleaf-write', 'overleaf-delete'],
+    toolset: 'sync',
   },
   delete_entities: {
     description:
@@ -872,6 +895,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'overleaf-delete'],
+    toolset: 'sync',
   },
   get_full_document: {
     description: `Flatten a LaTeX document latexpand-style: starting from rootFilePath, or from the project's root document when it is left out, every \\input, \\include, \\subfile, and \\import (also \\subimport, \\inputfrom, \\subinputfrom, \\includefrom, \\subincludefrom) is replaced by the text of the file it names, recursively, and the rest of the text is kept exactly. Directives inside % comments and verbatim text are skipped. A path resolves relative to the project root first and then to the including file's folder (the other way round for \\subimport and its relatives); \\input and \\subfile try the name as written and then with .tex, \\include always means .tex, and \\subfile takes in only the named file's document body. \\include does not add its page breaks to the text. A directive that cannot be followed stays as written and is listed in unresolved with file, line (1-based), target, and reason: missing (no document at any candidate path), binary_file (the path is an uploaded file, not a text document), macro_argument (the path uses a macro or parameter), or excluded_by_includeonly (an \\include an \\includeonly list leaves out; includeOnly lists it). Returns rootFilePath, text, files (every file visited, each once, in order), unresolved, includeOnly when a file sets it, and sourceMap: one entry per run of text copied from one file, { flattenedStart, flattenedEnd, filePath, docId, originalStart, originalEnd, revision }, offsets in UTF-16 code units, half-open, into text and into that file's LF-normalized content. revision is the file's revision as read_file returns it: route an edit decided on in the flattened view back with write_file or write_section on that file, with that revision, never by writing the flattened text anywhere. Each file is read separately, so files can change between reads; each revision matches the text it was read with. text joins each file's text to what follows its directive with nothing in between, as written; a comment on a file's last line therefore reads on into the next text if text is compiled as is, though section parsing treats each file separately. An include cycle is INCLUDE_CYCLE with details.chain; nesting deeper than maxDepth is INCLUDE_DEPTH_EXCEEDED (it never cuts the result short); a result longer than ${MAX_FLATTENED_LENGTH} code units is DOC_TOO_LARGE with details.kind flattened, and includes that take in files more than ${MAX_INCLUDE_VISITS} times in all, counting a file once per inclusion, are DOC_TOO_LARGE with details.kind includes: start from a file further down, or read the files one at a time.`,
@@ -910,6 +934,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'sections',
   },
   get_sections: {
     description:
@@ -923,6 +948,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'sections',
   },
   get_section_content: {
     description:
@@ -935,6 +961,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'sections',
   },
   write_section: {
     description:
@@ -951,6 +978,7 @@ export const OPERATIONS = {
     outputSchema: documentWriteSchema.extend({ filePath: z.string().optional() }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'overleaf-write'],
+    toolset: 'sections',
   },
   compile_project: {
     description: `Compile a project and report on the build from its logs. Omit rootFilePath to build the root document configured in Overleaf, which is what the web UI's Recompile button uses; pass it to build a different document for this call only. Check summary.builtCleanly, not status: Overleaf reports status "success" whenever a PDF came out, even when LaTeX hit errors along the way. builtCleanly is true only when a PDF was produced, output.log was read, and it reports no error. summary lists the first ${MAX_LOG_ENTRIES} errors and warnings as { file?, line?, message } (errorCount and warningCount count all of them), undefined references and citations, missing files, pageCount, and pdfSizeBytes; messages never quote the document. A LaTeX error that stopped the build returns status "failure" with the same summary rather than an error. outputFiles is Overleaf's listing, less an output.blg and output.bbl left over from an earlier build when BibTeX did not run for this one. buildRef names this build to get_compile_log and download_compile_output, also in a later process. stopOnFirstError gives a short log holding the one error that matters; draft skips images for faster text-only builds. Compiles spend the account's compile allowance, so read the summary instead of recompiling. Errors: COMPILE_RATE_LIMITED (Overleaf ran nothing; wait details.retryAfterMs when given, then compile once more), COMPILE_UNAVAILABLE (try later), COMPILE_TIMEOUT (the build hit the time limit; details.buildRef, when present, reaches its partial log), COMPILE_FAILED (no build to report on), and TIMEOUT (the request timed out while Overleaf may still be compiling; it is not retried).`,
@@ -992,6 +1020,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['compile', 'overleaf-read'],
+    toolset: 'compile',
   },
   stop_compile: {
     description: 'Stop the active Overleaf compile for a project. Returns { stopped: true }.',
@@ -999,6 +1028,7 @@ export const OPERATIONS = {
     outputSchema: z.object({ stopped: z.literal(true) }),
     annotations: { destructiveHint: true, idempotentHint: true },
     effects: ['compile'],
+    toolset: 'compile',
   },
   get_compile_log: {
     description: `Read a build's LaTeX log (output.log) or BibTeX log (kind "bibtex", the .blg file), without compiling again. kind "bibtex" is NOT_FOUND when BibTeX did not run for the build, even if Overleaf still lists an output.blg left over from an earlier build. Without buildRef it reads the latest build compile_project made in this server process, else NO_BUILD; Overleaf keeps build output only for a while, and an expired build is BUILD_NOT_FOUND. At most 1 MB of the log is read, from its start, and the last tail lines are returned (default ${DEFAULT_LOG_TAIL}, at most ${MAX_LOG_TAIL}, and at most ${MAX_LOG_CHARS} characters). format "errors-only" returns only the lines that start an error. errorLines lists the first ${MAX_ERROR_LINES} error lines with their 1-based line numbers, each cut to ${MAX_MESSAGE_LENGTH} characters. truncated says whether anything of the log was left out. The log quotes source lines near each error; prefer compile_project's summary when that is enough.`,
@@ -1028,6 +1058,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'compile',
   },
   download_compile_output: {
     description:
@@ -1053,6 +1084,7 @@ export const OPERATIONS = {
     // It writes a local file and can replace one, so it is not read-only.
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'local-write'],
+    toolset: 'compile',
   },
   list_comments: {
     description:
@@ -1077,6 +1109,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'review',
   },
   reply_to_comment: {
     description:
@@ -1095,6 +1128,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['overleaf-write', 'overleaf-read'],
+    toolset: 'review',
   },
   add_comment: {
     description:
@@ -1119,6 +1153,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: false, idempotentHint: false },
     effects: ['overleaf-write', 'overleaf-read'],
+    toolset: 'review',
   },
   set_comment_status: {
     description:
@@ -1140,6 +1175,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: true, idempotentHint: true },
     effects: ['overleaf-write', 'overleaf-read'],
+    toolset: 'review',
   },
   list_tracked_changes: {
     description: `List tracked changes (suggestions) and where they are, so they can be accepted or rejected with manage_tracked_changes. With filePath, that document is read and its list is authoritative. Without it, Overleaf's project range index only chooses which documents to read: just the documents it lists with changes are read, its change ids are never used, and it may lag or leave a document out, so name a document with filePath for an authoritative list (this matters most for history-OT documents, whose index ids are never valid). indexUnavailable: true means the deployment has no index and no document was read. type and authorId keep only matching changes; limit (default ${DEFAULT_TRACKED_CHANGE_LIMIT}, at most ${MAX_TRACKED_CHANGE_LIMIT}) caps the changes returned across all documents, totalMatched counts every match, and truncated says some were left out. Returns documents, each with filePath, revision (pass it to manage_tracked_changes), protocol, totalChanges (every tracked change in the document, unfiltered), undecidableChanges when some changes carry no id and cannot be decided by this server, and changes: changeId, type (insert: suggested text that is visible; delete: suggested removal of text that is no longer visible), start and end (1-based line and UTF-16 column in the text read_file returns; a delete is a point, so its start equals its end), length in UTF-16 units, excerpt of the inserted or deleted text (at most excerptChars UTF-16 units, default ${DEFAULT_EXCERPT_CHARS}, 0 for none) with excerptTruncated, authorId (an Overleaf user id, or null), an ISO timestamp, and pairedChangeId linking the insert and the delete of one replacement. Also returns trackChangesActive. Ids merge and split as the document is edited, and history-OT ids are valid only with the revision they were listed with, so list again before deciding.`,
@@ -1185,6 +1221,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'review',
   },
   manage_tracked_changes: {
     description: `Accept or reject tracked changes in one document. First list them with list_tracked_changes and confirm them with the user, then pass that document's filePath and revision, the changeIds (1 to ${MAX_CHANGE_IDS}, each once), and confirmCount equal to the number of changeIds; a missing or different confirmCount is CONFIRMATION_MISMATCH and nothing is sent. Accepting an insert keeps its text and accepting a delete removes it; rejecting an insert removes its text and rejecting a delete restores it. A tracked replacement is an insert and a delete linked by pairedChangeId: pass both ids. Checked in this order before anything is sent: access (only the owner and collaborators who can edit may decide; review-only and read-only access is PERMISSION_DENIED), whether track changes is available for the project (REVIEW_UNSUPPORTED, details.kind "feature_disabled"; review may need a plan that includes it), the revision (REVISION_CONFLICT), that every id is a tracked change in this document (NOT_FOUND, details.missingChangeIds), and that no change left out overlaps a chosen one (INVALID_ARGUMENT, details.overlappingChangeIds). REVIEW_UNSUPPORTED with details.kind "route_unavailable" or "document_protocol" means this Overleaf cannot decide changes this way. The decision is sent once and verified on a fresh read of the document. One that timed out is observed, never resent: recoveredAfterTimeout: true when it applied, TIMEOUT or REMOTE_ERROR with details.outcome "not_applied" when it did not, REVISION_CONFLICT with details.outcome "unknown" when the document changed meanwhile, and OUTCOME_UNKNOWN when it could not be observed. A repeated decision changes nothing: it fails with REVISION_CONFLICT when the first one changed the document's revision, as every reject and every history-OT decision does, or with NOT_FOUND when it did not, as after an accept on a ShareJS document, which leaves the revision as it was. Rejecting on a ShareJS (legacy editor) document may notify the change's author; on a history-OT document it does not. Returns action, filePath, changeIds, the resulting revision and protocol, remainingChangeCount (tracked changes left in the document), trackChangesActive, and recoveredAfterTimeout. List again after every decision and after REVISION_CONFLICT or NOT_FOUND: ids merge and split, and history-OT ids are valid only with the revision they were listed with.`,
@@ -1217,6 +1254,7 @@ export const OPERATIONS = {
     }),
     annotations: { destructiveHint: true, idempotentHint: true },
     effects: ['overleaf-write', 'overleaf-read'],
+    toolset: 'review',
   },
   monitor_project_history: {
     description:
@@ -1235,6 +1273,7 @@ export const OPERATIONS = {
     }),
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
+    toolset: 'history',
   },
 } as const satisfies Record<OperationName, OperationContract>
 
