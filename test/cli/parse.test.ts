@@ -77,6 +77,11 @@ describe('CLI command line', () => {
       input: { includeTags: true, tag: 'Thesis' },
     })
     expect(parseCommandLine(['tree', 'p'])).toMatchObject({ tool: 'get_project_tree', input: { projectId: 'p' } })
+    expect(parseCommandLine(['tree', 'p'])).not.toHaveProperty('input.includeTags')
+    expect(parseCommandLine(['tree', 'p', '--include-tags'])).toMatchObject({
+      tool: 'get_project_tree',
+      input: { projectId: 'p', includeTags: true },
+    })
     expect(
       parseCommandLine(['files', 'write', 'p', 'main.tex', '--revision', 'r', '--content-file', 'new.tex', '--tracked'])
     ).toMatchObject({

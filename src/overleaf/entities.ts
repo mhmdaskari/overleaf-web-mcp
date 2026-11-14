@@ -16,6 +16,7 @@ import {
   type ProjectEntity,
   type ProjectTree,
 } from './tree.js'
+import type { ProjectTag } from './tags.js'
 
 interface EntityHttp {
   postJson(path: string, body?: unknown): Promise<unknown>
@@ -188,16 +189,38 @@ export class EntitiesApi {
   readonly #http: EntityHttp
   readonly #connections: EntityConnections
   readonly #policy: AccessPolicy
+  readonly #listTags: (() => Promise<ProjectTag[]>) | undefined
 
-  constructor(http: EntityHttp, connections: EntityConnections, policy: AccessPolicy = AccessPolicy.permissive) {
+  constructor(
+    http: EntityHttp,
+    connections: EntityConnections,
+    policy: AccessPolicy = AccessPolicy.permissive,
+    /** Reads the account's tags, for `includeTags`. */
+    listTags?: () => Promise<ProjectTag[]>
+  ) {
     this.#http = http
     this.#connections = connections
     this.#policy = policy
+    this.#listTags = listTags
   }
 
-  async getProjectTree(projectId: string): Promise<ProjectTree> {
+  /** The tree; with `includeTags`, also the account's tags on the project, from one more read. */
+  async getProjectTree(projectId: string, options: { includeTags?: boolean | undefined } = {}): Promise<ProjectTree> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect('overleaf-read')
+    const tree = await this.#readTree(projectId)
+    if (options.includeTags !== true) return tree
+    if (this.#listTags === undefined) {
+      throw new McpError('PROTOCOL_UNSUPPORTED', 'This backend cannot read project tags.')
+    }
+    const tags = await this.#listTags()
+    return {
+      ...tree,
+      tags: tags.filter(tag => tag.projectIds.includes(projectId)).map(tag => ({ id: tag.id, name: tag.name })),
+    }
+  }
+
+  async #readTree(projectId: string): Promise<ProjectTree> {
     return await this.#connections.withConnection(
       projectId,
       async connection =>

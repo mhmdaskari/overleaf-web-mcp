@@ -13,6 +13,11 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
 
 ### Added
 
+- `get_project_tree` takes an optional `includeTags` (#42). When it is `true`, the result gains
+  `tags`, the account's tags on the project as `{ id, name }`, read with one `GET /tag`, and an
+  empty array when the project is in no tag. Left out or `false`, the result and the requests are
+  unchanged, with no `tags` key. An unrecognised tag list is `PROTOCOL_UNSUPPORTED`. The `tree`
+  shorthand gains `--include-tags`, and `client.getProjectTree` the same parameter.
 - Command line shorthands for `manage_tags` (#41): `tags create <name> [--color <c>]`,
   `tags edit <tagId> [--name <n>] [--color <c>]`, `tags delete <tagId> --confirm-name <name>`,
   `tags add <tagId> --project <id>...`, and `tags remove <tagId> --project <id>...`. Each only builds

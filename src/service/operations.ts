@@ -168,7 +168,7 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
     manage_tags: operation('manage_tags', async input => await runtime.tags.manageTags(manageTagsAction(input))),
     get_project_tree: operation(
       'get_project_tree',
-      async input => await runtime.entities.getProjectTree(input.projectId)
+      async input => await runtime.entities.getProjectTree(input.projectId, { includeTags: input.includeTags })
     ),
     read_file: operation('read_file', async input => await runtime.documents.readFile(input.projectId, input.filePath)),
     write_file: operation(

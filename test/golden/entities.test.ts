@@ -176,6 +176,53 @@ describe('get_project_tree golden results', () => {
       const result = await run(harness.service, 'get_project_tree', { projectId: PROJECT })
       expectGolden('get_project_tree', result)
       expect(harness.requests).toEqual([])
+      expect(result).not.toHaveProperty('tags')
+    } finally {
+      await harness.close()
+    }
+  })
+
+  test('includeTags adds the tags of this project as { id, name }, from one GET /tag', async () => {
+    const tags = [
+      { _id: '64b000000000000000000001', user_id: USER, name: 'Thesis', color: '#336699', project_ids: [PROJECT] },
+      { _id: '64b000000000000000000002', user_id: USER, name: 'Other', project_ids: ['another-project'] },
+      { _id: '64b000000000000000000003', user_id: USER, name: 'Grant', project_ids: ['another-project', PROJECT] },
+    ]
+    const harness = await goldenRuntime(NESTED_ROOT, { rootDoc_id: 'doc-main' }, routes({ 'GET /tag': json(tags) }))
+    try {
+      const result = await run(harness.service, 'get_project_tree', { projectId: PROJECT, includeTags: true })
+      expect(harness.requests).toEqual(['GET /tag'])
+      expect(result).toMatchObject({
+        tags: [
+          { id: '64b000000000000000000003', name: 'Grant' },
+          { id: '64b000000000000000000001', name: 'Thesis' },
+        ],
+      })
+      expectGolden('get_project_tree', result)
+    } finally {
+      await harness.close()
+    }
+  })
+
+  test('includeTags on a project in no tag gives an empty tags list', async () => {
+    const tags = [{ _id: '64b000000000000000000002', user_id: USER, name: 'Other', project_ids: ['another-project'] }]
+    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({ 'GET /tag': json(tags) }))
+    try {
+      const result = await run(harness.service, 'get_project_tree', { projectId: PROJECT, includeTags: true })
+      expect(harness.requests).toEqual(['GET /tag'])
+      expect(result).toMatchObject({ tags: [] })
+      expectGolden('get_project_tree', result)
+    } finally {
+      await harness.close()
+    }
+  })
+
+  test('includeTags with an unrecognised tag list is PROTOCOL_UNSUPPORTED', async () => {
+    const harness = await goldenRuntime(NESTED_ROOT, {}, routes({ 'GET /tag': json({ tags: 'no' }) }))
+    try {
+      await expect(
+        run(harness.service, 'get_project_tree', { projectId: PROJECT, includeTags: true })
+      ).rejects.toMatchObject({ code: 'PROTOCOL_UNSUPPORTED' })
     } finally {
       await harness.close()
     }

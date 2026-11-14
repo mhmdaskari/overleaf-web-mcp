@@ -180,11 +180,12 @@ export const ALIASES: readonly AliasCommand[] = [
   {
     words: ['tree'],
     tool: 'get_project_tree',
-    usage: 'tree <projectId>',
+    usage: 'tree <projectId> [--include-tags]',
     summary: 'Read the file tree with the root document and compiler',
     positionals: ['projectId'],
-    options: {},
-    build: ([projectId]) => call('get_project_tree', { projectId }),
+    options: { 'include-tags': { type: 'boolean' } },
+    build: ([projectId], values) =>
+      call('get_project_tree', { projectId, includeTags: flag(values, 'include-tags') || undefined }),
   },
   {
     words: ['files', 'read'],
