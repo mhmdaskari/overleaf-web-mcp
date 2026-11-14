@@ -121,7 +121,8 @@ These exports follow [Semantic Versioning](https://semver.org) from 1.0.0: a bre
 for a major version, a deprecation is announced at least one minor version ahead with both names
 working, and every change is listed in the [changelog](changelog.md). `AppConfig` gained two
 optional fields in 1.0.0, `readAttempts` and `minRequestIntervalMs`, which `readConfig` fills in;
-a configuration built by hand without them gets the same defaults.
+a configuration built by hand without them gets the same defaults. It gained `toolsets` in 1.2.0,
+from `OVERLEAF_TOOLSETS`; only `serve` reads it, and absent offers every tool.
 
 | Export | What it is | Since |
 | --- | --- | --- |
