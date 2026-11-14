@@ -23,7 +23,7 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
 
 ## 1.2.0
 
-[Changelog](changelog.md#120-unreleased)
+[Changelog](changelog.md#120-2026-11-14)
 
 - **MCP tools:** [`search_project`](tools.md#search_project-read-only); `edits` on
   [`write_file`](tools.md#write_file-destructive); `includeTags` on
