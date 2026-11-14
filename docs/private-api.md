@@ -99,9 +99,10 @@ A project id can stay in a tag after the account loses access to the project. Re
 - This path does not: turning link sharing off (`ProjectDetailsHandler.setPublicAccessLevel` to
   `private`) changes only `publicAccesLevel`, leaving link-sharing members in
   `tokenAccessReadOnly_refs` and `tokenAccessReadAndWrite_refs` and their tags untouched.
-  `CollaboratorsGetter.getProjectsUserIsMemberOf`, which the project list uses, requires
-  `publicAccesLevel: tokenBased` for those members, so the project disappears from the list while
-  its id stays in their tags.
+  `POST /api/project` (`ProjectListController.getProjectsJson`, through `_getProjects` and
+  `ProjectGetter.findAllUsersProjects`) lists projects with
+  `CollaboratorsGetter.getProjectsUserIsMemberOf`, which requires `publicAccesLevel: tokenBased`
+  for those members, so the project disappears from the list while its id stays in their tags.
 - `POST /tag/:tagId/projects/remove` checks only that the user is signed in, then `$pullAll`s the
   ids from the user's own tag. So `manage_tags` `remove_projects` takes an id the fresh `GET /tag`
   shows in the tag even when `POST /api/project` does not list it; any other inaccessible id is

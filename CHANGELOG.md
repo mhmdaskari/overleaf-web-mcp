@@ -28,7 +28,8 @@ server registers 36 tools.
   refused as an unknown tool. A name outside the eight is `INVALID_ARGUMENT` at startup, and exit 2
   for an operation command. It is not an access control: the command line and the SDK reach every
   operation. `capabilities` gains `toolsets`, the groups in effect, and a `toolset` on each
-  operation.
+  operation. In the SDK, `OperationContract` gains `toolset`, and `checkInput` for a rule across
+  parameters, which `write_file` uses; `AppConfig` gains the optional `toolsets`.
 - `search_project` (#55), a read-only tool that finds a literal string in the project's text
   documents and returns `matches` as `{ filePath, line, column, preview }`, with `totalMatches`,
   `truncated`, `filesSearched`, and `binaryFilesSkipped`. `query` is 1 to 200 characters, matched
@@ -48,7 +49,8 @@ server registers 36 tools.
   `details.parameters`; the command line and the SDK now refuse it when the input is parsed, before
   any session is opened, where before the content-and-localPath case was refused after. The
   `files write` shorthand gains `--edits-file <f>`, a JSON array, so document text never goes in
-  argv.
+  argv. A `newText` with CRLF line endings is written with LF, as `content` is. The server
+  instructions name `edits` beside `content` and `localPath`.
 - `get_project_tree` takes an optional `includeTags` (#42). When it is `true`, the result gains
   `tags`, the account's tags on the project as `{ id, name }`, read with one `GET /tag`, and an
   empty array when the project is in no tag. Left out or `false`, the result and the requests are

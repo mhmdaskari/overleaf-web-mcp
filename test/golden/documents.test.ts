@@ -200,6 +200,21 @@ describe('write_file', () => {
       })
     }
 
+    test('a CRLF in a newText is written as LF, the same update as LF content', async () => {
+      const send = async (source: { content: string } | { edits: { oldText: string; newText: string }[] }) => {
+        const server = fakeOverleaf({ d1: sharejs(BEFORE, 3) })
+        await withService(server, async ({ service }) => {
+          const read = (await service.read_file({ projectId: PROJECT, filePath: 'main.tex' })) as { revision: string }
+          await service.write_file({ projectId: PROJECT, filePath: 'main.tex', revision: read.revision, ...source })
+        })
+        return server
+      }
+      const edited = await send({ edits: [{ oldText: 'gamma.', newText: 'gamma.\r\nInserted line.' }] })
+      const replaced = await send({ content: BEFORE.replace('gamma.', 'gamma.\nInserted line.') })
+      expect(visible(edited, 'd1')).toBe(BEFORE.replace('gamma.', 'gamma.\nInserted line.'))
+      expect(edited.sentOps).toEqual(replaced.sentOps)
+    })
+
     test('a stale revision is REVISION_CONFLICT, and nothing is sent', async () => {
       const server = fakeOverleaf({ d1: sharejs(BEFORE, 3) })
       await withService(server, async ({ service }) => {
