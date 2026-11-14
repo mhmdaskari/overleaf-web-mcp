@@ -213,6 +213,37 @@ describe('CLI command line', () => {
     ).not.toHaveProperty('input.confirmCount')
   })
 
+  test('builds each tags command as exactly the manage_tags input', () => {
+    const tags = (argv: string[]) => parseCommandLine(['tags', ...argv])
+    const expected = (command: string, input: Record<string, unknown>) => ({
+      kind: 'alias',
+      command: `tags ${command}`,
+      tool: 'manage_tags',
+      input,
+      progress: false,
+    })
+    expect(tags(['create', 'Grant 2027', '--color', '#336699'])).toEqual(
+      expected('create', { action: 'create', name: 'Grant 2027', color: '#336699' })
+    )
+    expect(tags(['create', 'Grant'])).toEqual(expected('create', { action: 'create', name: 'Grant' }))
+    expect(tags(['edit', 't1', '--name', 'Thesis', '--color', '#000000'])).toEqual(
+      expected('edit', { action: 'edit', tagId: 't1', name: 'Thesis', color: '#000000' })
+    )
+    expect(tags(['delete', 't1', '--confirm-name', 'Thesis'])).toEqual(
+      expected('delete', { action: 'delete', tagId: 't1', confirmName: 'Thesis' })
+    )
+    expect(tags(['add', 't1', '--project', 'p2', '--project', 'p1'])).toEqual(
+      expected('add', { action: 'add_projects', tagId: 't1', projectIds: ['p2', 'p1'] })
+    )
+    expect(tags(['remove', 't1', '--project', 'p1'])).toEqual(
+      expected('remove', { action: 'remove_projects', tagId: 't1', projectIds: ['p1'] })
+    )
+    // A missing confirm value, a missing change, or a missing project is the operation's to refuse.
+    expect(tags(['delete', 't1'])).toEqual(expected('delete', { action: 'delete', tagId: 't1' }))
+    expect(tags(['edit', 't1'])).toEqual(expected('edit', { action: 'edit', tagId: 't1' }))
+    expect(tags(['add', 't1'])).toEqual(expected('add', { action: 'add_projects', tagId: 't1' }))
+  })
+
   test('refuses an alias call that cannot be right, before any operation', () => {
     for (const argv of [
       ['files', 'write', 'p', 'main.tex', '--revision', 'r'],
@@ -226,6 +257,10 @@ describe('CLI command line', () => {
       ['tracked-changes', 'list', 'p', '--excerpt-chars', '1.5'],
       ['tracked-changes', 'decide', 'p'],
       ['tracked-changes', 'reject', 'p', '--revision', 'r', '--change', 'c', '--confirm-count', '1'],
+      ['tags', 'frobnicate'],
+      ['tags', 'create'],
+      ['tags', 'delete', 't1', '--confirm-name'],
+      ['tags', 'add', 't1', 'p1'],
     ]) {
       expect(usage(argv), argv.join(' ')).toMatchObject({ code: 'INVALID_ARGUMENT' })
     }

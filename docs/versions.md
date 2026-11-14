@@ -21,6 +21,13 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
 - The [SDK](sdk.md#stable-surface) surface has existed since 0.5.0 and follows Semantic
   Versioning from 1.0.0. Before 1.0.0 a minor release could change it.
 
+## 1.2.0
+
+[Changelog](changelog.md#120-unreleased)
+
+- **Command line:** `tags create`, `tags edit`, `tags delete`, `tags add`, and `tags remove`
+  ([commands](cli.md#commands)).
+
 ## 1.1.0
 
 [Changelog](changelog.md#110-2026-11-09)

@@ -9,6 +9,23 @@ format, output framing, and exit codes; the `overleaf-web-mcp/core` surface the
 is announced at least one minor version ahead with both names working, and every change is listed
 below. Before 1.0.0, a minor or patch release could change them, and each such change is listed.
 
+## [1.2.0] - Unreleased
+
+### Added
+
+- Command line shorthands for `manage_tags` (#41): `tags create <name> [--color <c>]`,
+  `tags edit <tagId> [--name <n>] [--color <c>]`, `tags delete <tagId> --confirm-name <name>`,
+  `tags add <tagId> --project <id>...`, and `tags remove <tagId> --project <id>...`. Each only builds
+  the `manage_tags` input, and its result, errors, and exit codes are those of
+  `call manage_tags`.
+
+### Fixed
+
+- `manage_tags` `delete` without `confirmName` is now `CONFIRMATION_MISMATCH` with
+  `details.missing: "confirmName"`, as its description, the tool reference, and the safety page
+  already said, after the tags are read; it was `INVALID_ARGUMENT` before anything was read. Both
+  exit 2, and nothing is deleted either way.
+
 ## [1.1.1] - 2026-11-11
 
 Foundations. A blank environment variable now counts as unset, and the work around the code is

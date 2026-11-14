@@ -537,6 +537,45 @@ describe('safety checks with a real runtime', () => {
     }
   })
 
+  test('tags delete without --confirm-name and tags edit with no change exit 2 and change nothing', async () => {
+    const tagId = '64b000000000000000000001'
+    const tagsRuntime = async () =>
+      await realRuntime({
+        fetcher: async (input, init) => {
+          const url = new URL(input instanceof Request ? input.url : String(input))
+          if ((init?.method ?? 'GET') === 'GET' && url.pathname === '/tag') {
+            return Response.json([{ _id: tagId, name: 'Thesis', project_ids: [] }])
+          }
+          return new Response(null, { status: 204 })
+        },
+      })
+
+    const deleting = await tagsRuntime()
+    const unconfirmed = await cli(['tags', 'delete', tagId], { runtime: deleting.runtime })
+    expect(unconfirmed.exitCode).toBe(2)
+    expect(unconfirmed.stdout).toBe('')
+    expect(expectError(unconfirmed)).toMatchObject({
+      code: 'CONFIRMATION_MISMATCH',
+      details: { missing: 'confirmName' },
+    })
+    // The tags are read, so the name can be compared, and nothing is deleted.
+    expect(deleting.fetches).toEqual(['GET /tag'])
+    noDeletes(deleting.fetches)
+
+    const editing = await tagsRuntime()
+    const unchanged = await cli(['tags', 'edit', tagId], { runtime: editing.runtime })
+    expect(unchanged.exitCode).toBe(2)
+    expect(expectError(unchanged).code).toBe('INVALID_ARGUMENT')
+    expect(editing.fetches).toEqual([])
+  })
+
+  test('an unknown tags command exits 2 before any session is opened', async () => {
+    const run = await cli(['tags', 'frobnicate'])
+    expect(run.exitCode).toBe(2)
+    expect(expectError(run).code).toBe('INVALID_ARGUMENT')
+    expect(run.createRuntime).not.toHaveBeenCalled()
+  })
+
   test('tracked-changes exits 3 for review the deployment cannot do', async () => {
     for (const kind of ['feature_disabled', 'route_unavailable', 'document_protocol']) {
       const fake = rejectAll(

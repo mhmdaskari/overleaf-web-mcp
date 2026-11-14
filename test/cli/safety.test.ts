@@ -102,6 +102,11 @@ function commands(): Command[] {
         'Thesis',
       ],
     },
+    { label: 'tags create', argv: ['tags', 'create', 'Grant', '--color', '#336699'] },
+    { label: 'tags edit', argv: ['tags', 'edit', 't1', '--name', 'Thesis'] },
+    { label: 'tags delete', argv: ['tags', 'delete', 't1', '--confirm-name', 'Thesis'] },
+    { label: 'tags add', argv: ['tags', 'add', 't1', '--project', 'p'] },
+    { label: 'tags remove', argv: ['tags', 'remove', 't1', '--project', 'p'] },
     { label: 'tree', argv: ['tree', 'p'] },
     { label: 'files read', argv: ['files', 'read', 'p', 'main.tex'] },
     {
