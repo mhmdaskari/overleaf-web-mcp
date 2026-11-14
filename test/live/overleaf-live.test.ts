@@ -208,6 +208,35 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS !== '1
           'paper.tex',
           '\\documentclass{article}\n\\begin{document}\nDisposable lifecycle test.\n\\end{document}\n'
         )
+        // search_project finds the text through read_file's reads, and edits write through the same path.
+        const service = createOverleafService(runtime)
+        const found = await service.search_project({
+          projectId: created.projectId,
+          query: 'disposable LIFECYCLE',
+          caseSensitive: false,
+          limit: 50,
+        })
+        expect(found).toMatchObject({ totalMatches: 1, truncated: false })
+        expect(found.matches).toEqual([
+          { filePath: 'paper.tex', line: 3, column: 1, preview: 'Disposable lifecycle test.' },
+        ])
+        const before = await service.read_file({ projectId: created.projectId, filePath: 'paper.tex' })
+        await service.write_file({
+          projectId: created.projectId,
+          filePath: 'paper.tex',
+          revision: before.revision,
+          edits: [
+            { oldText: 'lifecycle test.', newText: 'lifecycle test, edited.' },
+            { oldText: '\\begin{document}\n', newText: '\\begin{document}\n% edited\n' },
+          ],
+          writeMode: 'untracked',
+        })
+        expect((await service.read_file({ projectId: created.projectId, filePath: 'paper.tex' })).content).toBe(
+          '\\documentclass{article}\n\\begin{document}\n% edited\nDisposable lifecycle test, edited.\n\\end{document}\n'
+        )
+        const tree = await service.get_project_tree({ projectId: created.projectId, includeTags: true })
+        expect(tree.tags).toEqual([])
+
         const settings = await runtime.projects.updateProjectSettings(created.projectId, {
           rootFilePath: 'paper.tex',
         })
