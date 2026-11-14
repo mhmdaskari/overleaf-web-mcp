@@ -9,7 +9,15 @@ format, output framing, and exit codes; the `overleaf-web-mcp/core` surface the
 is announced at least one minor version ahead with both names working, and every change is listed
 below. Before 1.0.0, a minor or patch release could change them, and each such change is listed.
 
-## [1.2.0] - Unreleased
+## [1.2.0] - 2026-11-14
+
+Cheaper for agents. An agent can now find text without reading every document (`search_project`),
+change a few words without sending the whole document back (`edits` on `write_file`), see a
+project's tags from its tree, and offer an MCP client only the groups of tools it needs
+(`OVERLEAF_TOOLSETS`), with a test that bounds what the tool list costs. The command line gains
+shorthands for tags and search. `remove_projects` can clear a tag id the account can no longer
+open, and a tag delete without `confirmName` now fails with the code the documentation named. The
+server registers 36 tools.
 
 ### Added
 
