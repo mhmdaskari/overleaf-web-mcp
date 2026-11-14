@@ -1,6 +1,7 @@
 import type { OperationContext, OperationDiagnostic, ProgressReporter } from '../contracts/context.js'
 import { OPERATION_NAMES, OPERATIONS } from '../contracts/operations.js'
 import type { OverleafServiceRuntime } from '../contracts/service.js'
+import type { Toolset } from '../contracts/toolsets.js'
 import { asMcpError } from '../core/errors.js'
 import { createOverleafService } from '../service/operations.js'
 
@@ -119,6 +120,8 @@ function progressReporter(extra: ToolCallExtra | undefined): ProgressReporter | 
 export interface ToolRegistrationOptions {
   /** Receives `{ tool, code }` notices; `overleaf-web-mcp serve` writes them to stderr. */
   onDiagnostic?: ((diagnostic: OperationDiagnostic) => void) | undefined
+  /** Registers only the tools of these groups, from `OVERLEAF_TOOLSETS`; absent registers every tool. */
+  toolsets?: readonly Toolset[] | undefined
 }
 
 /**
@@ -136,6 +139,8 @@ export function registerOverleafTools(
   const service = createOverleafService(runtime)
   for (const name of OPERATION_NAMES) {
     const contract = OPERATIONS[name]
+    // A tool left out is never registered, so the SDK refuses a call to it as an unknown tool.
+    if (options.toolsets !== undefined && !options.toolsets.includes(contract.toolset)) continue
     const call = service[name] as (input: unknown, context: OperationContext) => Promise<unknown>
     const run = async (args: unknown, extra: ToolCallExtra | undefined): Promise<Record<string, unknown>> => {
       try {

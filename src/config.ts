@@ -4,6 +4,7 @@ import { McpError } from './core/errors.js'
 import { MAX_READ_ATTEMPTS } from './core/retry.js'
 import { resolveAuthPaths } from './auth/paths.js'
 import { EFFECTS, type Effect } from './contracts/effects.js'
+import { TOOLSETS, type Toolset } from './contracts/toolsets.js'
 import { resolveProxyUrl } from './http/proxy.js'
 
 export interface AppConfig {
@@ -35,6 +36,11 @@ export interface AppConfig {
   localWriteRoots?: string[]
   /** Effects operations may have; absent allows every effect. */
   allowedEffects?: Effect[]
+  /**
+   * The tool groups `serve` lists to MCP clients; absent lists every tool. It narrows what an MCP
+   * client sees and is not an access control: the command line and the SDK reach every operation.
+   */
+  toolsets?: Toolset[]
 }
 
 /** The variable's value, or `undefined` when it is unset, empty, or only whitespace. */
@@ -95,6 +101,16 @@ function effects(env: NodeJS.ProcessEnv, name: string): Effect[] | undefined {
   return values as Effect[]
 }
 
+function toolsets(env: NodeJS.ProcessEnv, name: string): Toolset[] | undefined {
+  const values = list(env, name)
+  if (values === undefined) return undefined
+  const known = new Set<string>(TOOLSETS)
+  if (values.some(value => !known.has(value))) {
+    throw new McpError('INVALID_ARGUMENT', `${name} may only list these toolsets: ${TOOLSETS.join(', ')}.`)
+  }
+  return [...new Set(values)] as Toolset[]
+}
+
 export interface ConfigContext {
   platform?: NodeJS.Platform
   homeDir?: string
@@ -127,6 +143,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env, context: Config
   const localReadRoots = roots(env, 'OVERLEAF_LOCAL_READ_ROOTS')
   const localWriteRoots = roots(env, 'OVERLEAF_LOCAL_WRITE_ROOTS')
   const allowedEffects = effects(env, 'OVERLEAF_ALLOWED_EFFECTS')
+  const enabledToolsets = toolsets(env, 'OVERLEAF_TOOLSETS')
 
   return {
     baseUrl: baseUrl.href.replace(/\/$/u, ''),
@@ -150,5 +167,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env, context: Config
     ...(localReadRoots === undefined ? {} : { localReadRoots }),
     ...(localWriteRoots === undefined ? {} : { localWriteRoots }),
     ...(allowedEffects === undefined ? {} : { allowedEffects }),
+    ...(enabledToolsets === undefined ? {} : { toolsets: enabledToolsets }),
   }
 }

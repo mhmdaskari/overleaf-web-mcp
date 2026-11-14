@@ -5,6 +5,7 @@ import { McpServer, type ServerContext } from '@modelcontextprotocol/server'
 import { describe, expect, test, vi } from 'vitest'
 
 import { INSTRUCTION_WORD_LIMIT, instructionWords } from '../scripts/preflight.js'
+import { readConfig } from '../src/config.js'
 import { McpError } from '../src/core/errors.js'
 import { SERVER_INSTRUCTIONS } from '../src/mcp/instructions.js'
 import { ToolActivity, TOOL_NAMES, type ToolCallExtra } from '../src/mcp/tools.js'
@@ -86,8 +87,26 @@ function runtimeWithPlanProgress() {
   return { runtime, plan }
 }
 
-async function connectedPair() {
-  const server = createMcpServer(fakeRuntime())
+/**
+ * The most characters the names, descriptions, and input schemas of tools/list may take as compact
+ * JSON: what an MCP client loads into context on every turn. Set just over the size at 1.2.0
+ * (58,992), as the 450-word bound holds the instructions. A release that adds a tool or grows a
+ * description trims elsewhere, or raises this in a change the changelog explains.
+ */
+const TOOL_LIST_CHAR_LIMIT = 60_000
+
+function toolListSize(
+  tools: ReadonlyArray<{ name: string; description?: string | undefined; inputSchema: unknown }>
+): number {
+  return tools.reduce(
+    (total, tool) =>
+      total + JSON.stringify({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema }).length,
+    0
+  )
+}
+
+async function connectedPair(options: Parameters<typeof createMcpServer>[2] = {}) {
+  const server = createMcpServer(fakeRuntime(), undefined, options)
   const client = new Client({ name: 'smoke-client', version: '1.0.0' })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
@@ -160,6 +179,58 @@ describe('MCP server', () => {
     await expect(`${JSON.stringify(tools, null, 2)}\n`).toMatchFileSnapshot('__snapshots__/list-tools.json')
     await client.close()
     await server.close()
+  })
+
+  test('keeps the names, descriptions, and input schemas of tools/list under the size cap', async () => {
+    const { server, client } = await connectedPair()
+    const { tools } = await client.listTools()
+    const size = toolListSize(tools)
+    expect(size).toBeLessThanOrEqual(TOOL_LIST_CHAR_LIMIT)
+    // A description that grew past the cap fails the same check.
+    const grown = tools.map((tool, index) =>
+      index === 0
+        ? { ...tool, description: `${tool.description ?? ''}${'x'.repeat(TOOL_LIST_CHAR_LIMIT - size + 1)}` }
+        : tool
+    )
+    expect(toolListSize(grown)).toBeGreaterThan(TOOL_LIST_CHAR_LIMIT)
+    await client.close()
+    await server.close()
+  })
+
+  test('OVERLEAF_TOOLSETS lists only the tools of the chosen groups and refuses a call to any other', async () => {
+    const { toolsets } = readConfig({ OVERLEAF_TOOLSETS: 'files, compile' })
+    expect(toolsets).toEqual(['files', 'compile'])
+    const { server, client } = await connectedPair({ toolsets })
+    const { tools } = await client.listTools()
+    expect(tools.map(tool => tool.name)).toEqual([
+      'get_project_tree',
+      'read_file',
+      'search_project',
+      'write_file',
+      'create_file',
+      'manage_entity',
+      'upload_file',
+      'batch_upload',
+      'download_file',
+      'download_project_zip',
+      'compile_project',
+      'stop_compile',
+      'get_compile_log',
+      'download_compile_output',
+    ])
+    await expect(
+      client.callTool({ name: 'manage_tags', arguments: { action: 'create', name: 'x' } })
+    ).rejects.toMatchObject({
+      code: -32602,
+    })
+    await client.close()
+    await server.close()
+  })
+
+  test('OVERLEAF_TOOLSETS naming an unknown group fails at startup', () => {
+    expect(() => readConfig({ OVERLEAF_TOOLSETS: 'nope' })).toThrow(
+      expect.objectContaining({ code: 'INVALID_ARGUMENT' }) as Error
+    )
   })
 
   test('returns structuredContent that satisfies the declared outputSchema over the transport', async () => {

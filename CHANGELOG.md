@@ -13,6 +13,14 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
 
 ### Added
 
+- `OVERLEAF_TOOLSETS` (#44), a comma-separated list of the eight tool groups (`account`,
+  `projects`, `files`, `sync`, `sections`, `compile`, `review`, `history`) that `serve` offers MCP
+  clients, so a client that needs a few groups does not load every tool's description and schema
+  each turn. Unset or empty offers every tool, and `tools/list` is unchanged; a tool left out is
+  refused as an unknown tool. A name outside the eight is `INVALID_ARGUMENT` at startup, and exit 2
+  for an operation command. It is not an access control: the command line and the SDK reach every
+  operation. `capabilities` gains `toolsets`, the groups in effect, and a `toolset` on each
+  operation.
 - `search_project` (#55), a read-only tool that finds a literal string in the project's text
   documents and returns `matches` as `{ filePath, line, column, preview }`, with `totalMatches`,
   `truncated`, `filesSearched`, and `binaryFilesSkipped`. `query` is 1 to 200 characters, matched
@@ -60,6 +68,13 @@ below. Before 1.0.0, a minor or patch release could change them, and each such c
   `details.missing: "confirmName"`, as its description, the tool reference, and the safety page
   already said, after the tags are read; it was `INVALID_ARGUMENT` before anything was read. Both
   exit 2, and nothing is deleted either way.
+
+### Internal
+
+- `test/server.test.ts` bounds what `tools/list` costs a client (#44): the names, descriptions, and
+  input schemas, as compact JSON, must stay under 60,000 characters, set just over their size with
+  36 tools (58,992), as the 450-word bound holds the server instructions.
+- Each operation's contract names its `toolset`, and a test holds the README's tool table to it.
 
 ## [1.1.1] - 2026-11-11
 

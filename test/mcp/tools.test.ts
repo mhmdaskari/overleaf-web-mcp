@@ -4,6 +4,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test, vi } from 'vitest'
 
+import { OPERATIONS, type OperationName } from '../../src/contracts/operations.js'
+import { TOOLSETS, type Toolset } from '../../src/contracts/toolsets.js'
 import { McpError } from '../../src/core/errors.js'
 import { TOOL_NAMES, registerOverleafTools } from '../../src/mcp/tools.js'
 
@@ -93,6 +95,24 @@ describe('MCP tool registration', () => {
     expect(/^\| Tools \| (\d+) \|/mu.exec(comparison)?.[1]).toBe(String(TOOL_NAMES.length))
     // The README's tool table must name every registered tool, or it rots like the count would.
     for (const name of TOOL_NAMES) expect(readme).toContain(`| \`${name}\` |`)
+  })
+
+  test("groups each tool in the README's table as its contract's toolset, which OVERLEAF_TOOLSETS selects by", async () => {
+    const readme = await readFile(new URL('../../README.md', import.meta.url), 'utf8')
+    const labels: Record<string, Toolset> = {
+      Account: 'account',
+      'Project lifecycle': 'projects',
+      Files: 'files',
+      'Folder sync': 'sync',
+      Sections: 'sections',
+      Compilation: 'compile',
+      Review: 'review',
+      History: 'history',
+    }
+    const rows = [...readme.matchAll(/^\| ([A-Za-z ]+) \| `([a-z_]+)` \|/gmu)].map(match => [match[2]!, match[1]!])
+    expect(rows.map(([name]) => name)).toEqual(TOOL_NAMES)
+    for (const [name, label] of rows) expect(labels[label!], name).toBe(OPERATIONS[name as OperationName].toolset)
+    expect(new Set(Object.values(labels))).toEqual(new Set(TOOLSETS))
   })
 
   test('returns auth_status as structured content with a declared output schema', async () => {

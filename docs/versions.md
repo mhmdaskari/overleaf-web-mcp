@@ -28,6 +28,8 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
 - **MCP tools:** [`search_project`](tools.md#search_project-read-only); `edits` on
   [`write_file`](tools.md#write_file-destructive); `includeTags` on
   [`get_project_tree`](tools.md#get_project_tree-read-only).
+- **Configuration:** [`OVERLEAF_TOOLSETS`](configuration.md#toolsets); `toolsets` and each
+  operation's `toolset` in [`capabilities`](cli.md#describing-the-operations).
 - **Command line:** `tags create`, `tags edit`, `tags delete`, `tags add`, and `tags remove`
   ([commands](cli.md#commands)); `files search`; `--edits-file` on `files write`; `--include-tags` on
   `tree`.

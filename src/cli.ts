@@ -12,9 +12,11 @@ import { OverleafRuntime } from './runtime.js'
 async function serve(): Promise<void> {
   // Loaded only here, so an operation command never loads the MCP SDK.
   const { runStdioServer } = await import('./server.js')
-  const runtime = await OverleafRuntime.create(readConfig())
+  const config = readConfig()
+  const runtime = await OverleafRuntime.create(config)
   // stdout carries only MCP frames; a notice names the tool and a code, never content.
   const server = runStdioServer(runtime, {
+    toolsets: config.toolsets,
     onDiagnostic: diagnostic => {
       process.stderr.write(`${JSON.stringify({ diagnostic })}\n`)
     },

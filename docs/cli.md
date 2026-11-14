@@ -316,10 +316,14 @@ not forbid other keys; the command line refuses them anyway, as [above](#input-i
 `capabilities [projectId]` prints what this install can do:
 
 - `version`: the package version.
-- `operations`: for each tool, `{ name, effects, annotations, blockedEffects, commands }`.
+- `operations`: for each tool, `{ name, effects, annotations, blockedEffects, commands, toolset }`.
   `effects` is everything the tool can do; a given call may need less. `blockedEffects` lists the
   effects `OVERLEAF_ALLOWED_EFFECTS` refuses: the tool fails with `POLICY_DENIED` only when a call
-  needs one of them. `commands` names its shorthand commands besides `call`.
+  needs one of them. `commands` names its shorthand commands besides `call`. `toolset`
+  <!-- md:version 1.2.0 --> is its group.
+- `toolsets` <!-- md:version 1.2.0 -->: the groups whose tools `serve` offers MCP clients, all
+  eight unless [`OVERLEAF_TOOLSETS`](configuration.md#toolsets) narrows them. Every operation stays
+  available here and in the SDK.
 - `policy`: `{ projectsRestricted, effectsRestricted, localReadRestricted, localWriteRestricted }`,
   which [access policy](configuration.md#access-policy) variables are set.
 - `project`: `{ projectId, allowedByPolicy, accessLevel, archived, trashed }`.

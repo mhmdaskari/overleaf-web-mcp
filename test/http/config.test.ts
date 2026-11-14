@@ -68,6 +68,7 @@ describe('configuration', () => {
       'OVERLEAF_BROWSER_PATH',
       'OVERLEAF_BROWSER_PROFILE_DIR',
       'OVERLEAF_PROTOCOL_VERSIONS',
+      'OVERLEAF_TOOLSETS',
     ]
     const numbers = [
       'OVERLEAF_LOGIN_TIMEOUT_MS',
@@ -93,6 +94,16 @@ describe('configuration', () => {
       supportedProtocolVersions: [2],
     })
     expect(defaults).not.toHaveProperty('browserPath')
+  })
+
+  test('reads OVERLEAF_TOOLSETS as known groups, once each, and refuses any other', () => {
+    expect(readConfig({})).not.toHaveProperty('toolsets')
+    expect(readConfig({ OVERLEAF_TOOLSETS: 'review, files,review' }).toolsets).toEqual(['review', 'files'])
+    for (const value of ['nope', 'files,Files', 'files,,compile', 'files, sync, comments']) {
+      expect(() => readConfig({ OVERLEAF_TOOLSETS: value }), value).toThrow(
+        expect.objectContaining({ code: 'INVALID_ARGUMENT' }) as Error
+      )
+    }
   })
 
   test('still refuses a malformed base URL that is not blank', () => {

@@ -58,6 +58,11 @@
           "name": "OVERLEAF_ALLOWED_EFFECTS",
           "description": "Comma-separated kinds of change operations may make, such as overleaf-read. Unset allows all.",
           "format": "string"
+        },
+        {
+          "name": "OVERLEAF_TOOLSETS",
+          "description": "Comma-separated tool groups to offer, such as files,compile, to save client context. Unset offers all.",
+          "format": "string"
         }
       ]
     }
