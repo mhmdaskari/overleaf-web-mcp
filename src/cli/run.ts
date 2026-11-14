@@ -87,6 +87,28 @@ async function readRequest(source: RequestSource, io: CliIo): Promise<Record<str
   }
 }
 
+/** `files write --edits-file`: a JSON array of `{ oldText, newText }`, checked by the contract. */
+async function readEditsFile(path: string): Promise<unknown[]> {
+  let bytes: Uint8Array
+  try {
+    bytes = await readFile(path)
+  } catch (error) {
+    throw new McpError('INVALID_ARGUMENT', 'The --edits-file file could not be read.', {
+      details: { errno: (error as { code?: unknown }).code ?? 'unknown' },
+    })
+  }
+  let value: unknown
+  try {
+    value = JSON.parse(utf8(bytes, 'The --edits-file file'))
+  } catch (error) {
+    if (error instanceof McpError) throw error
+    // The file holds document text, so the parser's message, which quotes it, is dropped.
+    throw new McpError('INVALID_ARGUMENT', 'The --edits-file file is not valid JSON.')
+  }
+  if (!Array.isArray(value)) throw new McpError('INVALID_ARGUMENT', 'The --edits-file file must be a JSON array.')
+  return value as unknown[]
+}
+
 function progressContext(io: CliIo, enabled: boolean): OperationContext {
   if (!enabled) return {}
   return {
@@ -136,6 +158,7 @@ async function runOperation(
   } else {
     raw = command.input
     if (command.contentFromStdin === true) raw = { ...raw, content: utf8(await io.readStdin(), 'stdin') }
+    if (command.editsFile !== undefined) raw = { ...raw, edits: await readEditsFile(command.editsFile) }
   }
   // Parsed before any session is opened, so a refused call sends nothing.
   const input = parseOperationInput(command.tool, raw)

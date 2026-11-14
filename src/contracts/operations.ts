@@ -15,8 +15,10 @@ import {
   MAX_EXCERPT_CHARS,
   MAX_TRACKED_CHANGE_LIMIT,
 } from '../overleaf/tracked-changes.js'
+import { MAX_TEXT_EDITS } from '../core/text-edits.js'
 import type { Effect } from './effects.js'
 import { ERROR_CODES } from './error-codes.js'
+import { assertOneTextSource } from './text-source.js'
 
 /**
  * Operation ids, in registration order. They are the MCP tool names and, from v0.7.0, the CLI
@@ -80,6 +82,12 @@ export interface OperationContract {
   annotations: OperationAnnotations
   /** Everything the operation can do; the access policy refuses it before any work otherwise. */
   effects: readonly Effect[]
+  /**
+   * A rule across parameters that the JSON Schema cannot state. `parseOperationInput` runs it, so
+   * the command line and the SDK refuse before any session is opened, and every service call runs
+   * it again, which is where an MCP call meets it. It throws `INVALID_ARGUMENT`.
+   */
+  checkInput?: (input: Record<string, unknown>) => void
 }
 
 const projectId = z.string().min(1).describe('Overleaf project ID')
@@ -489,23 +497,36 @@ export const OPERATIONS = {
     effects: ['overleaf-read'],
   },
   write_file: {
-    description:
-      'Replace a text document with a verified OT update that changes only the words that differ, optionally recorded as tracked changes, one per changed group of words; where a changed word touches a comment or tracked change, the update is one edit from the first change to the last instead. Supply the new text either inline through content or from disk through localPath, never both; localPath keeps a whole-file replacement revision-checked without sending the file through the tool call. A write that hit a timeout, a lost socket, or an error Overleaf reported on the document after the update was sent is never resent: the live document is observed instead, and recoveredAfterTimeout: true means the intended text was confirmed. An update Overleaf refused as too large is UPDATE_TOO_LARGE with details.outcome not_applied: nothing was stored. On a ShareJS (legacy editor) document, text that adds a character outside the Basic Multilingual Plane, such as an emoji, adds another copy of one the document holds, or changes their order is INVALID_ARGUMENT with details.line (1-based) and nothing is sent, because Overleaf would store it as U+FFFD; editing text on either side of one the document already holds is fine. With writeMode tracked, a write Overleaf applied without recording it as tracked changes by this account is PROTOCOL_UNSUPPORTED with details.kind applied_untracked and details.liveRevision: it is live and not reverted, so read the file before writing again; if another update followed the write before that check, it is REVISION_CONFLICT with details.outcome unknown instead. A review-only collaborator can write only with writeMode tracked, and a read-only one cannot write: either is PERMISSION_DENIED before anything is sent.',
+    description: `Replace a text document with a verified OT update that changes only the words that differ, optionally recorded as tracked changes, one per changed group of words; where a changed word touches a comment or tracked change, the update is one edit from the first change to the last instead. Supply the new text through exactly one of content (the whole text), localPath (a local file holding it, never sent through the tool call), or edits: 1 to ${MAX_TEXT_EDITS} { oldText, newText } applied in order to the document at revision, each oldText matching exactly once in the text the edits before it left, with whitespace and line endings exact; an empty newText deletes. An oldText that does not match is INVALID_ARGUMENT with details.kind edit_not_found, one that matches more than once edit_ambiguous, each with details.editIndex (0-based), and nothing is sent; otherwise the result is written as content would be. A write that hit a timeout, a lost socket, or an error Overleaf reported on the document after the update was sent is never resent: the live document is observed instead, and recoveredAfterTimeout: true means the intended text was confirmed. An update Overleaf refused as too large is UPDATE_TOO_LARGE with details.outcome not_applied: nothing was stored. On a ShareJS (legacy editor) document, text that adds a character outside the Basic Multilingual Plane, such as an emoji, adds another copy of one the document holds, or changes their order is INVALID_ARGUMENT with details.line (1-based) and nothing is sent, because Overleaf would store it as U+FFFD; editing text on either side of one the document already holds is fine. With writeMode tracked, a write Overleaf applied without recording it as tracked changes by this account is PROTOCOL_UNSUPPORTED with details.kind applied_untracked and details.liveRevision: it is live and not reverted, so read the file before writing again; if another update followed the write before that check, it is REVISION_CONFLICT with details.outcome unknown instead. A review-only collaborator can write only with writeMode tracked, and a read-only one cannot write: either is PERMISSION_DENIED before anything is sent.`,
     inputSchema: z.object({
       projectId,
       filePath,
       revision,
-      content: z.string().optional().describe('Complete replacement text, mutually exclusive with localPath'),
+      content: z.string().optional().describe('Complete replacement text; exactly one of content, localPath, edits'),
       localPath: z
         .string()
         .min(1)
         .optional()
-        .describe('Local UTF-8 text file holding the complete replacement, mutually exclusive with content'),
+        .describe('Local UTF-8 text file holding the complete replacement; exactly one of content, localPath, edits'),
+      edits: z
+        .array(
+          z.object({
+            oldText: z.string().min(1).describe('Text to replace; must occur exactly once'),
+            newText: z.string().describe('Replacement; empty deletes'),
+          })
+        )
+        .min(1)
+        .max(MAX_TEXT_EDITS)
+        .optional()
+        .describe(
+          `Targeted changes, 1 to ${MAX_TEXT_EDITS}, applied in order; exactly one of content, localPath, edits`
+        ),
       writeMode,
     }),
     outputSchema: documentWriteSchema,
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['local-read', 'overleaf-write'],
+    checkInput: assertOneTextSource,
   },
   create_file: {
     description:

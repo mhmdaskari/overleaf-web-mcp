@@ -55,6 +55,8 @@ export interface FakeOverleaf {
   /** The access level joinProject reports; `owner` unless set. */
   permissionsLevel?: string
   applied: number
+  /** The `op` of every update received, stored or not, in order. */
+  sentOps: unknown[]
   /** Every request after the bootstrap `GET /project`, as `METHOD /path`. */
   requests: string[]
   /** Every bootstrap `GET /project`, one per runtime opened. */
@@ -91,6 +93,7 @@ export function fakeOverleaf(
     ...(options.trackChangesState === undefined ? {} : { trackChangesState: options.trackChangesState }),
     newDocumentProtocol: options.newDocumentProtocol ?? 'sharejs',
     applied: 0,
+    sentOps: [],
     requests: [],
     bootstraps: 0,
     peers: [],
@@ -299,6 +302,7 @@ export class FakePeer extends EventEmitter {
     }
     if (name !== 'applyOtUpdate') throw new Error(`unexpected socket call ${name}`)
     const update = args[1] as { doc: string; v: number; op: unknown[]; meta?: { tc?: string } }
+    this.#server.sentOps.push(structuredClone(update.op))
     if (update.v !== document.version) return [{ message: 'version mismatch' }]
     const refusal = (message: string): unknown[] => {
       // Overleaf acknowledges the update, then sends the error and disconnects the socket.

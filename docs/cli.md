@@ -50,7 +50,7 @@ overleaf-web-mcp tags add <tagId> --project <id>...
 overleaf-web-mcp tags remove <tagId> --project <id>...
 overleaf-web-mcp tree <projectId> [--include-tags]
 overleaf-web-mcp files read <projectId> <path>
-overleaf-web-mcp files write <projectId> <path> --revision <r> (--content-file <f> | --stdin) [--tracked]
+overleaf-web-mcp files write <projectId> <path> --revision <r> (--content-file <f> | --stdin | --edits-file <f>) [--tracked]
 overleaf-web-mcp files download <projectId> <path> <localPath> [--overwrite]
 overleaf-web-mcp sync plan <projectId> <localFolder> [--destination <path>] [--ignore <glob>]... [--verbose] [--progress]
 overleaf-web-mcp sync apply <projectId> <localFolder> --mode additive|mirror (--plan-token <t> | --unplanned) [--destination <path>] [--ignore <glob>]... [--confirm-delete-count <n>] [--tracked] [--stop-on-error] [--progress]
@@ -94,7 +94,7 @@ prints the help and exits 0.
 | `tags remove` | `manage_tags` | as `tags add`, with `action: "remove_projects"` | <!-- md:version 1.2.0 --> |
 | `tree` | `get_project_tree` | `<projectId>` `projectId`, `--include-tags` `includeTags: true` <!-- md:version 1.2.0 --> | <!-- md:version 0.7.0 --> |
 | `files read` | `read_file` | `<path>` `filePath` | <!-- md:version 0.7.0 --> |
-| `files write` | `write_file` | `<path>` `filePath`, `--revision` `revision`, `--content-file` `localPath`, `--stdin` `content`, `--tracked` `writeMode: "tracked"` | <!-- md:version 0.7.0 --> |
+| `files write` | `write_file` | `<path>` `filePath`, `--revision` `revision`, `--content-file` `localPath`, `--stdin` `content`, `--edits-file` `edits` <!-- md:version 1.2.0 -->, `--tracked` `writeMode: "tracked"` | <!-- md:version 0.7.0 --> |
 | `files download` | `download_file` | `<path>` `filePath`, `<localPath>` `localPath`, `--overwrite` `overwrite: true` | <!-- md:version 0.7.0 --> |
 | `sync plan` | `plan_sync` | `<localFolder>` `localFolderPath`, `--destination` `destinationFolderPath`, each `--ignore` one `ignore` pattern, `--verbose` `verbose: true` | <!-- md:version 0.7.0 --> |
 | `sync apply` | `sync_directory` | as `sync plan`, plus `--mode` `mode`, `--plan-token` `planToken`, `--unplanned` `unplanned: true`, `--confirm-delete-count` `confirmDeleteCount`, `--tracked` `writeMode: "tracked"`, `--stop-on-error` `stopOnError: true` | <!-- md:version 0.7.0 --> |
@@ -108,10 +108,13 @@ prints the help and exits 0.
 
 A few rules the table does not show:
 
-- `files write` takes exactly one of `--content-file` and `--stdin`. `--content-file` is passed as
-  `write_file`'s `localPath`, so the operation reads the file itself and
-  `OVERLEAF_LOCAL_READ_ROOTS` applies. `--stdin` reads all of stdin as UTF-8 text; a leading byte
-  order mark is dropped and invalid UTF-8 is refused.
+- `files write` takes exactly one of `--content-file`, `--stdin`, and `--edits-file`.
+  `--content-file` is passed as `write_file`'s `localPath`, so the operation reads the file itself
+  and `OVERLEAF_LOCAL_READ_ROOTS` applies. `--stdin` reads all of stdin as UTF-8 text; a leading
+  byte order mark is dropped and invalid UTF-8 is refused. `--edits-file` names a UTF-8 file
+  holding a JSON array of `{ "oldText": ..., "newText": ... }`, which becomes `edits`; the command
+  reads it, as `call` reads `--request`, and a file it cannot read or parse exits 2 before any
+  session is opened, without quoting it.
 - A `planToken` is bound to the local folder, `--destination`, and `--ignore`, so `sync apply`
   needs the same values `sync plan` was given. Mirror mode needs `--confirm-delete-count`.
 - `compile log` and `compile download` require `--build-ref`.

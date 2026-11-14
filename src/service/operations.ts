@@ -27,6 +27,8 @@ type Implementation<N extends OperationName> = (
 function guarded<N extends OperationName>(policy: AccessPolicy, name: N, run: Implementation<N>): OperationHandler<N> {
   return async (input: OperationInput<N>, context: OperationContext = {}) => {
     try {
+      // Parsed input already passed this from the command line and the SDK; an MCP call meets it here.
+      operationContract(name).checkInput?.(input ?? {})
       const fields = (input ?? {}) as { projectId?: unknown; sourceProjectId?: unknown }
       if (typeof fields.projectId === 'string') policy.assertProject(fields.projectId)
       if (typeof fields.sourceProjectId === 'string') policy.assertProject(fields.sourceProjectId, 'sourceProjectId')
@@ -178,7 +180,7 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
           input.projectId,
           input.filePath,
           input.revision,
-          await resolveTextContent(input, runtime.policy),
+          input.edits !== undefined ? { edits: input.edits } : await resolveTextContent(input, runtime.policy),
           input.writeMode
         )
     ),

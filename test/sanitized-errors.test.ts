@@ -8,6 +8,7 @@ import { describe, expect, test, vi } from 'vitest'
 
 import { asMcpError } from '../src/core/errors.js'
 import { FifoQueue } from '../src/core/queue.js'
+import { applyTextEdits } from '../src/core/text-edits.js'
 import { OverleafHttpClient } from '../src/http/client.js'
 import { CompileApi } from '../src/overleaf/compile.js'
 import { EntitiesApi } from '../src/overleaf/entities.js'
@@ -52,6 +53,21 @@ function joinedConnection(peer: SocketIo09Peer): ProjectConnection {
     applyTimeoutMs: 1_000,
   })
 }
+
+describe('document text never reaches an edit error', () => {
+  test('an oldText that matches nowhere or twice, and an empty one', async () => {
+    const document = `${SENTINEL} once\n${SENTINEL}-twice ${SENTINEL}-twice\n`
+    for (const edits of [
+      [{ oldText: `${SENTINEL} missing`, newText: SENTINEL }],
+      [{ oldText: `${SENTINEL}-twice`, newText: SENTINEL }],
+      [{ oldText: '', newText: SENTINEL }],
+    ]) {
+      const failure = await serializedFailure(async () => applyTextEdits(document, edits))
+      expect(failure).toContain('INVALID_ARGUMENT')
+      expect(failure).not.toContain(SENTINEL)
+    }
+  })
+})
 
 describe('upstream text never reaches an error', () => {
   test('an otUpdateError quoting document text', async () => {
