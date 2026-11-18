@@ -37,6 +37,8 @@ export interface PreflightInputs {
   serverVersion: string | undefined
   /** `version` and each package entry's `version` in `server.json`. */
   serverJsonVersions: string[]
+  /** `version` in `manifest.json`, the Claude Desktop extension manifest. */
+  manifestVersion: string | undefined
   installed: InstalledPackage[]
   instructions: string
 }
@@ -79,6 +81,7 @@ export function evaluatePreflight(inputs: PreflightInputs): Check[] {
       index === 0 ? 'server.json' : `server.json package ${index}`,
       value,
     ]),
+    ['manifest.json', inputs.manifestVersion],
   ]
   const differing = sources.filter(([, value]) => value === undefined || value !== version)
   checks.push({
@@ -153,6 +156,8 @@ export async function gatherPreflight(root: string, environment: PreflightEnviro
     packages?: Array<{ version?: unknown }>
   }
 
+  const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as { version?: unknown }
+
   const tags = attempt(() => environment.run('git', ['tag', '--list', 'v*', '--sort=-v:refname']))
   const latestTag = tags
     ?.split('\n')
@@ -169,6 +174,7 @@ export async function gatherPreflight(root: string, environment: PreflightEnviro
     packageJson,
     serverVersion: /^export const SERVER_VERSION = '([^']*)'$/mu.exec(versionSource)?.[1],
     serverJsonVersions: [server.version, ...(server.packages ?? []).map(entry => entry.version)].map(String),
+    manifestVersion: typeof manifest.version === 'string' ? manifest.version : undefined,
     installed: installed.map(({ name, version, location }) => ({ name, version, location })),
     instructions: await environment.instructions(),
   }

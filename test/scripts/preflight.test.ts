@@ -32,7 +32,7 @@ async function copyOfRepository(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'overleaf-preflight-'))
   folders.push(root)
   await mkdir(join(root, 'src'))
-  for (const path of ['package.json', 'server.json', 'src/version.ts'])
+  for (const path of ['package.json', 'server.json', 'manifest.json', 'src/version.ts'])
     await cp(join(repository, path), join(root, path))
   return root
 }
@@ -83,6 +83,17 @@ describe('preflight', () => {
     expect(await failing(root)).toEqual(['versions agree'])
     const [agree] = evaluatePreflight(await gatherPreflight(root, environment()))
     expect(agree!.detail).toContain('server.json 0.0.1')
+  })
+
+  test('fails when the extension manifest names a different version', async () => {
+    const root = await copyOfRepository()
+    const path = join(root, 'manifest.json')
+    const manifest = JSON.parse(await readFile(path, 'utf8'))
+    manifest.version = '0.0.1'
+    await writeFile(path, JSON.stringify(manifest, null, 2))
+    expect(await failing(root)).toEqual(['versions agree'])
+    const [agree] = evaluatePreflight(await gatherPreflight(root, environment()))
+    expect(agree!.detail).toContain('manifest.json 0.0.1')
   })
 
   test('fails when npm, the latest tag, or SERVER_VERSION disagree, or npm cannot be reached', async () => {

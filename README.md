@@ -86,7 +86,7 @@ Add this to the client's MCP configuration:
 }
 ```
 
-VS Code uses a `servers` key and `"type": "stdio"` instead; the [installation guide](https://mhmdaskari.github.io/overleaf-web-mcp/install/) has the exact block for each client.
+Claude Desktop can instead install the extension file attached to each [release](https://github.com/mhmdaskari/overleaf-web-mcp/releases/latest), which runs on its own Node.js; see [Claude Desktop](https://mhmdaskari.github.io/overleaf-web-mcp/install/#2-connect-your-mcp-client) in the guide. VS Code uses a `servers` key and `"type": "stdio"` instead; the [installation guide](https://mhmdaskari.github.io/overleaf-web-mcp/install/) has the exact block for each client.
 
 </details>
 

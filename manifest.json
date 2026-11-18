@@ -1,0 +1,65 @@
+{
+  "manifest_version": "0.4",
+  "name": "overleaf-web-mcp",
+  "display_name": "Overleaf Web MCP",
+  "version": "1.2.0",
+  "description": "Read, edit, compile, and review your Overleaf projects through your own signed-in web session.",
+  "long_description": "An unofficial MCP server for Overleaf, not affiliated with Overleaf. It works through the web session you save once with `npx overleaf-web-mcp login`, so it reaches the projects your account can open, on overleaf.com or a self-hosted Overleaf. Every edit is checked against the revision it was read at, tracked changes are supported, and destructive tools ask for an explicit confirmation value.",
+  "author": {
+    "name": "Mohammad Askari",
+    "url": "https://github.com/mhmdaskari"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mhmdaskari/overleaf-web-mcp.git"
+  },
+  "homepage": "https://mhmdaskari.github.io/overleaf-web-mcp/",
+  "documentation": "https://mhmdaskari.github.io/overleaf-web-mcp/install/",
+  "support": "https://github.com/mhmdaskari/overleaf-web-mcp/issues",
+  "license": "MIT",
+  "keywords": ["overleaf", "latex", "manuscript", "compile", "comments", "track-changes"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/cli.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/cli.js", "serve"],
+      "env": {
+        "OVERLEAF_BASE_URL": "${user_config.base_url}",
+        "OVERLEAF_ALLOWED_PROJECTS": "${user_config.allowed_projects}",
+        "OVERLEAF_BROWSER_PATH": "${user_config.browser_path}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "prompts_generated": true,
+  "user_config": {
+    "base_url": {
+      "type": "string",
+      "title": "Overleaf address",
+      "description": "The Overleaf server to use. Change it only for a self-hosted Overleaf, and sign in to that address.",
+      "required": false,
+      "default": "https://www.overleaf.com"
+    },
+    "allowed_projects": {
+      "type": "string",
+      "title": "Allowed project ids",
+      "description": "Comma-separated project ids the server may open. Leave it empty to allow every project your account can open.",
+      "required": false,
+      "default": ""
+    },
+    "browser_path": {
+      "type": "string",
+      "title": "Browser for signing in",
+      "description": "Full path to Google Chrome, Chromium, Brave, or Microsoft Edge, used to open the Overleaf sign-in window. Leave it empty to find one automatically.",
+      "required": false,
+      "default": ""
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32"],
+    "runtimes": {
+      "node": ">=20"
+    }
+  }
+}
