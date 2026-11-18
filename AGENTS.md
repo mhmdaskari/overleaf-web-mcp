@@ -108,7 +108,9 @@ Windows and macOS with Node 24, for every push and pull request. For the docs si
 - Live tests are opt-in with `RUN_OVERLEAF_LIVE_TESTS=1` and must target a disposable project
   the maintainer owns. Never point them at a real manuscript.
 - `test/mcp/tools.test.ts` asserts the README badge, every "All N tools", the Tools cell of the
-  README's comparison and of `docs/comparison.md`, and `docs/tools.md` agree with `TOOL_NAMES`. Update them when adding or removing a tool.
+  README's comparison and of `docs/comparison.md`, and `docs/tools.md` agree with
+  `LISTED_TOOL_NAMES`, the operations plus the MCP-only `sign_in`. Update them when adding or
+  removing a tool.
 - `test/server.test.ts` compares `tools/list` with `test/__snapshots__/list-tools.json`. Update the
   snapshot (`npx vitest run -u`) only for a change listed in `CHANGELOG.md`.
 - The golden tests in `test/golden/` (with `test/helpers/golden.ts`) snapshot tool results taken
@@ -301,8 +303,9 @@ the rest need a person:
   prints `(empty)`, and `npm ls zod @modelcontextprotocol/core` shows one copy of each. Note which
   MCP protocol versions the server answers and whether the SDK added one.
 - `SERVER_INSTRUCTIONS` (`src/mcp/instructions.ts`) is under the 450-word bound in
-  `test/server.test.ts`; it was 445 words at 1.0.0, so a release that adds guidance trims
-  elsewhere. The `tools/list` size cap in the same file was 58,992 of 60,000 characters at 1.2.0.
+  `test/server.test.ts`; it was 445 words at 1.0.0 and 446 at 1.3.0, so a release that adds
+  guidance trims elsewhere. The `tools/list` size cap in the same file was 58,992 of 60,000
+  characters at 1.2.0 and 59,551 at 1.3.0, with `sign_in`.
 - Every Overleaf route or socket message the release will touch is still in Overleaf's source as
   `docs/private-api.md` describes it.
 - The comparison in the README was checked on the date it states; re-check the projects it names
@@ -336,12 +339,12 @@ the rest need a person:
    `npm run build`, `npx tsx scripts/check-pack.ts`, and `mkdocs build --strict` all pass.
 5. **Live tests.** Any release that changes code under `src/overleaf/`, `src/protocol/`,
    `src/http/`, `src/auth/`, `src/core/`, or `src/service/`, or in `src/runtime.ts`,
-   `src/config.ts`, or `src/cli/doctor.ts`, runs the live suites (see `docs/development.md`)
-   against a disposable project the maintainer owns: each file in its own run, after
-   `npm run build`, with a minute between files for Overleaf's join limit. Check afterwards that
-   every throwaway project is in the trash (`projects list --query mcp- --include-trashed`), and
-   tell the maintainer to empty it; the suites never delete. A failure that comes from the
-   account's plan, such as track changes being off, is reported, not patched around.
+   `src/session-runtime.ts`, `src/config.ts`, or `src/cli/doctor.ts`, runs the live suites (see
+   `docs/development.md`) against a disposable project the maintainer owns: each file in its own
+   run, after `npm run build`, with a minute between files for Overleaf's join limit. Check
+   afterwards that every throwaway project is in the trash (`projects list --query mcp-
+   --include-trashed`), and tell the maintainer to empty it; the suites never delete. A failure that
+   comes from the account's plan, such as track changes being off, is reported, not patched around.
 6. **Pull request.** The description says what changed, which issues it closes, which live suites
    ran and with what result, and what was left out. Read it back after creating it and remove any
    footer or link a tool added. Merge to `main` with CI green.

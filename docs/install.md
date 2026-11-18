@@ -58,8 +58,8 @@ Using only the command line or the TypeScript library? Skip to
     args = ["-y", "overleaf-web-mcp", "serve"]
     ```
 
-    The Codex app, the command line, and the IDE extension share this file
-    <!-- md:version 1.3.0 -->, so one entry serves all three. Codex stops waiting for a tool after
+    The ChatGPT desktop app, where Codex now lives, the Codex command line, and the IDE
+    extension share this file <!-- md:version 1.3.0 -->, so one entry serves all three. Codex stops waiting for a tool after
     60 seconds by default (`tool_timeout_sec`), which is why [`sign_in`](tools.md#sign_in)
     answers `waiting` while you sign in. If the app was installed from the App Store as ChatGPT
     and reports `ENOENT` for the server, see
