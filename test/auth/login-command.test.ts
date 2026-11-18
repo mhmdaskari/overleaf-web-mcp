@@ -1,4 +1,4 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -6,14 +6,16 @@ import lockfile from 'proper-lockfile'
 import { CookieJar } from 'tough-cookie'
 import { describe, expect, test, vi } from 'vitest'
 
+import { captureBrowserSession, type CdpTransport } from '../../src/auth/browser-login.js'
 import { runLoginCommand } from '../../src/auth/login-command.js'
 import { readConfig } from '../../src/config.js'
 
 describe('login command', () => {
   test('captures, securely persists, and verifies a browser session', async () => {
+    const configRoot = await mkdtemp(join(tmpdir(), 'overleaf-login-test-'))
     const config = readConfig(
       {
-        XDG_CONFIG_HOME: '/tmp/overleaf-login-test',
+        XDG_CONFIG_HOME: configRoot,
         OVERLEAF_BASE_URL: 'https://overleaf.test',
       },
       { platform: 'linux', homeDir: '/home/alice' }
@@ -34,7 +36,7 @@ describe('login command', () => {
         captureSession: async options => {
           expect(options).toMatchObject({
             baseUrl: 'https://overleaf.test',
-            browserProfileDir: '/tmp/overleaf-login-test/overleaf-web-mcp/chrome-profile',
+            browserProfileDir: join(configRoot, 'overleaf-web-mcp', 'chrome-profile'),
             timeoutMs: 300_000,
           })
           options.onStatus?.('Browser ready.')
@@ -64,7 +66,7 @@ describe('login command', () => {
       authenticated: true,
       baseUrl: 'https://overleaf.test',
       projectCount: 2,
-      cookieJarFile: '/tmp/overleaf-login-test/overleaf-web-mcp/cookies.txt',
+      cookieJarFile: join(configRoot, 'overleaf-web-mcp', 'cookies.txt'),
       cookiesCaptured: 1,
       permissionsUnchecked: false,
     })
@@ -126,5 +128,65 @@ describe('login command', () => {
     await expect(login).rejects.toThrow('stopped')
     expect(persistSession).not.toHaveBeenCalled()
     expect(await lockfile.check(config.browserProfileDir)).toBe(false)
+  })
+
+  test.each([
+    ['the sign-in times out', 'TIMEOUT', false],
+    ['the window is closed', 'AUTH_EXPIRED', true],
+  ])('leaves an existing session file byte-for-byte unchanged when %s', async (_case, code, closes) => {
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-login-unchanged-'))
+    const config = readConfig({
+      OVERLEAF_COOKIE_JAR_FILE: join(directory, 'cookies.txt'),
+      OVERLEAF_BROWSER_PROFILE_DIR: join(directory, 'profile'),
+      OVERLEAF_BASE_URL: 'https://www.overleaf.test',
+      OVERLEAF_LOGIN_TIMEOUT_MS: '10',
+    })
+    await writeFile(
+      config.cookieJarFile,
+      '# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t2147483647\toverleaf.sid\texpired\n',
+      { mode: 0o600 }
+    )
+    const before = { bytes: await readFile(config.cookieJarFile), mtime: (await stat(config.cookieJarFile)).mtimeMs }
+    // The real capture and the real writeCookieJar, with only the browser faked: still on the login page.
+    const cdp: CdpTransport = {
+      closed: false,
+      async send<T>(method: string): Promise<T> {
+        if (method === 'Target.getTargets') return { targetInfos: [{ targetId: 'page-1', type: 'page' }] } as T
+        if (method === 'Target.attachToTarget') return { sessionId: 'session-1' } as T
+        if (method === 'Runtime.evaluate') {
+          return {
+            result: { value: { origin: 'https://www.overleaf.test', pathname: '/login', csrfToken: null } },
+          } as T
+        }
+        return {} as T
+      },
+      close: vi.fn(),
+    }
+    let now = 0
+    const browser = { exitCode: null as number | null, kill: () => true }
+
+    await expect(
+      runLoginCommand(
+        config,
+        {},
+        {
+          captureSession: async options =>
+            await captureBrowserSession(options, {
+              findChrome: async () => '/opt/chrome',
+              spawnChrome: () => browser,
+              readEndpoint: async () => 'ws://127.0.0.1/devtools/browser/id',
+              connectCdp: async () => cdp,
+              sleep: async () => {
+                now += 4
+                if (closes) browser.exitCode = 0
+              },
+              now: () => now,
+            }),
+        }
+      )
+    ).rejects.toMatchObject({ code })
+
+    expect(await readFile(config.cookieJarFile)).toEqual(before.bytes)
+    expect((await stat(config.cookieJarFile)).mtimeMs).toBe(before.mtime)
   })
 })

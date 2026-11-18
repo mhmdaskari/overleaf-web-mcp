@@ -24,7 +24,7 @@
         {
           "type": "positional",
           "value": "serve",
-          "description": "Run the MCP server over stdio. Sign in once first with `npx overleaf-web-mcp login`."
+          "description": "Run the MCP server over stdio. Sign in with `npx overleaf-web-mcp login`, or from the client with the sign_in tool."
         }
       ],
       "environmentVariables": [
