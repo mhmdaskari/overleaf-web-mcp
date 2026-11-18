@@ -1,13 +1,26 @@
 # Changelog
 
-All notable changes to this project are documented here. This project follows
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). From 1.0.0 it covers the tool names,
-input schemas, result shapes, and error codes; the command line's commands, flags, request
-format, output framing, and exit codes; the `overleaf-web-mcp/core` surface the
-[SDK page](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) lists as stable; and the
-`capabilities` report. A breaking change to any of them waits for a major version, a deprecation
-is announced at least one minor version ahead with both names working, and every change is listed
-below. Before 1.0.0, a minor or patch release could change them, and each such change is listed.
+All notable changes to this project are documented here. This project follows [Semantic
+Versioning](https://semver.org/spec/v2.0.0.html). From 1.0.0 it covers the tool names, input
+schemas, result shapes, and error codes, and from 1.3.0 the MCP prompt names and arguments; the
+command line's commands, flags, request format, output framing, and exit codes; the
+`overleaf-web-mcp/core` surface the [SDK page](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/)
+lists as stable; and the `capabilities` report. A breaking change to any of them waits for a major
+version, a deprecation is announced at least one minor version ahead with both names working, and
+every change is listed below. Before 1.0.0, a minor or patch release could change them, and each
+such change is listed.
+
+## [1.3.0] - Unreleased
+
+### Added
+
+- MCP prompts (#56): `revise_manuscript`, `address_reviewer_comments`, and `sync_sources`, the
+  three workflows of the Agent Skills written for tool calls. `prompts/list` offers them on both
+  protocol eras, and `prompts/get` returns one user message with the steps and the arguments
+  filled in as quoted strings. Every argument is optional and at most 4,096 characters; an
+  unknown argument is refused. A prompt runs nothing and reads no session. Under
+  `OVERLEAF_TOOLSETS`, a prompt is offered only when every tool it names is. `tools/list` is
+  unchanged, and the command line and SDK are unchanged.
 
 ## [1.2.0] - 2026-11-14
 

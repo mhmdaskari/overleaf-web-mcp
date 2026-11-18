@@ -124,6 +124,13 @@ export interface ToolRegistrationOptions {
   toolsets?: readonly Toolset[] | undefined
 }
 
+/** The tools `registerOverleafTools` registers under these options, in order. */
+export function offeredToolNames(options: Pick<ToolRegistrationOptions, 'toolsets'> = {}): string[] {
+  return OPERATION_NAMES.filter(
+    name => options.toolsets === undefined || options.toolsets.includes(OPERATIONS[name].toolset)
+  )
+}
+
 /**
  * Registers one MCP tool per operation in the contract registry. A handler parses nothing (the
  * SDK validated the input against the same schema), makes one service call, and renders the
