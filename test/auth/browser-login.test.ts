@@ -76,6 +76,7 @@ describe('browser-assisted login', () => {
       },
       {
         findChrome: async () => '/opt/chrome',
+        browserEnvironment: async () => ({}),
         spawnChrome: () => process,
         readEndpoint: async () => 'ws://127.0.0.1/devtools/browser/id',
         connectCdp: async () => cdp,
@@ -128,6 +129,7 @@ describe('browser-assisted login', () => {
         },
         {
           findChrome: async () => '/opt/chrome',
+          browserEnvironment: async () => ({}),
           spawnChrome: () => ({ exitCode: null, kill: () => true }),
           readEndpoint: async () => 'ws://127.0.0.1/devtools/browser/id',
           connectCdp: async () => cdp,
@@ -172,6 +174,7 @@ describe('browser-assisted login', () => {
         },
         {
           findChrome: async () => '/opt/chrome',
+          browserEnvironment: async () => ({}),
           spawnChrome: () => ({ exitCode: null, kill }),
           readEndpoint: async () => 'ws://127.0.0.1/devtools/browser/id',
           connectCdp: async () => cdp,
@@ -204,6 +207,48 @@ describe('browser-assisted login', () => {
         { findChrome: async () => '/opt/chrome', spawnChrome }
       )
     ).rejects.toMatchObject({ code: 'TIMEOUT' })
+    expect(spawnChrome).not.toHaveBeenCalled()
+  })
+  test('starts Chrome with the environment that names the desktop display', async () => {
+    const profileDir = await mkdtemp(join(tmpdir(), 'overleaf-browser-display-'))
+    const stopped = new McpError('TIMEOUT', 'The sign-in was stopped.')
+    const spawnChrome = vi.fn(() => ({ exitCode: null, kill: () => true }))
+
+    await expect(
+      captureBrowserSession(
+        { baseUrl: 'https://www.overleaf.test', browserProfileDir: profileDir, timeoutMs: 60_000 },
+        {
+          findChrome: async () => '/opt/chrome',
+          browserEnvironment: async () => ({ PATH: '/usr/bin', WAYLAND_DISPLAY: 'wayland-0' }),
+          spawnChrome,
+          readEndpoint: async () => {
+            throw stopped
+          },
+        }
+      )
+    ).rejects.toBe(stopped)
+    expect(spawnChrome).toHaveBeenCalledWith('/opt/chrome', expect.any(Array), {
+      PATH: '/usr/bin',
+      WAYLAND_DISPLAY: 'wayland-0',
+    })
+  })
+
+  test('opens no window when no desktop display can be found', async () => {
+    const profileDir = await mkdtemp(join(tmpdir(), 'overleaf-browser-no-display-'))
+    const spawnChrome = vi.fn()
+
+    await expect(
+      captureBrowserSession(
+        { baseUrl: 'https://www.overleaf.test', browserProfileDir: profileDir, timeoutMs: 60_000 },
+        {
+          findChrome: async () => '/opt/chrome',
+          browserEnvironment: async () => {
+            throw new McpError('NOT_FOUND', 'No desktop display.', { details: { reason: 'no_display' } })
+          },
+          spawnChrome,
+        }
+      )
+    ).rejects.toMatchObject({ code: 'NOT_FOUND', details: { reason: 'no_display' } })
     expect(spawnChrome).not.toHaveBeenCalled()
   })
 })

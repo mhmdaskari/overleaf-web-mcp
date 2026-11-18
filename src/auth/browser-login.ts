@@ -7,6 +7,7 @@ import { Cookie, CookieJar } from 'tough-cookie'
 import { McpError } from '../core/errors.js'
 import { CdpClient } from './cdp.js'
 import { chromeLaunchArguments, findChromeExecutable, readDevToolsEndpoint } from './chrome.js'
+import { chromeEnvironment } from './display.js'
 
 export interface BrowserProcess {
   exitCode: number | null
@@ -41,7 +42,9 @@ export interface BrowserLoginOptions {
 
 export interface BrowserLoginDependencies {
   findChrome?: (explicitPath?: string) => Promise<string>
-  spawnChrome?: (executable: string, args: string[]) => BrowserProcess
+  /** The environment Chrome starts with; on Linux it names the desktop display. */
+  browserEnvironment?: () => Promise<NodeJS.ProcessEnv>
+  spawnChrome?: (executable: string, args: string[], env: NodeJS.ProcessEnv) => BrowserProcess
   readEndpoint?: (profileDir: string, timeoutMs?: number) => Promise<string>
   connectCdp?: (url: string) => Promise<CdpTransport>
   sleep?: (ms: number) => Promise<void>
@@ -86,7 +89,9 @@ export async function captureBrowserSession(
   const findChrome = dependencies.findChrome ?? findChromeExecutable
   const spawnChrome =
     dependencies.spawnChrome ??
-    ((executable: string, args: string[]) => spawn(executable, args, { stdio: 'ignore', detached: false }))
+    ((executable: string, args: string[], env: NodeJS.ProcessEnv) =>
+      spawn(executable, args, { env, stdio: 'ignore', detached: false }))
+  const browserEnvironment = dependencies.browserEnvironment ?? (async () => await chromeEnvironment())
   const readEndpoint = dependencies.readEndpoint ?? readDevToolsEndpoint
   const connectCdp = dependencies.connectCdp ?? (async (url: string) => await CdpClient.connect(url))
   const sleep = dependencies.sleep ?? (async (ms: number) => await new Promise(resolve => setTimeout(resolve, ms)))
@@ -102,8 +107,9 @@ export async function captureBrowserSession(
   // Chrome may leave this discovery file behind after an unclean exit.
   await rm(join(options.browserProfileDir, 'DevToolsActivePort'), { force: true })
   const executable = await findChrome(options.browserPath)
+  const env = await browserEnvironment()
   options.onStatus?.('Opening a dedicated Chrome window for Overleaf login...')
-  const browser = spawnChrome(executable, chromeLaunchArguments(options.browserProfileDir))
+  const browser = spawnChrome(executable, chromeLaunchArguments(options.browserProfileDir), env)
   let cdp: CdpTransport | undefined
   try {
     const endpoint = await readEndpoint(options.browserProfileDir, 10_000)

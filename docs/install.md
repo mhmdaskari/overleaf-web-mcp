@@ -69,8 +69,9 @@ Using only the command line or the TypeScript library? Skip to
 
     **As an extension** <!-- md:version 1.3.0 -->. Download `overleaf-web-mcp-X.Y.Z.mcpb` from
     the [latest release](https://github.com/mhmdaskari/overleaf-web-mcp/releases/latest) and open
-    it; Claude Desktop shows an install dialog. On macOS and Windows, the extension runs on the
-    Node.js that Claude Desktop ships with, so an older `node` on your `PATH` does not matter.
+    it; Claude Desktop shows an install dialog. On macOS, Windows, and Linux, the extension runs
+    on the Node.js that Claude Desktop ships with, so an older `node` on your `PATH` does not
+    matter.
 
     - No terminal is needed: once installed, ask Claude to sign you in to Overleaf, and it opens
       the sign-in window with [`sign_in`](tools.md#sign_in). Without a saved session the
@@ -229,6 +230,13 @@ Node.js installed with nvm, Homebrew, or a version manager is not on its `PATH`,
 `command -v npx` on macOS and Linux, or `where npx` on Windows, and put that in `command`, or
 use the absolute `node` and `dist/cli.js` paths as in the nvm example above. Claude Desktop's
 extension needs neither, as it brings its own Node.js.
+
+**`NOT_FOUND` with `details.reason: "no_display"` from `sign_in` on Linux.**
+<!-- md:version 1.3.0 --> Desktop apps start servers without `DISPLAY` or `WAYLAND_DISPLAY`, and
+the server reads them from your systemd user session instead, which desktops such as GNOME set.
+When that fails, as under another session manager, add `DISPLAY` (often `:0`) or
+`WAYLAND_DISPLAY` (often `wayland-0`) to the server's `env` block, or sign in from a terminal
+with `npx overleaf-web-mcp login`.
 
 **Not sure which part is failing.** Run `npx overleaf-web-mcp doctor`, and with a project id
 `npx overleaf-web-mcp doctor <projectId>`. It reports each check as `ok`, `failed` with its error
