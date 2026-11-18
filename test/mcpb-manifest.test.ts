@@ -91,6 +91,6 @@ describe('Claude Desktop extension manifest', () => {
   })
 
   test('targets the systems Claude Desktop runs on', () => {
-    expect([...manifest.compatibility.platforms].sort()).toEqual(['darwin', 'win32'])
+    expect([...manifest.compatibility.platforms].sort()).toEqual(['darwin', 'linux', 'win32'])
   })
 })
