@@ -71,7 +71,7 @@ codex mcp add overleaf -- npx -y overleaf-web-mcp serve
 ```
 
 <details>
-<summary>Claude Desktop, Cursor, VS Code, and other clients</summary>
+<summary>Claude Desktop, Cursor, Antigravity, VS Code, and other clients</summary>
 
 Add this to the client's MCP configuration:
 
@@ -230,7 +230,7 @@ Against the three most-starred Overleaf MCP servers and the two closest in desig
 
 | Page | What it covers |
 | --- | --- |
-| [Install](https://mhmdaskari.github.io/overleaf-web-mcp/install/) | Claude Code, Codex, Claude Desktop, Cursor, VS Code, the command line alone, self-hosted Overleaf, troubleshooting |
+| [Install](https://mhmdaskari.github.io/overleaf-web-mcp/install/) | Claude Code, Codex, Claude Desktop, Cursor, Antigravity, VS Code, the command line alone, self-hosted Overleaf, troubleshooting |
 | [Using it](https://mhmdaskari.github.io/overleaf-web-mcp/using/) | Example prompts and what happens underneath |
 | [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 37 tools with parameters and results |
 | [Command line](https://mhmdaskari.github.io/overleaf-web-mcp/cli/) | Every command, request formats, output, exit codes, and the Agent Skills |

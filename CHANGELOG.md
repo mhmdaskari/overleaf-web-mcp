@@ -70,6 +70,15 @@ such change is listed.
   file alone when a cookie it changes no longer holds the value it had, and only that process's
   own session fails with `AUTH_EXPIRED`.
 
+### Documentation
+
+- The installation guide covers Antigravity, with its configuration files and where to open them;
+  the Codex app, which shares `config.toml` with the Codex command line; and an "Add to Cursor"
+  link that installs `npx -y overleaf-web-mcp serve`. Troubleshooting explains the
+  "`spawn npx ENOENT`" of apps opened from the Dock or Start menu, and the toolsets section
+  explains clients that cap the number of tools. `test/docs-install.test.ts` checks every client
+  block, registration command, and the Cursor link against the definition in `server.json`.
+
 ### Internal
 
 - `scripts/build-mcpb.ts` builds the extension after `npm run build`. It installs the production
