@@ -3,7 +3,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import { describe, expect, test } from 'vitest'
 
 import { ALIASES } from '../src/cli/commands.js'
-import { OPERATION_NAMES } from '../src/contracts/operations.js'
+import { LISTED_TOOL_NAMES } from '../src/mcp/tools.js'
 import { ERROR_CODES } from '../src/contracts/error-codes.js'
 
 // The documentation site tags each feature with the release that introduced it, as
@@ -58,7 +58,7 @@ describe('version tags in the documentation', () => {
     const tagged = [...reference.matchAll(/^### `([a-z_]+)`[^\n]*\n\n<!-- md:version \S+ -->$/gmu)].map(
       match => match[1]
     )
-    expect([...tagged].sort()).toEqual([...OPERATION_NAMES].sort())
+    expect([...tagged].sort()).toEqual([...LISTED_TOOL_NAMES].sort())
   })
 
   test('tag every command in the docs/cli.md Commands tables', async () => {

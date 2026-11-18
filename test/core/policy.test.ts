@@ -71,6 +71,13 @@ describe('access policy', () => {
     await expect(policy.resolveLocalRead('/x')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
   })
 
+  test('says whether an effect is allowed, so a tool needing it can be left out', async () => {
+    const restricted = await AccessPolicy.create({ allowedEffects: ['overleaf-read'] })
+    expect(restricted.allowsEffect('overleaf-read')).toBe(true)
+    expect(restricted.allowsEffect('sign-in')).toBe(false)
+    expect((await AccessPolicy.create({})).allowsEffect('sign-in')).toBe(true)
+  })
+
   test('keeps local reads inside the read roots, judging a link by where it leads', async () => {
     const { inside, outside } = await folders()
     await symlink(join(outside, 'secret.tex'), join(inside, 'link.tex'))

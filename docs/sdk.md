@@ -127,7 +127,7 @@ from `OVERLEAF_TOOLSETS`; only `serve` reads it, and absent offers every tool.
 | Export | What it is | Since |
 | --- | --- | --- |
 | `createOverleafClient` | `createOverleafClient(options?)` opens the session and returns an `OverleafClient`. `options.config` defaults to `readConfig()`. | <!-- md:version 0.7.0 --> |
-| `OverleafClient` | The client type: one method per tool, plus `close()`. | <!-- md:version 0.7.0 --> |
+| `OverleafClient` | The client type: one method per operation, which is every tool but `sign_in`, plus `close()`. | <!-- md:version 0.7.0 --> |
 | `OverleafClientOptions` | `createOverleafClient`'s options. Only `config` is public. | <!-- md:version 0.7.0 --> |
 | `OperationMethod` | The type of one client method. | <!-- md:version 0.7.0 --> |
 | `CamelCase` | The method name for a tool name, as a type: `CamelCase<'read_file'>` is `'readFile'`. | <!-- md:version 0.7.0 --> |
@@ -149,7 +149,7 @@ from `OVERLEAF_TOOLSETS`; only `serve` reads it, and absent offers every tool.
 | `ProgressReporter` | The type of `onProgress`. | <!-- md:version 0.5.0 --> |
 | `OperationDiagnostic` | What `onDiagnostic` receives. | <!-- md:version 0.5.0 --> |
 | `OperationContract`, `OperationAnnotations` | The shape of one `OPERATIONS` entry and its MCP annotations. | <!-- md:version 0.5.0 --> |
-| `EFFECTS`, `READ_EFFECTS`, `Effect` | The effects an operation can have, as the [access policy](configuration.md#access-policy) names them. | <!-- md:version 0.5.0 --> |
+| `EFFECTS`, `READ_EFFECTS`, `Effect` | The effects an operation can have, as the [access policy](configuration.md#access-policy) names them. `sign-in`, the effect of the MCP tool `sign_in` alone, was added in 1.3.0. | <!-- md:version 0.5.0 --> |
 | `WriteMode` | `"untracked"` or `"tracked"`. | <!-- md:version 0.5.0 --> |
 | `SERVER_VERSION` | The package version. | <!-- md:version 0.5.0 --> |
 

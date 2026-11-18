@@ -28,6 +28,21 @@ such change is listed.
   project ids (`OVERLEAF_ALLOWED_PROJECTS`, default empty, which allows every project), and the
   browser used to sign in (`OVERLEAF_BROWSER_PATH`, default empty, found automatically).
 
+- `sign_in` (#54), an MCP tool that opens a browser window on the user's computer for them to
+  sign in to Overleaf and saves the session, as `npx overleaf-web-mcp login` does, so a client
+  with no terminal can sign in. A session that already works is returned with `status:
+  "signed_in"` and `alreadySignedIn: true`, and nothing opens. Otherwise the sign-in runs in the
+  background: the call waits up to 40 seconds, under the usual 60-second tool-call timeout, and
+  answers `status: "waiting"` with `deadline` while the user signs in; a later call answers
+  `signed_in` with the `auth_status` fields. A failed sign-in is reported once by the next call,
+  which opens nothing. While a window is open, other tools, and a second `login`, fail with
+  `AUTH_EXPIRED` and `details.reason: "sign_in_in_progress"`. It is listed only by `serve`, in
+  the `account` toolset, and has no command or SDK method; `serve` lists 37 tools, and
+  `createMcpServer` lists it only for a runtime with `signIn`. Its annotations are not read-only,
+  not destructive, idempotent, and open-world.
+- The `sign-in` effect, in `EFFECTS` and `OVERLEAF_ALLOWED_EFFECTS`. With an allowlist that leaves
+  it out, `sign_in` is not listed, and a call to it is `POLICY_DENIED`.
+
 ### Changed
 
 - `serve` starts without a working session (#54). It used to exit with `AUTH_EXPIRED` before
@@ -39,6 +54,12 @@ such change is listed.
   A session file that others can read, and any other startup failure, still stop the server.
   Operation commands and the SDK still open the session up front and fail with `AUTH_EXPIRED`
   when there is none.
+- The server instructions tell the assistant, on `AUTH_EXPIRED`, to call `sign_in` with the
+  user's agreement, or have the user run `login`, instead of stopping.
+- `login` locks the browser profile while its window is open. A second sign-in on the same
+  computer, from `login` or `sign_in`, fails at once with `AUTH_EXPIRED` and
+  `details.reason: "sign_in_in_progress"`; before, its window closed at once and it failed as a
+  cancelled sign-in.
 
 ### Fixed
 

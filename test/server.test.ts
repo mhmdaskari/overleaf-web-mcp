@@ -9,7 +9,7 @@ import { readConfig } from '../src/config.js'
 import { McpError } from '../src/core/errors.js'
 import { SERVER_INSTRUCTIONS } from '../src/mcp/instructions.js'
 import { promptTools, renderWorkflowPrompt, WORKFLOW_PROMPTS } from '../src/mcp/prompts.js'
-import { ToolActivity, TOOL_NAMES, type ToolCallExtra } from '../src/mcp/tools.js'
+import { LISTED_TOOL_NAMES, ToolActivity, type ToolCallExtra } from '../src/mcp/tools.js'
 import { createMcpServer, runStdioServer, SERVER_NAME, serveOverStdio } from '../src/server.js'
 
 function fakeRuntime() {
@@ -56,6 +56,8 @@ function fakeRuntime() {
     sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn(), batchUpload: vi.fn() },
     tags: { manageTags: vi.fn() },
     search: { searchProject: vi.fn() },
+    // As serve's runtime can, so sign_in is listed, snapshotted, and counted in the size cap.
+    signIn: vi.fn(),
   }
 }
 
@@ -121,7 +123,7 @@ describe('MCP server', () => {
       const server = createMcpServer(fakeRuntime())
 
       expect(server).toBeInstanceOf(McpServer)
-      expect(registerTool.mock.calls.map(call => call[0])).toEqual(TOOL_NAMES)
+      expect(registerTool.mock.calls.map(call => call[0])).toEqual(LISTED_TOOL_NAMES)
     } finally {
       registerTool.mockRestore()
     }
@@ -131,7 +133,7 @@ describe('MCP server', () => {
     const { server, client } = await connectedPair()
     const result = await client.listTools()
 
-    expect(result.tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    expect(result.tools.map(tool => tool.name)).toEqual(LISTED_TOOL_NAMES)
     // Parameter descriptions survive the schema conversion the SDK performs.
     expect(result.tools.find(tool => tool.name === 'list_projects')?.inputSchema.properties?.query).toMatchObject({
       description: 'Case-insensitive substring of the project name',
@@ -440,6 +442,7 @@ describe('MCP server', () => {
       'confirmCount',
       'NOT_FOUND',
       'AUTH_EXPIRED',
+      'sign_in',
     ]) {
       expect(instructions).toContain(term)
     }
@@ -470,7 +473,7 @@ describe('protocol eras', () => {
       expect(client.getNegotiatedProtocolVersion()).toBe(version)
       expect(client.getDiscoverResult()).toBeUndefined()
       expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS)
-      expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+      expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(LISTED_TOOL_NAMES)
       await client.close()
       await connection.close()
     }
@@ -504,7 +507,7 @@ describe('protocol eras', () => {
     await peer.send({ jsonrpc: '2.0', method: 'notifications/initialized' })
     const listed = await request(2, 'tools/list', {})
     const tools = listed.result?.tools as Array<{ name: string }>
-    expect(tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    expect(tools.map(tool => tool.name)).toEqual(LISTED_TOOL_NAMES)
     await peer.close()
     await connection.close()
   })
@@ -522,7 +525,7 @@ describe('protocol eras', () => {
     expect(client.getDiscoverResult()?.instructions).toBe(SERVER_INSTRUCTIONS)
     expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS)
     expect((await client.discover()).instructions).toBe(SERVER_INSTRUCTIONS)
-    expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(LISTED_TOOL_NAMES)
     await client.close()
     await connection.close()
   })
@@ -557,7 +560,7 @@ describe('protocol eras', () => {
       expect(bare.messages[0]!.content).toEqual({ type: 'text', text: renderWorkflowPrompt(prompt, {}) })
     }
     // tools/list is unchanged by the prompts.
-    expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(LISTED_TOOL_NAMES)
     await client.close()
     await connection.close()
   })
@@ -748,7 +751,7 @@ describe('stdio lifecycle', () => {
     expect(client.getNegotiatedProtocolVersion()).toBe(version)
     expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS)
     if (era === 'modern') expect((await client.discover()).instructions).toBe(SERVER_INSTRUCTIONS)
-    expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(LISTED_TOOL_NAMES)
     await client.close()
 
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))

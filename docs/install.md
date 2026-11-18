@@ -17,6 +17,11 @@ A dedicated browser window opens with its own profile, separate from your everyd
 Complete the normal Overleaf sign-in, including SSO or two-factor authentication if your account
 uses them. The window closes by itself once the session is detected.
 
+**No terminal?** <!-- md:version 1.3.0 --> Skip this step. Once the server is connected, ask the
+assistant to sign you in to Overleaf: with your agreement it calls [`sign_in`](tools.md#sign_in),
+which opens the same window from the server. When you have finished, tell the assistant, and it
+checks that the session works.
+
 Only cookies for the Overleaf origin are saved. On macOS and Linux the file is readable by your
 user alone. The command prints a short JSON summary ending in `"authenticated": true` when it
 worked. See [configuration](configuration.md#where-the-session-is-stored) for the exact paths.
@@ -60,9 +65,10 @@ Using only the command line or the TypeScript library? Skip to
     it; Claude Desktop shows an install dialog. On macOS and Windows, the extension runs on the
     Node.js that Claude Desktop ships with, so an older `node` on your `PATH` does not matter.
 
-    - Sign in with step 1 above, which needs Node.js 20 or newer and a terminal. Without a
-      saved session the extension still starts, and its tools answer `AUTH_EXPIRED` until you
-      sign in. Sign in again after the session expires; no restart is needed.
+    - No terminal is needed: once installed, ask Claude to sign you in to Overleaf, and it opens
+      the sign-in window with [`sign_in`](tools.md#sign_in). Without a saved session the
+      extension still starts, and its tools answer `AUTH_EXPIRED` until you sign in. Sign in
+      the same way after the session expires; no restart is needed.
     - The extension has three settings, all optional: **Overleaf address**, which stays
       `https://www.overleaf.com` unless you use a [self-hosted Overleaf](#self-hosted-overleaf);
       **Allowed project ids**, a comma-separated list that limits which projects the server
@@ -194,8 +200,10 @@ in `$(npm root -g)/overleaf-web-mcp/skills` after a global install;
 code, `unsupported`, or `skipped`, and never changes anything.
 
 **Every tool answers `AUTH_EXPIRED`.** There is no saved session, or it has expired: Overleaf
-sessions last five days from their last use. Sign in with `npx overleaf-web-mcp login`; the
-running server picks the new session up on the next call, with no restart. Releases before 1.3.0
+sessions last five days from their last use. Ask the assistant to sign you in, which calls
+[`sign_in`](tools.md#sign_in), or run `npx overleaf-web-mcp login`; the running server picks the
+new session up on the next call, with no restart. With `details.reason: "sign_in_in_progress"`, a
+sign-in window is already open on this computer: finish it or close it. Releases before 1.3.0
 instead exited at startup, which clients show as "Connection closed" or "server exited". Run
 `npx overleaf-web-mcp keepalive` to check: it prints the new expiry if the session is alive, or
 the `AUTH_EXPIRED` error if it is not. To stop it recurring, schedule the keepalive daily; see

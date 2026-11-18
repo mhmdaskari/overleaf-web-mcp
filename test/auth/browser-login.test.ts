@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
 
 import { captureBrowserSession, type BrowserProcess, type CdpTransport } from '../../src/auth/browser-login.js'
+import { McpError } from '../../src/core/errors.js'
 
 describe('browser-assisted login', () => {
   test('captures only target-origin cookies after the authenticated project page loads', async () => {
@@ -137,5 +138,72 @@ describe('browser-assisted login', () => {
         }
       )
     ).rejects.toMatchObject({ code: 'TIMEOUT' })
+  })
+
+  test('stops waiting, and closes the window, when its signal aborts', async () => {
+    const profileDir = await mkdtemp(join(tmpdir(), 'overleaf-browser-abort-'))
+    const close = vi.fn()
+    const kill = vi.fn(() => true)
+    const cdp: CdpTransport = {
+      closed: false,
+      async send<T>(method: string): Promise<T> {
+        if (method === 'Target.getTargets') return { targetInfos: [{ targetId: 'page-1', type: 'page' }] } as T
+        if (method === 'Target.attachToTarget') return { sessionId: 'session-1' } as T
+        if (method === 'Runtime.evaluate') {
+          return {
+            result: { value: { origin: 'https://www.overleaf.test', pathname: '/login', csrfToken: null } },
+          } as T
+        }
+        return {} as T
+      },
+      close,
+    }
+    const controller = new AbortController()
+    const stopped = new McpError('TIMEOUT', 'The sign-in was stopped.')
+    let polls = 0
+
+    await expect(
+      captureBrowserSession(
+        {
+          baseUrl: 'https://www.overleaf.test',
+          browserProfileDir: profileDir,
+          timeoutMs: 60_000,
+          signal: controller.signal,
+        },
+        {
+          findChrome: async () => '/opt/chrome',
+          spawnChrome: () => ({ exitCode: null, kill }),
+          readEndpoint: async () => 'ws://127.0.0.1/devtools/browser/id',
+          connectCdp: async () => cdp,
+          sleep: async () => {
+            polls += 1
+            if (polls === 2) controller.abort(stopped)
+          },
+          now: () => 0,
+        }
+      )
+    ).rejects.toBe(stopped)
+    expect(close).toHaveBeenCalled()
+    expect(kill).toHaveBeenCalled()
+  })
+
+  test('opens no window when its signal has already aborted', async () => {
+    const profileDir = await mkdtemp(join(tmpdir(), 'overleaf-browser-aborted-'))
+    const spawnChrome = vi.fn()
+    const controller = new AbortController()
+    controller.abort(new McpError('TIMEOUT', 'The sign-in was stopped.'))
+
+    await expect(
+      captureBrowserSession(
+        {
+          baseUrl: 'https://www.overleaf.test',
+          browserProfileDir: profileDir,
+          timeoutMs: 60_000,
+          signal: controller.signal,
+        },
+        { findChrome: async () => '/opt/chrome', spawnChrome }
+      )
+    ).rejects.toMatchObject({ code: 'TIMEOUT' })
+    expect(spawnChrome).not.toHaveBeenCalled()
   })
 })

@@ -11,7 +11,7 @@ import type { SectionsApi } from '../overleaf/sections-api.js'
 import type { SyncApi } from '../overleaf/sync.js'
 import type { TagsApi } from '../overleaf/tags.js'
 import type { TrackedChangesApi } from '../overleaf/tracked-changes.js'
-import type { OperationContext } from './context.js'
+import type { OperationContext, ProgressReporter } from './context.js'
 import type { OperationInput, OperationName, OperationOutput } from './operations.js'
 
 /**
@@ -59,3 +59,20 @@ export type OperationHandler<N extends OperationName> = (
  * nothing else; interfaces parse input against the contract, render the result, and map errors.
  */
 export type OverleafService = { readonly [N in OperationName]: OperationHandler<N> }
+
+/** What `sign_in` returns: the session it confirmed, or that the user is still signing in. */
+export type SignInResult =
+  | (OperationOutput<'auth_status'> & { status: 'signed_in'; alreadySignedIn: boolean })
+  | { status: 'waiting'; deadline: string }
+
+/**
+ * A runtime that can open a browser window for the user to sign in, as `serve`'s does. The MCP
+ * server offers `sign_in` only for a runtime that has this.
+ */
+export interface SignInCapable {
+  signIn(onProgress?: ProgressReporter): Promise<SignInResult>
+}
+
+export function isSignInCapable(runtime: object): runtime is SignInCapable {
+  return typeof (runtime as Partial<SignInCapable>).signIn === 'function'
+}

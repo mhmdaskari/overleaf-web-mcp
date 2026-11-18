@@ -7,7 +7,8 @@ import { describe, expect, test, vi } from 'vitest'
 import { OPERATIONS, type OperationName } from '../../src/contracts/operations.js'
 import { TOOLSETS, type Toolset } from '../../src/contracts/toolsets.js'
 import { McpError } from '../../src/core/errors.js'
-import { TOOL_NAMES, registerOverleafTools } from '../../src/mcp/tools.js'
+import { SIGN_IN_TOOL } from '../../src/mcp/sign-in.js'
+import { LISTED_TOOL_NAMES, TOOL_NAMES, registerOverleafTools } from '../../src/mcp/tools.js'
 
 function fakeRuntime() {
   return {
@@ -84,17 +85,18 @@ describe('MCP tool registration', () => {
     const badge = /alt="(\d+) MCP tools"/u.exec(readme)?.[1]
     const prose = /The server registers (\d+) tools/u.exec(reference)?.[1]
 
-    expect(badge).toBe(String(TOOL_NAMES.length))
-    expect(prose).toBe(String(TOOL_NAMES.length))
+    // serve lists every operation plus sign_in.
+    expect(badge).toBe(String(LISTED_TOOL_NAMES.length))
+    expect(prose).toBe(String(LISTED_TOOL_NAMES.length))
     // The tool-list sentence and the Documentation table row, plus the comparison's Tools cell.
     const allCounts = [...readme.matchAll(/All (\d+) tools/gu)].map(match => match[1])
     expect(allCounts).toHaveLength(2)
-    expect(allCounts).toEqual([String(TOOL_NAMES.length), String(TOOL_NAMES.length)])
-    expect(/^\| Tools \| (\d+) \|/mu.exec(readme)?.[1]).toBe(String(TOOL_NAMES.length))
+    expect(allCounts).toEqual([String(LISTED_TOOL_NAMES.length), String(LISTED_TOOL_NAMES.length)])
+    expect(/^\| Tools \| (\d+) \|/mu.exec(readme)?.[1]).toBe(String(LISTED_TOOL_NAMES.length))
     const comparison = await readFile(new URL('../../docs/comparison.md', import.meta.url), 'utf8')
-    expect(/^\| Tools \| (\d+) \|/mu.exec(comparison)?.[1]).toBe(String(TOOL_NAMES.length))
+    expect(/^\| Tools \| (\d+) \|/mu.exec(comparison)?.[1]).toBe(String(LISTED_TOOL_NAMES.length))
     // The README's tool table must name every registered tool, or it rots like the count would.
-    for (const name of TOOL_NAMES) expect(readme).toContain(`| \`${name}\` |`)
+    for (const name of LISTED_TOOL_NAMES) expect(readme).toContain(`| \`${name}\` |`)
   })
 
   test("groups each tool in the README's table as its contract's toolset, which OVERLEAF_TOOLSETS selects by", async () => {
@@ -110,8 +112,10 @@ describe('MCP tool registration', () => {
       History: 'history',
     }
     const rows = [...readme.matchAll(/^\| ([A-Za-z ]+) \| `([a-z_]+)` \|/gmu)].map(match => [match[2]!, match[1]!])
-    expect(rows.map(([name]) => name)).toEqual(TOOL_NAMES)
-    for (const [name, label] of rows) expect(labels[label!], name).toBe(OPERATIONS[name as OperationName].toolset)
+    expect(rows.map(([name]) => name)).toEqual(LISTED_TOOL_NAMES)
+    const toolsetOf = (name: string) =>
+      name === SIGN_IN_TOOL.name ? SIGN_IN_TOOL.toolset : OPERATIONS[name as OperationName].toolset
+    for (const [name, label] of rows) expect(labels[label!], name).toBe(toolsetOf(name!))
     expect(new Set(Object.values(labels))).toEqual(new Set(TOOLSETS))
   })
 

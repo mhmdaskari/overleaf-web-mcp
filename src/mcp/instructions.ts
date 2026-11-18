@@ -10,7 +10,7 @@ Find the project first. list_projects returns ids, newest first. get_project_tre
 
 Projects. create_project, clone_project, and import_project_zip return a new projectId. A blank project's root is Overleaf's stub main.tex: after adding the manuscript, set rootFilePath with update_project_settings or delete the stub. manage_project trash, archive, and delete need confirmName equal to the project name; prefer trash, since delete is permanent.
 
-Editing text. Call read_file before write_file or write_section and pass back its revision unchanged. On REVISION_CONFLICT, read again and reconcile; never reuse a stale revision or retry a write blindly. Send the complete new text, localPath for a local file, or edits for small changes; the server edits only changed words. writeMode "tracked" records Overleaf tracked changes and never falls back to untracked. On a legacy (ShareJS) document, adding emoji or other characters above U+FFFF is refused.
+Editing text. Call read_file before write_file or write_section and pass back its revision unchanged. On REVISION_CONFLICT, read again and reconcile; never reuse a stale revision or retry a write blindly. Send the complete new text, localPath for a local file, or edits for small changes. writeMode "tracked" records Overleaf tracked changes and never falls back to untracked. On a legacy (ShareJS) document, adding emoji or other characters above U+FFFF is refused.
 
 Uploads. upload_file and batch_upload have no revision check and replace nothing unless asked. To replace a binary, pass overwrite: true or expectedHash from get_project_tree; for a text document, prefer write_file with localPath.
 
@@ -22,6 +22,6 @@ Compiling. Without rootFilePath, compile_project builds the configured root. Jud
 
 Review. add_comment needs a fresh revision, 1-based line and UTF-16 column positions, and expectedText equal to the selected text. Before manage_tracked_changes, call list_tracked_changes and confirm them with the user, then pass that document's revision, the changeIds (both halves of a replacement), and confirmCount equal to their number. List again after each decision, REVISION_CONFLICT, or NOT_FOUND.
 
-Errors are JSON with code, message, retryable, and details. AUTH_EXPIRED means the user must run "npx overleaf-web-mcp login"; tell them and stop. POLICY_DENIED and PATH_OUTSIDE_ROOT mean this server's configuration forbids the call; do not work around it. Sessions lapse after five idle days unless "npx overleaf-web-mcp keepalive" is scheduled; auth_status reports sessionExpiresAt.
+Errors are JSON with code, message, retryable, and details. On AUTH_EXPIRED, with the user's agreement call sign_in if listed; otherwise they run "npx overleaf-web-mcp login". POLICY_DENIED and PATH_OUTSIDE_ROOT mean this server's configuration forbids the call; do not work around it. Sessions lapse after five idle days unless "npx overleaf-web-mcp keepalive" is scheduled; auth_status reports sessionExpiresAt.
 
 Prefer disposable projects for experiments and keep request volume low.`

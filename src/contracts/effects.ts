@@ -10,6 +10,8 @@
  * - `local-read`: reads a file or folder on the server's own disk.
  * - `local-write`: creates or replaces a file on the server's own disk.
  * - `unchecked-replace`: replaces a text document with no revision check.
+ * - `sign-in`: opens a browser window on the server's machine for the user to sign in, and saves
+ *   the session. Only the MCP tool `sign_in` has it.
  */
 export const EFFECTS = [
   'overleaf-read',
@@ -20,6 +22,7 @@ export const EFFECTS = [
   'local-read',
   'local-write',
   'unchecked-replace',
+  'sign-in',
 ] as const
 
 export type Effect = (typeof EFFECTS)[number]

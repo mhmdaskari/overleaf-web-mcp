@@ -37,7 +37,7 @@ export function createMcpServer(
     runtime,
     uriTemplate => new ResourceTemplate(uriTemplate, { list: undefined })
   )
-  registerWorkflowPrompts(server, offeredToolNames(options))
+  registerWorkflowPrompts(server, offeredToolNames(options, runtime))
   return server
 }
 
