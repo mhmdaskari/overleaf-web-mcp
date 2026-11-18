@@ -4,9 +4,10 @@ import { McpServer, ResourceTemplate, type Transport } from '@modelcontextprotoc
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio'
 
 import { SERVER_INSTRUCTIONS } from './mcp/instructions.js'
+import { registerWorkflowPrompts } from './mcp/prompts.js'
 import { registerCompileResources, type ResourceRegistrar } from './mcp/resources.js'
 import type { OverleafServiceRuntime } from './contracts/service.js'
-import { registerOverleafTools, ToolActivity, type ToolRegistrationOptions } from './mcp/tools.js'
+import { offeredToolNames, registerOverleafTools, ToolActivity, type ToolRegistrationOptions } from './mcp/tools.js'
 import { SERVER_NAME, SERVER_VERSION } from './version.js'
 
 export { SERVER_INSTRUCTIONS } from './mcp/instructions.js'
@@ -36,6 +37,7 @@ export function createMcpServer(
     runtime,
     uriTemplate => new ResourceTemplate(uriTemplate, { list: undefined })
   )
+  registerWorkflowPrompts(server, offeredToolNames(options))
   return server
 }
 

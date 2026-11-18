@@ -21,6 +21,14 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
 - The [SDK](sdk.md#stable-surface) surface has existed since 0.5.0 and follows Semantic
   Versioning from 1.0.0. Before 1.0.0 a minor release could change it.
 
+## 1.3.0
+
+[Changelog](changelog.md#130-unreleased)
+
+- **MCP prompts:** [`revise_manuscript`, `address_reviewer_comments`, and
+  `sync_sources`](tools.md#workflow-prompts), the three workflows as prompts a client can offer
+  by name.
+
 ## 1.2.0
 
 [Changelog](changelog.md#120-2026-11-14)

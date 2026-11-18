@@ -242,7 +242,7 @@ Against the three most-starred Overleaf MCP servers and the two closest in desig
 
 ## For AI agents
 
-The server sends usage instructions to the MCP client when it connects, and every tool description is self-contained, so an assistant does not need this README to use it correctly. An agent working in a shell can use the command line instead, with `overleaf-web-mcp --help` and the three Agent Skills in [`skills/`](https://github.com/mhmdaskari/overleaf-web-mcp/tree/main/skills), which call only public commands. Coding agents contributing to the repository should read [AGENTS.md](AGENTS.md).
+The server sends usage instructions to the MCP client when it connects, and every tool description is self-contained, so an assistant does not need this README to use it correctly. An agent working in a shell can use the command line instead, with `overleaf-web-mcp --help` and the three Agent Skills in [`skills/`](https://github.com/mhmdaskari/overleaf-web-mcp/tree/main/skills), which call only public commands. MCP clients are offered the same three workflows as [prompts](https://mhmdaskari.github.io/overleaf-web-mcp/tools/#workflow-prompts). Coding agents contributing to the repository should read [AGENTS.md](AGENTS.md).
 
 ## Contributing
 

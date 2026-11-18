@@ -1377,3 +1377,23 @@ its `projectOperations` list only operations with `atVersion` at or after `since
 operation at `atVersion` produces version `atVersion + 1`, so passing `nextSinceVersion` back
 never skips an operation and never repeats one. This is stateless polling, not a background
 watcher, and it never pages backward or computes diffs.
+
+## Workflow prompts
+
+<!-- md:version 1.3.0 -->
+
+The server also offers three MCP prompts, the workflows of the
+[Agent Skills](https://github.com/mhmdaskari/overleaf-web-mcp/tree/main/skills) written for tool
+calls, so a client without skills or a shell can offer them by name. A prompt returns
+instructions only: it calls no tool, reads no session, and carries no document text. The model
+reads it only when the user picks it, so it adds nothing to the context of other turns. Every
+argument is optional, at most 4,096 characters, and filled into the text as a quoted string; an
+argument the prompt does not take is refused. With
+[`OVERLEAF_TOOLSETS`](configuration.md#toolsets) set, a prompt is offered only when every tool it
+names is, so `account`, `files`, and `review` offer `address_reviewer_comments` alone.
+
+| Prompt | Arguments | Steps |
+| --- | --- | --- |
+| `revise_manuscript` | `projectId`, `filePath` | Find the document, read it with its revision, agree the change with the user, write it back against that revision (tracked or not), compile and judge `builtCleanly`. |
+| `address_reviewer_comments` | `projectId`, `filePath` (only that document's threads) | List and summarize the threads, read the commented text, reply, add comments, resolve or reopen threads, revise the text as tracked changes, each only as the user decides. |
+| `sync_sources` | `projectId`, `localFolderPath`, `destinationFolderPath` | Plan with `plan_sync`, show the plan and ask, apply exactly that plan with its `planToken`, read the result, compile. |

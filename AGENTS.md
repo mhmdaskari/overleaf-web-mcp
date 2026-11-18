@@ -91,8 +91,9 @@ Windows and macOS with Node 24, for every push and pull request. For the docs si
 - Only `src/mcp/`, `src/server.ts`, `src/cli.ts`, and `src/index.ts` import the MCP SDK or the
   adapter; ESLint enforces it, type imports included.
 - Tool names, input schemas, result shapes, and error codes are the public contract, and so are
-  the CLI's command names, flags, request format, output framing, and exit codes, and the
-  `overleaf-web-mcp/core` surface `docs/sdk.md` lists as stable, and the `capabilities` report.
+  the MCP prompt names and arguments, the CLI's command names, flags, request format, output
+  framing, and exit codes, and the `overleaf-web-mcp/core` surface `docs/sdk.md` lists as stable,
+  and the `capabilities` report.
   Any change is listed in `CHANGELOG.md` under the next version.
 - Every result validates against its operation's `outputSchema` on every return path and carries
   no key the schema does not declare. zod drops an undeclared key without failing, so the
@@ -224,6 +225,10 @@ Each addition touches several files, and the tests fail until they agree.
   `OPERATION_COMMAND_WORDS` (both in `src/cli/commands.ts`; without the word the command is
   treated as unknown), a parser and a `ParsedCommandLine` kind in `src/cli/parse.ts`, a case in
   `runOperationCommand` in `src/cli/run.ts`, tests in `test/cli/`, and `docs/cli.md`.
+- **A prompt:** an entry in `WORKFLOW_PROMPTS` (`src/mcp/prompts.ts`) for a workflow in
+  `skills/`, one step per numbered heading of its `SKILL.md`, which `test/mcp/prompts.test.ts`
+  holds; it names tools in backticks, and it is offered only when every tool it names is. Then a
+  row of the prompt table in `docs/tools.md`.
 - **A shorthand:** an `ALIASES` entry in `src/cli/commands.ts` (usage, options, `build`; the
   parser picks it up), and its usage line and a row of the Commands table in `docs/cli.md`.
   `test/cli/docs.test.ts` holds `docs/cli.md` to the help for both kinds.

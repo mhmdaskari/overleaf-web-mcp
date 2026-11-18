@@ -8,6 +8,7 @@ import { INSTRUCTION_WORD_LIMIT, instructionWords } from '../scripts/preflight.j
 import { readConfig } from '../src/config.js'
 import { McpError } from '../src/core/errors.js'
 import { SERVER_INSTRUCTIONS } from '../src/mcp/instructions.js'
+import { promptTools, renderWorkflowPrompt, WORKFLOW_PROMPTS } from '../src/mcp/prompts.js'
 import { ToolActivity, TOOL_NAMES, type ToolCallExtra } from '../src/mcp/tools.js'
 import { createMcpServer, runStdioServer, SERVER_NAME, serveOverStdio } from '../src/server.js'
 
@@ -223,6 +224,38 @@ describe('MCP server', () => {
     ).rejects.toMatchObject({
       code: -32602,
     })
+    await client.close()
+    await server.close()
+  })
+
+  test('OVERLEAF_TOOLSETS offers only the prompts whose tools are all offered', async () => {
+    const toolNames = async (client: Client) => (await client.listTools()).tools.map(tool => tool.name)
+    for (const toolsets of [
+      ['review'],
+      ['account', 'files', 'review'],
+      ['account', 'projects', 'files', 'sync', 'compile'],
+    ]) {
+      const { server, client } = await connectedPair({
+        toolsets: readConfig({ OVERLEAF_TOOLSETS: toolsets.join(',') }).toolsets,
+      })
+      const offered = await toolNames(client)
+      const expected = WORKFLOW_PROMPTS.filter(prompt => promptTools(prompt).every(tool => offered.includes(tool)))
+      const listed = await client.listPrompts().then(
+        result => result.prompts.map(prompt => prompt.name),
+        () => []
+      )
+      expect(listed, toolsets.join(',')).toEqual(expected.map(prompt => prompt.name))
+      await client.close()
+      await server.close()
+    }
+    // The review group alone lacks list_projects, which every workflow starts from.
+    const { server, client } = await connectedPair({ toolsets: ['review'] })
+    expect(
+      await client.listPrompts().then(
+        result => result.prompts,
+        () => []
+      )
+    ).toEqual([])
     await client.close()
     await server.close()
   })
@@ -490,6 +523,51 @@ describe('protocol eras', () => {
     expect(client.getInstructions()).toBe(SERVER_INSTRUCTIONS)
     expect((await client.discover()).instructions).toBe(SERVER_INSTRUCTIONS)
     expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    await client.close()
+    await connection.close()
+  })
+
+  test.each([
+    ['2025-11-25 (initialize)', { supportedProtocolVersions: ['2025-11-25'] }],
+    ['2026-07-28 (server/discover)', { versionNegotiation: { mode: { pin: '2026-07-28' as const } } }],
+  ])('lists the workflow prompts and fills in their arguments for a %s client', async (_era, options) => {
+    const { clientTransport, connection } = served()
+    const client = new Client({ name: 'prompt-client', version: '1.0.0' }, options)
+    await client.connect(clientTransport)
+
+    const { prompts } = await client.listPrompts()
+    expect(prompts.map(prompt => prompt.name)).toEqual(WORKFLOW_PROMPTS.map(prompt => prompt.name))
+    for (const prompt of WORKFLOW_PROMPTS) {
+      const listed = prompts.find(entry => entry.name === prompt.name)!
+      expect(listed.description).toBe(prompt.description)
+      expect(listed.arguments?.map(argument => argument.name)).toEqual(prompt.arguments.map(argument => argument.name))
+
+      const args = Object.fromEntries(prompt.arguments.map(argument => [argument.name, `given-${argument.name}`]))
+      const got = await client.getPrompt({ name: prompt.name, arguments: args })
+      expect(got.messages).toHaveLength(1)
+      const [message] = got.messages
+      expect(message!.role).toBe('user')
+      expect(message!.content).toEqual({ type: 'text', text: renderWorkflowPrompt(prompt, args) })
+      for (const argument of prompt.arguments) {
+        expect((message!.content as { text: string }).text).toContain(`"given-${argument.name}"`)
+      }
+
+      // Every argument is optional, so a client may send none at all.
+      const bare = await client.getPrompt({ name: prompt.name })
+      expect(bare.messages[0]!.content).toEqual({ type: 'text', text: renderWorkflowPrompt(prompt, {}) })
+    }
+    // tools/list is unchanged by the prompts.
+    expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(TOOL_NAMES)
+    await client.close()
+    await connection.close()
+  })
+
+  test('refuses a prompt argument the prompt does not take', async () => {
+    const { clientTransport, connection } = served()
+    const client = new Client({ name: 'prompt-client', version: '1.0.0' })
+    await client.connect(clientTransport)
+    const [prompt] = WORKFLOW_PROMPTS
+    await expect(client.getPrompt({ name: prompt!.name, arguments: { notAnArgument: 'x' } })).rejects.toThrow()
     await client.close()
     await connection.close()
   })
