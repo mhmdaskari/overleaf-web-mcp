@@ -21,6 +21,25 @@ such change is listed.
   unknown argument is refused. A prompt runs nothing and reads no session. Under
   `OVERLEAF_TOOLSETS`, a prompt is offered only when every tool it names is. `tools/list` is
   unchanged, and the command line and SDK are unchanged.
+- A Claude Desktop extension (#52): `overleaf-web-mcp-X.Y.Z.mcpb`, attached to the GitHub
+  Release from this version on. It runs `serve` from the same build as the npm package, on the
+  Node.js Claude Desktop ships with, on macOS and Windows. Its three optional settings are the
+  Overleaf address (`OVERLEAF_BASE_URL`, default `https://www.overleaf.com`), the allowed
+  project ids (`OVERLEAF_ALLOWED_PROJECTS`, default empty, which allows every project), and the
+  browser used to sign in (`OVERLEAF_BROWSER_PATH`, default empty, found automatically). Signing in
+  still needs `npx overleaf-web-mcp login` in a terminal, and the server does not start without a
+  saved session.
+
+### Internal
+
+- `scripts/build-mcpb.ts` builds the extension after `npm run build`. It installs the production
+  dependencies in a clean folder, starts the command line and loads the MCP server from it with
+  the default settings, then validates and packs it with the `mcpb` command line pinned to
+  2.1.2. It fails, and removes the file, when the bundle holds anything outside `dist/`, the
+  production dependencies, `manifest.json`, `package.json`, `package-lock.json`, and `LICENSE`.
+  CI runs it on Ubuntu with Node 24, and the publish workflow attaches the result to the release.
+- `manifest.json` joins the files `scripts/bump-version.ts` sets and preflight compares, and
+  `test/version.test.ts` holds its version to `package.json`.
 
 ## [1.2.0] - 2026-11-14
 

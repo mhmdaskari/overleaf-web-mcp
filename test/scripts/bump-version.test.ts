@@ -18,6 +18,7 @@ const STEP_TWO_FILES = [
   'package-lock.json',
   'src/version.ts',
   'server.json',
+  'manifest.json',
   'skills/overleaf-reviewer-comments/SKILL.md',
   'skills/overleaf-revise-manuscript/SKILL.md',
   'skills/overleaf-sync-sources/SKILL.md',
@@ -59,7 +60,7 @@ describe('version parsing', () => {
 })
 
 describe('bump-version', () => {
-  test('a patch sets the version in four files and leaves the pins alone', async () => {
+  test('a patch sets the version in five files and leaves the pins alone', async () => {
     const root = await copyOfRepository()
     const next = `${major}.${minor}.${patch + 1}`
     expect(await bumpVersion(root, next)).toEqual([
@@ -67,6 +68,7 @@ describe('bump-version', () => {
       'package-lock.json',
       'src/version.ts',
       'server.json',
+      'manifest.json',
     ])
 
     const read = async <T>(path: string) => JSON.parse(await readFile(join(root, path), 'utf8')) as T
@@ -76,6 +78,7 @@ describe('bump-version', () => {
     expect(packageJson.version).toBe(next)
     expect([lock.version, lock.packages['']!.version]).toEqual([next, next])
     expect([server.version, ...server.packages.map(entry => entry.version)]).toEqual([next, next])
+    expect((await read<{ version: string }>('manifest.json')).version).toBe(next)
     expect(await readFile(join(root, 'src/version.ts'), 'utf8')).toContain(`export const SERVER_VERSION = '${next}'`)
     expect(await readFile(join(root, 'docs/cli.md'), 'utf8')).toContain(pin)
   })
@@ -89,16 +92,26 @@ describe('bump-version', () => {
 
     const after = await snapshot(root)
     expect(after['CHANGELOG.md']).toBe(before['CHANGELOG.md'])
-    for (const path of STEP_TWO_FILES.slice(4)) {
+    for (const path of STEP_TWO_FILES.slice(5)) {
       expect(after[path], path).not.toContain(`${pin} `)
       expect(after[path], path).toContain(nextPin)
       // Only the pins and the wording moved: every other line is untouched.
       const changed = after[path]!.split('\n').filter((line, index) => line !== before[path]!.split('\n')[index])
       for (const line of changed) expect(line, `${path}: ${line}`).toMatch(new RegExp(`${major}\\.${minor + 1}`, 'u'))
     }
-    for (const path of STEP_TWO_FILES.slice(4, 7)) {
+    for (const path of STEP_TWO_FILES.slice(5, 8)) {
       expect(after[path], path).not.toMatch(new RegExp(`\\b${major}\\.${minor} releases`, 'u'))
     }
+  })
+
+  test('changes nothing when manifest.json has no version line it can rewrite', async () => {
+    const root = await copyOfRepository()
+    const path = join(root, 'manifest.json')
+    const manifest = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+    await writeFile(path, JSON.stringify(manifest))
+    const before = await snapshot(root)
+    await expect(bumpVersion(root, `${major}.${minor}.${patch + 1}`)).rejects.toThrow(/manifest\.json/u)
+    expect(await snapshot(root)).toEqual(before)
   })
 
   test('does not move a longer pin that only starts with the current one', async () => {

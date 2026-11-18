@@ -35,6 +35,7 @@ npm run format:check # prettier; npm run format rewrites the files
 npm test             # vitest, no network needed
 npm run build        # emits dist/
 npx tsx scripts/check-pack.ts  # after a build: checks the published file list, the three skills/*/SKILL.md included
+npx tsx scripts/build-mcpb.ts  # after a build: the Claude Desktop extension, in build/
 ```
 
 CI runs all of these on Ubuntu with Node 20 and 24, and the type-check, tests, and build on
@@ -284,7 +285,8 @@ all but noting the MCP protocol versions, prints one line per check, and exits 1
 the rest need a person:
 
 - `npm view overleaf-web-mcp version`, the latest `vX.Y.Z` tag, `package.json`, `SERVER_VERSION`
-  in `src/version.ts`, and both `version` fields of `server.json` agree on the last release.
+  in `src/version.ts`, both `version` fields of `server.json`, and the `version` of `manifest.json`
+  (the Claude Desktop extension) agree on the last release.
 - The MCP SDK is still v2: `@modelcontextprotocol/server` 2.x in `dependencies`,
   `@modelcontextprotocol/client` 2.x in `devDependencies`, `npm ls @modelcontextprotocol/sdk`
   prints `(empty)`, and `npm ls zod @modelcontextprotocol/core` shows one copy of each. Note which
@@ -308,9 +310,10 @@ the rest need a person:
    exit codes named. Write the date as `YYYY-MM-DD`: the publish workflow only checks that a line
    starting `## [X.Y.Z]` exists, so it accepts a heading still marked `Unreleased`.
 2. **Version.** Run `npx tsx scripts/bump-version.ts X.Y.Z`. It sets the same version in
-   `package.json` and `package-lock.json`, `SERVER_VERSION` in `src/version.ts`, and both
-   `version` fields of `server.json`, and for a major or minor release also moves the
-   `npx --yes overleaf-web-mcp@X.Y` pin in `skills/*/SKILL.md`, `docs/cli.md`, and
+   `package.json` and `package-lock.json`, `SERVER_VERSION` in `src/version.ts`, both
+   `version` fields of `server.json`, and the `version` of `manifest.json`, and for a major or
+   minor release also moves the `npx --yes overleaf-web-mcp@X.Y` pin in `skills/*/SKILL.md`,
+   `docs/cli.md`, and
    `test/skills.test.ts`, which fails until it matches. It prints the files it changed, refuses a
    version that is not greater than the current one, and changes nothing if a place it expects is
    missing. It does not touch `CHANGELOG.md`, commit, or tag.
@@ -337,14 +340,16 @@ the rest need a person:
    (`workflow_dispatch`). It checks that the version matches `package.json` and has a
    `CHANGELOG.md` section, re-runs the checks and the packed file list check, publishes to npm
    with trusted publishing, lists the version in the MCP Registry from `server.json` with GitHub
-   OIDC, then creates the `vX.Y.Z` tag and the GitHub Release with that section as its notes.
-   Publishing a GitHub Release with tag `vX.Y.Z` by hand still works and runs the same checks and
-   publish. A run that failed after npm can be re-run; it skips what is already published.
+   OIDC, then creates the `vX.Y.Z` tag and the GitHub Release with that section as its notes,
+   and attaches the Claude Desktop extension, `overleaf-web-mcp-X.Y.Z.mcpb`, built from the same
+   commit. Publishing a GitHub Release with tag `vX.Y.Z` by hand still works and runs the same
+   checks and publish. A run that failed after npm can be re-run; it skips what is already
+   published.
 8. **After publishing.** `npm view overleaf-web-mcp version` shows the new version,
-   `npx --yes overleaf-web-mcp@X.Y.Z --help` runs, the GitHub Release and tag exist, the MCP
-   Registry job succeeded, and the docs site, which redeploys on its own from `main`, shows the
-   new changelog section. Close the issues the release shipped, and open issues for what it left
-   out.
+   `npx --yes overleaf-web-mcp@X.Y.Z --help` runs, the GitHub Release and tag exist with the
+   `.mcpb` file attached, the MCP Registry job succeeded, and the docs site, which redeploys on
+   its own from `main`, shows the new changelog section. Close the issues the release shipped,
+   and open issues for what it left out.
 
 ## Style
 

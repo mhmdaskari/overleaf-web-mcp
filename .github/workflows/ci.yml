@@ -81,6 +81,12 @@ jobs:
         # tsx, since Node 20 cannot run TypeScript directly.
         run: npx tsx scripts/check-pack.ts
 
+      - name: Build the Claude Desktop extension
+        # Once, on the Node.js releases are published from: validates the manifest, packs it,
+        # and fails on any file outside the build and the production dependencies.
+        if: matrix.node-version == '24'
+        run: npx tsx scripts/build-mcpb.ts
+
   platforms:
     # Path separators, drive letters, file permissions, and the platform configuration directory
     # behave differently here, and node:path only behaves like Windows on Windows. Lint and

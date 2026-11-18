@@ -6,7 +6,9 @@ name: Publish to npm
 #   then the vX.Y.Z tag and the GitHub Release are created, with that version's CHANGELOG.md
 #   section as the notes. A release made this way does not start a second run.
 # Either way, once the package is on npm, server.json is published to the MCP Registry
-# (registry.modelcontextprotocol.io) with GitHub OIDC; no token is stored for it.
+# (registry.modelcontextprotocol.io) with GitHub OIDC; no token is stored for it, and the Claude
+# Desktop extension (overleaf-web-mcp-X.Y.Z.mcpb) is built from the same commit and attached to
+# the GitHub Release.
 on:
   release:
     types: [published]
@@ -226,3 +228,65 @@ jobs:
             --title "$TAG" \
             --notes-file release-notes.md \
             --latest
+
+  extension:
+    name: Build the Claude Desktop extension
+    needs: publish
+    runs-on: ubuntu-latest
+    # Read-only: this job runs npm ci and the mcpb command line; the next job only uploads.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out the published commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.publish.outputs.commit }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Build and check the bundle
+        run: npx tsx scripts/build-mcpb.ts
+
+      - name: Keep the bundle for the release
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcpb
+          path: build/*.mcpb
+          if-no-files-found: error
+
+  attach-extension:
+    name: Attach the Claude Desktop extension
+    needs: [publish, release, extension]
+    # The release job is skipped when a published GitHub Release started this run.
+    if: ${{ always() && needs.publish.result == 'success' && needs.extension.result == 'success' && (needs.release.result == 'success' || needs.release.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Fetch the bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: mcpb
+
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.publish.outputs.tag }}
+        run: |
+          bundle="overleaf-web-mcp-${TAG#v}.mcpb"
+          test -f "$bundle"
+          # --clobber, so a re-run replaces the file instead of failing on it.
+          gh release upload "$TAG" "$bundle" --repo "$GITHUB_REPOSITORY" --clobber

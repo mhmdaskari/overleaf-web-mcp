@@ -16,6 +16,16 @@ describe('package identity', () => {
     expect(USER_AGENT).toBe(`${packageJson.name}/${packageJson.version}`)
   })
 
+  test('keeps the Claude Desktop extension manifest at the package version', () => {
+    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      version: string
+    }
+    const manifest = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')) as {
+      version: string
+    }
+    expect(manifest.version).toBe(packageJson.version)
+  })
+
   test('keeps the MCP Registry entry aligned with package metadata', () => {
     const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
       name: string

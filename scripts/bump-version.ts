@@ -110,6 +110,15 @@ export async function planVersionBump(root: string, next: string): Promise<FileC
   for (const entry of entries) entry.version = next
   changes.push({ ...serverFile, after: stringify(server) })
 
+  // The Claude Desktop extension manifest, rewritten in place so its hand-kept layout survives.
+  const manifestFile = await read('manifest.json')
+  const manifestVersion = /^( {2}"version": )"[^"]*"/mu
+  if (json<Versioned>(manifestFile.before, manifestFile.path).version === undefined)
+    throw new BumpError('manifest.json has no version.')
+  if (!manifestVersion.test(manifestFile.before))
+    throw new BumpError('manifest.json has no top-level "version" line in its usual layout; nothing was changed.')
+  changes.push({ ...manifestFile, after: manifestFile.before.replace(manifestVersion, `$1"${next}"`) })
+
   if (nextVersion[0] !== currentVersion[0] || nextVersion[1] !== currentVersion[1]) {
     const from = `${currentVersion[0]}.${currentVersion[1]}`
     const to = `${nextVersion[0]}.${nextVersion[1]}`

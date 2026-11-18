@@ -28,6 +28,9 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
 - **MCP prompts:** [`revise_manuscript`, `address_reviewer_comments`, and
   `sync_sources`](tools.md#workflow-prompts), the three workflows as prompts a client can offer
   by name.
+- **Claude Desktop:** an [extension](install.md#2-connect-your-mcp-client),
+  `overleaf-web-mcp-X.Y.Z.mcpb`, attached to each GitHub Release, with the Overleaf address,
+  the allowed project ids, and the sign-in browser as settings.
 
 ## 1.2.0
 

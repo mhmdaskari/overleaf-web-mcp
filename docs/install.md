@@ -55,7 +55,24 @@ Using only the command line or the TypeScript library? Skip to
 
 === "Claude Desktop"
 
-    Add the server to `claude_desktop_config.json`. On macOS it is at
+    **As an extension** <!-- md:version 1.3.0 -->. Download `overleaf-web-mcp-X.Y.Z.mcpb` from
+    the [latest release](https://github.com/mhmdaskari/overleaf-web-mcp/releases/latest) and open
+    it; Claude Desktop shows an install dialog. On macOS and Windows, the extension runs on the
+    Node.js that Claude Desktop ships with, so an older `node` on your `PATH` does not matter.
+
+    - Sign in first, with step 1 above, which still needs Node.js 20 or newer and a terminal.
+      Without a saved session the server does not start, and Claude Desktop reports that it
+      failed to connect. Sign in again after the session expires.
+    - The extension has three settings, all optional: **Overleaf address**, which stays
+      `https://www.overleaf.com` unless you use a [self-hosted Overleaf](#self-hosted-overleaf);
+      **Allowed project ids**, a comma-separated list that limits which projects the server
+      opens (`OVERLEAF_ALLOWED_PROJECTS`), every project your account can open when empty; and
+      **Browser for signing in**, the full path to Chrome, Chromium, Brave, or Edge
+      (`OVERLEAF_BROWSER_PATH`), found automatically when empty. Other
+      [variables](configuration.md) need the configuration file below.
+    - Ask "check my Overleaf connection" to see `auth_status`.
+
+    **In the configuration file.** Add the server to `claude_desktop_config.json`. On macOS it is at
     `~/Library/Application Support/Claude/claude_desktop_config.json`; on Windows at
     `%APPDATA%\Claude\claude_desktop_config.json`.
 
