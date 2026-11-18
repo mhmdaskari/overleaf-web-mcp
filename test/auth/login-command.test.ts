@@ -36,7 +36,7 @@ describe('login command', () => {
         captureSession: async options => {
           expect(options).toMatchObject({
             baseUrl: 'https://overleaf.test',
-            browserProfileDir: join(configRoot, 'overleaf-web-mcp', 'chrome-profile'),
+            browserProfileDir: config.browserProfileDir,
             timeoutMs: 300_000,
           })
           options.onStatus?.('Browser ready.')
@@ -66,7 +66,7 @@ describe('login command', () => {
       authenticated: true,
       baseUrl: 'https://overleaf.test',
       projectCount: 2,
-      cookieJarFile: join(configRoot, 'overleaf-web-mcp', 'cookies.txt'),
+      cookieJarFile: config.cookieJarFile,
       cookiesCaptured: 1,
       permissionsUnchecked: false,
     })
