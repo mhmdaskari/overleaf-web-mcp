@@ -63,21 +63,21 @@ such change is listed.
 
 ### Fixed
 
-- A process holding an older or expired session no longer overwrites a newer one. Every runtime
-  (the server, each command, the SDK) saves the cookies Overleaf sends back; it used to apply them
-  over whatever the session file held, so a server whose session had expired could replace the
-  session a `login` in another terminal had just saved with an anonymous one. It now leaves the
-  file alone when a cookie it changes no longer holds the value it had, and only that process's
-  own session fails with `AUTH_EXPIRED`.
+- A process holding an older or expired session no longer overwrites a newer one (#64). Every
+  runtime (the server, each command, the SDK) saves the cookies Overleaf sends back; it used to
+  apply them over whatever the session file held, so a server whose session had expired could
+  replace the session a `login` in another terminal had just saved with an anonymous one. It now
+  leaves the file alone when a cookie it changes no longer holds the value it had, and only that
+  process's own session fails with `AUTH_EXPIRED`.
 
 ### Documentation
 
-- The installation guide covers Antigravity, with its configuration files and where to open them;
-  the Codex app, which shares `config.toml` with the Codex command line; and an "Add to Cursor"
-  link that installs `npx -y overleaf-web-mcp serve`. Troubleshooting explains the
-  "`spawn npx ENOENT`" of apps opened from the Dock or Start menu, and the toolsets section
-  explains clients that cap the number of tools. `test/docs-install.test.ts` checks every client
-  block, registration command, and the Cursor link against the definition in `server.json`.
+- The installation guide (#65) covers Antigravity, with its configuration files and where to open
+  them; the Codex app, which shares `config.toml` with the Codex command line; and an "Add to
+  Cursor" link that installs `npx -y overleaf-web-mcp serve`. Troubleshooting explains the "`spawn
+  npx ENOENT`" of apps opened from the Dock or Start menu, and the toolsets section explains clients
+  that cap the number of tools. `test/docs-install.test.ts` checks every client block, registration
+  command, and the Cursor link against the definition in `server.json`.
 
 ### Internal
 
