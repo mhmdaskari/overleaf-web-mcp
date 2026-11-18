@@ -60,9 +60,9 @@ Using only the command line or the TypeScript library? Skip to
     it; Claude Desktop shows an install dialog. On macOS and Windows, the extension runs on the
     Node.js that Claude Desktop ships with, so an older `node` on your `PATH` does not matter.
 
-    - Sign in first, with step 1 above, which still needs Node.js 20 or newer and a terminal.
-      Without a saved session the server does not start, and Claude Desktop reports that it
-      failed to connect. Sign in again after the session expires.
+    - Sign in with step 1 above, which needs Node.js 20 or newer and a terminal. Without a
+      saved session the extension still starts, and its tools answer `AUTH_EXPIRED` until you
+      sign in. Sign in again after the session expires; no restart is needed.
     - The extension has three settings, all optional: **Overleaf address**, which stays
       `https://www.overleaf.com` unless you use a [self-hosted Overleaf](#self-hosted-overleaf);
       **Allowed project ids**, a comma-separated list that limits which projects the server
@@ -173,8 +173,10 @@ in `$(npm root -g)/overleaf-web-mcp/skills` after a global install;
 
 **"Failed to connect" right after adding the server.** Almost always one of two things.
 
-- *No saved session.* The server refuses to start until you have run `npx overleaf-web-mcp login`.
-  Run it and try again. A command fails the same way, with `AUTH_EXPIRED` on stderr and exit 3.
+- *A release before 1.3.0 without a saved session.* Those releases refused to start until you
+  had run `npx overleaf-web-mcp login`. From 1.3.0 the server starts without one, and its tools
+  answer `AUTH_EXPIRED` until you sign in. A command fails with `AUTH_EXPIRED` on stderr and
+  exit 3.
 - *Node is older than 20.* If your default `node` is an older version, `npx` starts the server
   with it and it exits immediately. Check `node --version`. If you keep several versions with a
   manager such as nvm, register the server with an absolute path to a new enough binary instead
@@ -191,12 +193,12 @@ in `$(npm root -g)/overleaf-web-mcp/skills` after a global install;
 `npx overleaf-web-mcp doctor <projectId>`. It reports each check as `ok`, `failed` with its error
 code, `unsupported`, or `skipped`, and never changes anything.
 
-**"Connection closed" or "server exited" at startup, and nothing else.** The server checks the
-saved session before it answers the client, and an expired session makes it exit with
-`AUTH_EXPIRED` on stderr, which most clients never show. Overleaf sessions last five days from
-their last use. Run `npx overleaf-web-mcp keepalive`: it prints the new expiry if the session is
-alive, or the `AUTH_EXPIRED` error if it is not, in which case run `npx overleaf-web-mcp login`.
-To stop it recurring, schedule the keepalive daily; see
+**Every tool answers `AUTH_EXPIRED`.** There is no saved session, or it has expired: Overleaf
+sessions last five days from their last use. Sign in with `npx overleaf-web-mcp login`; the
+running server picks the new session up on the next call, with no restart. Releases before 1.3.0
+instead exited at startup, which clients show as "Connection closed" or "server exited". Run
+`npx overleaf-web-mcp keepalive` to check: it prints the new expiry if the session is alive, or
+the `AUTH_EXPIRED` error if it is not. To stop it recurring, schedule the keepalive daily; see
 [keeping the session alive](configuration.md#keeping-the-session-alive).
 
 **Requests fail or time out on a network that requires a proxy.** Set `HTTPS_PROXY`, and

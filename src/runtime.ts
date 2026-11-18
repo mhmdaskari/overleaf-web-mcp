@@ -91,6 +91,18 @@ export interface RuntimeDependencies {
   sleep?: Sleep
 }
 
+/** The access policy a configuration describes, built before any session is opened. */
+export async function createAccessPolicy(config: AppConfig): Promise<AccessPolicy> {
+  return await AccessPolicy.create({
+    allowedProjects: config.allowedProjects,
+    localReadRoots: config.localReadRoots,
+    localWriteRoots: config.localWriteRoots,
+    allowedEffects: config.allowedEffects,
+    cookieJarFile: config.cookieJarFile,
+    browserProfileDir: config.browserProfileDir,
+  })
+}
+
 /**
  * Composes authenticated HTTP, cached collaboration sockets, and the domain APIs every operation runs on.
  * Callers must close the runtime so cached sockets do not outlive the server process.
@@ -161,14 +173,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
 
   static async create(config: AppConfig, dependencies: RuntimeDependencies = {}): Promise<OverleafRuntime> {
     // Roots resolve before anything is sent, so a misconfigured policy fails without a request.
-    const policy = await AccessPolicy.create({
-      allowedProjects: config.allowedProjects,
-      localReadRoots: config.localReadRoots,
-      localWriteRoots: config.localWriteRoots,
-      allowedEffects: config.allowedEffects,
-      cookieJarFile: config.cookieJarFile,
-      browserProfileDir: config.browserProfileDir,
-    })
+    const policy = await createAccessPolicy(config)
     const cookieStore = await CookieStore.load(config.cookieJarFile)
     // One proxy decision, from readConfig, covers REST calls, the handshake, and the WebSocket.
     const proxy = config.proxyUrl === undefined ? undefined : createProxyRoute(config.proxyUrl)

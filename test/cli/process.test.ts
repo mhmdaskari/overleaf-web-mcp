@@ -150,7 +150,7 @@ describe('the overleaf-web-mcp process', { timeout: 60_000 }, () => {
   })
 
   test('serve, under the same hook, is refused the MCP SDK, so the hook is in force', async () => {
-    // Without the hook, serve would load the SDK and stop at the missing session with AUTH_EXPIRED.
+    // Without the hook, serve would load the SDK and start signed out, waiting for a client.
     const exit = await overleafWebMcp('serve')
     expect(exit.code).toBe(1)
     expect(exit.stdout).toBe('')

@@ -38,7 +38,7 @@ try {
 }
 ```
 
-`createOverleafClient()` opens the saved session, as the server does at start-up, and rejects with
+`createOverleafClient()` opens the saved session when it is created, and rejects with
 `AUTH_EXPIRED` when there is none or it has expired; any failure to open it rejects with
 `McpError`. Close the client in `finally`: it caches
 project connections, which keep the process alive, and can show the account online to
