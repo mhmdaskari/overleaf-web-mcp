@@ -23,7 +23,7 @@ such change is listed.
   unchanged, and the command line and SDK are unchanged.
 - A Claude Desktop extension (#52): `overleaf-web-mcp-X.Y.Z.mcpb`, attached to the GitHub
   Release from this version on. It runs `serve` from the same build as the npm package, on the
-  Node.js Claude Desktop ships with, on macOS and Windows. Its three optional settings are the
+  Node.js Claude Desktop ships with, on macOS, Windows, and Linux. Its three optional settings are the
   Overleaf address (`OVERLEAF_BASE_URL`, default `https://www.overleaf.com`), the allowed
   project ids (`OVERLEAF_ALLOWED_PROJECTS`, default empty, which allows every project), and the
   browser used to sign in (`OVERLEAF_BROWSER_PATH`, default empty, found automatically).
@@ -40,6 +40,11 @@ such change is listed.
   the `account` toolset, and has no command or SDK method; `serve` lists 37 tools, and
   `createMcpServer` lists it only for a runtime with `signIn`. Its annotations are not read-only,
   not destructive, idempotent, and open-world.
+- On Linux, `sign_in` and `login` open the window on the desktop even when the server was
+  started by a desktop app, which passes no display variables: `DISPLAY`, `WAYLAND_DISPLAY`, and
+  the related session variables are read from the user's systemd session, and a variable the
+  server was given is never replaced. When no display can be found, they fail with `NOT_FOUND`
+  and `details.reason: "no_display"` before opening anything.
 - The `sign-in` effect, in `EFFECTS` and `OVERLEAF_ALLOWED_EFFECTS`. With an allowlist that leaves
   it out, `sign_in` is not listed, and a call to it is `POLICY_DENIED`.
 

@@ -173,6 +173,7 @@ describe('login command', () => {
           captureSession: async options =>
             await captureBrowserSession(options, {
               findChrome: async () => '/opt/chrome',
+              browserEnvironment: async () => ({}),
               spawnChrome: () => browser,
               readEndpoint: async () => 'ws://127.0.0.1/devtools/browser/id',
               connectCdp: async () => cdp,
