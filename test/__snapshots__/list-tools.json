@@ -52,6 +52,70 @@
     }
   },
   {
+    "name": "sign_in",
+    "description": "Open a browser window on the user's computer for them to sign in to Overleaf, and save the session, as the login command does. Call it only when the user agrees. A session that already works is returned at once and nothing opens. It waits up to 40 seconds: status waiting means the user is still signing in, so call it again only after they say they have finished. After a failure, ask the user before calling it again. Needs Google Chrome, Chromium, Brave, or Microsoft Edge.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "authenticated": {
+          "type": "boolean",
+          "const": true
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "projectCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sessionExpiresAt": {
+          "type": "string"
+        },
+        "permissionsUnchecked": {
+          "type": "boolean"
+        },
+        "warning": {
+          "type": "string"
+        },
+        "socketPresenceNotice": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "signed_in",
+            "waiting"
+          ]
+        },
+        "alreadySignedIn": {
+          "type": "boolean"
+        },
+        "deadline": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
     "name": "list_projects",
     "description": "List the projects the account can access, newest first by default. Archived and trashed projects are hidden unless includeArchived or includeTrashed is set. Returns projects with id, name, accessLevel, lastUpdated, archived, and trashed, plus totalMatched (before limit) and totalProjects (everything the account can access). includeTags adds each project's tags ({ id, name }) and tags, every tag of the account with its id, name, color, and projectCount, empty ones included; use these ids with manage_tags. tag lists only the projects in the tag with that exact name; an unknown name is NOT_FOUND. Tags are the dashboard's own labels for this account; collaborators do not see them.",
     "inputSchema": {

@@ -183,6 +183,15 @@ connections while it runs, so a shell loop over many files repeats that, and mul
 requests Overleaf sees; `sync_directory`, `batch_upload`, and `delete_entities` do the same work
 in one call.
 
+**Signing in from a client opens a window, and nothing more.** <!-- md:version 1.3.0 -->
+`sign_in` opens the same dedicated browser window as `login`, on the computer the server runs on,
+for the user to sign in; the assistant never sees the page, the password, or the cookies. It
+opens nothing when a session already works, one window at a time on a computer, and nothing after
+a failed sign-in until it is called again, which its description tells the assistant to do only
+with the user's agreement. The session file is written only after a sign-in succeeds, as `login`
+writes it; a closed window, the deadline, or the server shutting down leave it untouched.
+`OVERLEAF_ALLOWED_EFFECTS` without `sign-in` removes the tool.
+
 ## The exact contracts
 
 - Reads normalize CRLF and lone CR to LF and report `newline: "LF"`.
@@ -295,7 +304,7 @@ is why the command line's exit code depends on whether the operation is read-onl
 
 | Code | Meaning | What to do | Since |
 | --- | --- | --- | --- |
-| `AUTH_EXPIRED` | No saved session, or Overleaf no longer accepts it: a redirect to the login page, HTTP 401, a project page without a signed-in user, or a project socket refused as `invalid session` (`details.reason: "invalid_session"`). No other socket refusal is reported as an expired session, though `PERMISSION_DENIED` with `details.reason: "not_authorized"` can also mean one. | Run `npx overleaf-web-mcp login` again. Do not retry the call. | <!-- md:version 0.1.0 --> |
+| `AUTH_EXPIRED` | No saved session, or Overleaf no longer accepts it: a redirect to the login page, HTTP 401, a project page without a signed-in user, or a project socket refused as `invalid session` (`details.reason: "invalid_session"`). No other socket refusal is reported as an expired session, though `PERMISSION_DENIED` with `details.reason: "not_authorized"` can also mean one. With `details.reason: "sign_in_in_progress"`, a sign-in window is open on this computer, from `sign_in` or `login` <!-- md:version 1.3.0 -->. | With the user's agreement call `sign_in`, or run `npx overleaf-web-mcp login` again. Do not retry the call. | <!-- md:version 0.1.0 --> |
 | `PERMISSION_DENIED` | Overleaf refused the operation for this account (HTTP 403), or a document write needs more access than the account has, which is checked before anything is sent (`details.accessLevel`, `details.required`): review-only collaborators can write only tracked changes, and read-only ones only add comments. From `manage_tracked_changes`, the account is not the owner or an editor, which deciding tracked changes needs (`details.accessLevel`), with nothing sent. From `download_project_zip` it can also mean the session expired, since that route checks project access rather than the login. Overleaf refusing to let the account join the project's socket is this code too (`details.reason: "not_authorized"`), with nothing sent; Overleaf sends that refusal also when the saved session is no longer signed in. | Check the project's access level; a review-only collaborator writes with `writeMode: "tracked"`. For a project download, or `details.reason: "not_authorized"`, check `auth_status` too. | <!-- md:version 0.1.0 --> |
 | `NOT_FOUND` | The project, path, or Overleaf resource does not exist (HTTP 404), or a local file to upload or a local folder to download into does not exist (`details.errno: "ENOENT"`), or a `changeIds` entry is not a tracked change in the document (`details.missingChangeIds`, nothing sent), or Overleaf found no such project when joining its socket (`details.reason: "project_not_found"`). | Re-read the tree; the entity may have been renamed or removed. For a tracked change, list the changes again. | <!-- md:version 0.1.0 --> |
 | `REVISION_CONFLICT` | The document changed since the revision you hold, or the verified result differs from the intent, or another update followed a tracked write before it could be checked as tracked (the text is live; `details.outcome: "unknown"`). `details.liveRevision` carries the current revision. From `write_section` with `followIncludes: true`, the file holding the section is no longer at the revision given, checked before anything is sent (`details.filePath`, `details.liveRevision`). | Read again, reconcile, and write with the new revision. | <!-- md:version 0.1.0 --> |

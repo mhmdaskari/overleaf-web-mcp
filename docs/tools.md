@@ -1,9 +1,10 @@
 # Tool reference
 
-The server registers 36 tools. Names are `snake_case`. Each tool is also
-`overleaf-web-mcp call <name>` on the [command line](cli.md) and a camelCase method of
-`createOverleafClient` in the [TypeScript SDK](sdk.md), with the same parameters, results, and
-errors. Every tool except `auth_status`,
+The server registers 37 tools. Names are `snake_case`. Each tool but
+[`sign_in`](#sign_in) is also `overleaf-web-mcp call <name>` on the [command line](cli.md) and a
+camelCase method of `createOverleafClient` in the [TypeScript SDK](sdk.md), with the same
+parameters, results, and errors; `sign_in` opens a browser window, which only `login` does on
+the command line. Every tool except `auth_status`, `sign_in`,
 `list_projects`, `create_project`, `import_project_zip`, and `manage_tags` takes a `projectId` from
 `list_projects` or from one of the tools that create a project. An id never contains `/`, `\`,
 `.`, `?`, `#`, or `%`; one that does is refused with `INVALID_ARGUMENT` before anything is sent.
@@ -46,6 +47,37 @@ absent when no cookie carries a deadline), `permissionsUnchecked` (true on files
 POSIX modes), an optional `warning`, and `socketPresenceNotice` explaining that an open project
 connection can show the account as online. A missing or expired session fails with
 `AUTH_EXPIRED`.
+
+### `sign_in`
+
+<!-- md:version 1.3.0 -->
+
+Open a browser window on the user's computer for them to sign in to Overleaf, and save the
+session, as `npx overleaf-web-mcp login` does, for an MCP client with no terminal. Call it only
+when the user agrees.
+
+No parameters.
+
+- A session that already works, saved by this server or by `login` in another process, is
+  returned with `status: "signed_in"` and `alreadySignedIn: true`, and nothing opens. The check
+  writes nothing.
+- Otherwise a dedicated window opens with its own profile, as for `login`, and the sign-in
+  continues in the background. The call waits up to 40 seconds, under the 60-second tool-call
+  timeout most clients use, then answers `status: "waiting"` with `deadline`, when the sign-in
+  gives up (`OVERLEAF_LOGIN_TIMEOUT_MS`, 5 minutes by default). Call it again once the user says
+  they have finished: it answers `status: "signed_in"`, `alreadySignedIn: false`, and the
+  `auth_status` fields. Progress notifications arrive about every 5 seconds while it waits.
+- While the window is open, every other tool fails with `AUTH_EXPIRED` and
+  `details.reason: "sign_in_in_progress"`, as does a sign-in that `login` or another server
+  holds open on this computer.
+- A sign-in that fails (the window closed, the deadline passed, or the server shut down) is
+  reported once by the next call, which opens nothing; ask the user before calling it again.
+  Nothing is saved unless the sign-in succeeds, and only cookies for the Overleaf origin are.
+
+It is listed only by `serve`, with the `account` toolset, and when `OVERLEAF_ALLOWED_EFFECTS`, if
+set, includes `sign-in`. It needs Google Chrome, Chromium, Brave, or Microsoft Edge; set
+`OVERLEAF_BROWSER_PATH` if none is found. Annotations: not read-only, not destructive (it saves a
+session only when the saved one does not work), idempotent, open-world.
 
 ### `list_projects` <small>read-only</small>
 

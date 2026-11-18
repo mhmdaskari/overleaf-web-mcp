@@ -6,7 +6,12 @@ import { describe, expect, test, vi } from 'vitest'
 
 import { readConfig } from '../src/config.js'
 import { McpError } from '../src/core/errors.js'
-import { SESSION_RUNTIME_MEMBERS, SessionRuntime, type SessionRuntimeOptions } from '../src/session-runtime.js'
+import {
+  SESSION_RUNTIME_MEMBERS,
+  SessionRuntime,
+  signInOfferedBy,
+  type SessionRuntimeOptions,
+} from '../src/session-runtime.js'
 import { fakeServiceRuntime } from './helpers/fake-runtime.js'
 
 type FakeRuntime = ReturnType<typeof fakeServiceRuntime>
@@ -151,6 +156,19 @@ describe('SessionRuntime', () => {
     await session.close()
   })
 
+  test('names sign_in in its message only when the configuration offers it', async () => {
+    const offered = await SessionRuntime.start(await config(), { ...harness([expired()]).options, signInOffered: true })
+    await expect(offered.authStatus()).rejects.toThrow(/sign_in/u)
+    const hidden = await SessionRuntime.start(await config(), harness([expired()]).options)
+    await expect(hidden.authStatus()).rejects.not.toThrow(/sign_in/u)
+    expect(signInOfferedBy(readConfig({}))).toBe(true)
+    expect(signInOfferedBy(readConfig({ OVERLEAF_TOOLSETS: 'files' }))).toBe(false)
+    expect(signInOfferedBy(readConfig({ OVERLEAF_ALLOWED_EFFECTS: 'overleaf-read' }))).toBe(false)
+    expect(signInOfferedBy(readConfig({ OVERLEAF_ALLOWED_EFFECTS: 'overleaf-read,sign-in' }))).toBe(true)
+    await offered.close()
+    await hidden.close()
+  })
+
   test('exposes the access policy before any session exists', async () => {
     const { options } = harness([expired()])
     const session = await SessionRuntime.start(
@@ -158,6 +176,163 @@ describe('SessionRuntime', () => {
       options
     )
     expect(() => session.policy.assertProject('bbbbbbbbbbbbbbbbbbbbbbbb')).toThrow(/OVERLEAF_ALLOWED_PROJECTS|policy/iu)
+    await session.close()
+  })
+})
+
+describe('SessionRuntime.signIn', () => {
+  /** A login that the test finishes or fails by hand, recording the signal it was given. */
+  function pendingLogin() {
+    const calls: AbortSignal[] = []
+    let finish!: () => void
+    let fail!: (error: unknown) => void
+    const login = vi.fn(
+      async (_config: unknown, options: { signal: AbortSignal }) =>
+        await new Promise<void>((resolve, reject) => {
+          calls.push(options.signal)
+          finish = resolve
+          fail = reject
+          options.signal.addEventListener('abort', () => reject(options.signal.reason))
+        })
+    )
+    return { login, calls, finish: () => finish(), fail: (error: unknown) => fail(error) }
+  }
+
+  async function signedOut(extra: Partial<SessionRuntimeOptions> = {}, outcomes: Array<FakeRuntime | Error> = []) {
+    const h = harness([expired(), ...outcomes])
+    const session = await SessionRuntime.start(await config(), {
+      ...h.options,
+      probe: async () => {
+        throw expired()
+      },
+      signInWaitMs: 30,
+      ...extra,
+    })
+    return { ...h, session }
+  }
+
+  test('reports a working session without opening anything', async () => {
+    const runtime = fakeServiceRuntime()
+    const { login } = pendingLogin()
+    const h = harness([runtime])
+    const session = await SessionRuntime.start(await config(), { ...h.options, login })
+
+    await expect(session.signIn()).resolves.toMatchObject({ status: 'signed_in', alreadySignedIn: true })
+    expect(login).not.toHaveBeenCalled()
+    await session.close()
+  })
+
+  test('finds a session saved elsewhere with a read-only probe, and opens nothing', async () => {
+    const { login } = pendingLogin()
+    const probe = vi.fn(async () => undefined)
+    const { session } = await signedOut({ login, probe }, [fakeServiceRuntime()])
+
+    await expect(session.signIn()).resolves.toMatchObject({ status: 'signed_in', alreadySignedIn: true })
+    expect(probe).toHaveBeenCalledTimes(1)
+    expect(login).not.toHaveBeenCalled()
+    await session.close()
+  })
+
+  test('signs in, then uses the new session', async () => {
+    const pending = pendingLogin()
+    const runtime = fakeServiceRuntime()
+    const { session } = await signedOut({ login: pending.login, signInWaitMs: 1_000 }, [runtime])
+
+    const result = session.signIn()
+    await vi.waitFor(() => expect(pending.login).toHaveBeenCalledTimes(1))
+    pending.finish()
+    await expect(result).resolves.toMatchObject({ status: 'signed_in', alreadySignedIn: false, authenticated: true })
+    expect(runtime.authStatus).toHaveBeenCalledTimes(1)
+    await session.close()
+  })
+
+  test('returns waiting while the user signs in, refuses other calls, and reports the session next time', async () => {
+    const pending = pendingLogin()
+    const { session } = await signedOut({ login: pending.login }, [fakeServiceRuntime()])
+
+    const waiting = await session.signIn()
+    expect(waiting).toMatchObject({ status: 'waiting', deadline: expect.any(String) })
+    await expect(session.account.listProjects({})).rejects.toMatchObject({
+      code: 'AUTH_EXPIRED',
+      details: { reason: 'sign_in_in_progress' },
+    })
+    // A second call joins the same sign-in instead of opening another window.
+    await expect(session.signIn()).resolves.toMatchObject({ status: 'waiting' })
+    expect(pending.login).toHaveBeenCalledTimes(1)
+
+    pending.finish()
+    await expect(session.signIn()).resolves.toMatchObject({ status: 'signed_in', alreadySignedIn: false })
+    await session.close()
+  })
+
+  test('reports a failed sign-in once, opening nothing, and tries again only after it expires', async () => {
+    const pending = pendingLogin()
+    let clock = 1_000_000
+    const { session } = await signedOut({ login: pending.login, now: () => clock })
+
+    await expect(session.signIn()).resolves.toMatchObject({ status: 'waiting' })
+    pending.fail(new McpError('AUTH_EXPIRED', 'Chrome closed before Overleaf login completed.'))
+    await vi.waitFor(async () =>
+      expect(session.account.listProjects({})).rejects.not.toMatchObject({ details: { reason: 'sign_in_in_progress' } })
+    )
+
+    await expect(session.signIn()).rejects.toMatchObject({
+      code: 'AUTH_EXPIRED',
+      message: expect.stringMatching(/Ask the user before calling sign_in again/u),
+    })
+    expect(pending.login).toHaveBeenCalledTimes(1)
+
+    clock += 3 * 60_000
+    await expect(session.signIn()).resolves.toMatchObject({ status: 'waiting' })
+    expect(pending.login).toHaveBeenCalledTimes(2)
+    await session.close()
+  })
+
+  test('a failure other than an expired session opens nothing', async () => {
+    const { login } = pendingLogin()
+    const { session } = await signedOut({
+      login,
+      probe: async () => {
+        throw new McpError('REMOTE_ERROR', 'Overleaf could not be reached.')
+      },
+    })
+
+    await expect(session.signIn()).rejects.toMatchObject({ code: 'REMOTE_ERROR' })
+    expect(login).not.toHaveBeenCalled()
+    await session.close()
+  })
+
+  test('refuses before anything when OVERLEAF_ALLOWED_EFFECTS leaves out sign-in', async () => {
+    const { login } = pendingLogin()
+    const probe = vi.fn()
+    const h = harness([expired()])
+    const session = await SessionRuntime.start(
+      readConfig({ ...process.env, OVERLEAF_ALLOWED_EFFECTS: 'overleaf-read' }),
+      { ...h.options, login, probe }
+    )
+
+    await expect(session.signIn()).rejects.toMatchObject({ code: 'POLICY_DENIED', details: { effect: 'sign-in' } })
+    expect(probe).not.toHaveBeenCalled()
+    expect(login).not.toHaveBeenCalled()
+    await session.close()
+  })
+
+  test('closing the server stops a sign-in in progress', async () => {
+    const pending = pendingLogin()
+    const { session } = await signedOut({ login: pending.login })
+
+    await expect(session.signIn()).resolves.toMatchObject({ status: 'waiting' })
+    await session.close()
+    expect(pending.calls[0]!.aborted).toBe(true)
+  })
+
+  test('sends progress while it waits', async () => {
+    const pending = pendingLogin()
+    const { session } = await signedOut({ login: pending.login, signInWaitMs: 60, signInProgressMs: 10 })
+    const progress = vi.fn(async () => undefined)
+
+    await expect(session.signIn(progress)).resolves.toMatchObject({ status: 'waiting' })
+    expect(progress.mock.calls.length).toBeGreaterThan(0)
     await session.close()
   })
 })

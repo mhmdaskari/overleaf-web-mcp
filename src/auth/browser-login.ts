@@ -35,6 +35,8 @@ export interface BrowserLoginOptions {
   browserPath?: string
   timeoutMs: number
   onStatus?: (message: string) => void
+  /** Stops the wait and closes the window; the capture rejects with the signal's reason. */
+  signal?: AbortSignal
 }
 
 export interface BrowserLoginDependencies {
@@ -90,7 +92,11 @@ export async function captureBrowserSession(
   const sleep = dependencies.sleep ?? (async (ms: number) => await new Promise(resolve => setTimeout(resolve, ms)))
   const now = dependencies.now ?? Date.now
   const baseUrl = new URL(options.baseUrl)
+  const stopIfAborted = (): void => {
+    if (options.signal?.aborted) throw options.signal.reason ?? new McpError('TIMEOUT', 'The sign-in was stopped.')
+  }
 
+  stopIfAborted()
   // A dedicated profile avoids exposing or modifying the user's everyday browser session.
   await mkdir(options.browserProfileDir, { recursive: true, mode: 0o700 })
   // Chrome may leave this discovery file behind after an unclean exit.
@@ -118,6 +124,7 @@ export async function captureBrowserSession(
 
     const deadline = now() + options.timeoutMs
     while (now() < deadline) {
+      stopIfAborted()
       if (browser.exitCode !== null || cdp.closed) {
         throw new McpError('AUTH_EXPIRED', 'Chrome closed before Overleaf login completed.')
       }
@@ -153,10 +160,12 @@ export async function captureBrowserSession(
         }
       } catch (error) {
         if (error instanceof McpError && error.code === 'AUTH_EXPIRED') throw error
+        if (options.signal?.aborted) throw error
         // Navigation briefly destroys the execution context; polling resumes after the redirect.
       }
       await sleep(500)
     }
+    stopIfAborted()
     throw new McpError(
       'TIMEOUT',
       `Overleaf login did not complete within ${Math.round(options.timeoutMs / 1000)} seconds.`

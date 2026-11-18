@@ -190,6 +190,11 @@ export class AccessPolicy {
   }
 
   /** Refuses an effect outside `OVERLEAF_ALLOWED_EFFECTS` (`POLICY_DENIED`), before any work. */
+  /** Whether `OVERLEAF_ALLOWED_EFFECTS` allows `effect`; always true without an allowlist. */
+  allowsEffect(effect: Effect): boolean {
+    return this.#allowedEffects === undefined || this.#allowedEffects.has(effect)
+  }
+
   assertEffect(...effects: Effect[]): void {
     if (this.#allowedEffects === undefined) return
     const refused = effects.find(effect => !this.#allowedEffects!.has(effect))

@@ -264,6 +264,7 @@ The effects are:
 | `local-read` | Reading a file or folder on the server's disk |
 | `local-write` | Creating or replacing a file on the server's disk |
 | `unchecked-replace` | Replacing a text document with no revision check, by `upload_file` or `batch_upload` |
+| `sign-in` | Opening a browser window on this computer for the user to sign in, and saving the session, by the MCP tool `sign_in` alone, which `serve` does not list when an allowlist leaves this out <!-- md:version 1.3.0 --> |
 
 Nearly every operation reads project data, writes included, so `overleaf-read` belongs in any
 useful list. An operation that reads after it changes something, such as `create_project`

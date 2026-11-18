@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
-import { TOOL_NAMES } from '../../src/mcp/tools.js'
+import { LISTED_TOOL_NAMES } from '../../src/mcp/tools.js'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -87,7 +87,7 @@ describe('serve without a saved session', () => {
     const byId = new Map(replies.map(reply => [reply.id, reply]))
     expect(byId.get(1)?.result?.serverInfo?.name).toBe('overleaf-web-mcp')
     const listed = (byId.get(2)?.result?.tools as Array<{ name: string }>).map(tool => tool.name)
-    for (const name of TOOL_NAMES) expect(listed).toContain(name)
+    expect(listed).toEqual(LISTED_TOOL_NAMES)
     const call = byId.get(3)?.result as { isError?: boolean; content: Array<{ text: string }> }
     expect(call.isError).toBe(true)
     expect(JSON.parse(call.content[0]!.text)).toMatchObject({ code: 'AUTH_EXPIRED' })

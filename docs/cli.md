@@ -1,7 +1,7 @@
 # Command line
 
-Every tool is also a command. `overleaf-web-mcp` reaches the same 36 operations as the MCP
-server, through the same service, checks, and safety defaults, and prints one JSON result whose
+Every tool but one is also a command. `overleaf-web-mcp` reaches the same 36 operations as the
+MCP server, through the same service, checks, and safety defaults, and prints one JSON result whose
 exit code says what is safe to do next. Use it from a shell, a script, a CI job, or a coding
 agent that works in a terminal; no MCP client is involved. Three [Agent Skills](#agent-skills)
 build on it.
@@ -16,7 +16,9 @@ npx overleaf-web-mcp call auth_status
 ```
 
 `login` opens a browser window and saves the session, as in the
-[installation guide](install.md#1-sign-in-once). `call auth_status` then prints the account's
+[installation guide](install.md#1-sign-in-once). One sign-in runs at a time on a computer: while
+`login`, or the MCP tool `sign_in` of a running server, has its window open, another fails with
+`AUTH_EXPIRED` and `details.reason: "sign_in_in_progress"`. `call auth_status` then prints the account's
 project count and when the session expires, and exits 0. For frequent use, install the package
 once with `npm install -g overleaf-web-mcp` and run `overleaf-web-mcp` directly. In a script, pin the version and pass `--yes`, as in
 `npx --yes overleaf-web-mcp@1.2 projects list`: without `--yes`, `npx` can print an install

@@ -161,7 +161,9 @@ These held through every release so far; keep them.
 
 - Tool names are snake_case `verb_noun` (`list_projects`, `manage_entity`), and parameters are
   camelCase. A tool name is also its command line and SDK name (`call read_file`,
-  `client.readFile`), so naming one names all three.
+  `client.readFile`), so naming one names all three. The one exception is `sign_in`, an MCP-only
+  tool: it opens a browser window, which the command line does only through `login` and the SDK
+  never does.
 - Every tool description costs an MCP client context on every turn. Prefer an `action` enum on an
   existing tool, as `manage_entity`, `manage_project`, and `manage_tracked_changes` do, to one new
   tool per verb. A check that needs no agent, such as `doctor` or `capabilities`, is a command line
@@ -214,6 +216,13 @@ Each addition touches several files, and the tests fail until they agree.
   README's "N tools in eight groups" and the opening line of `docs/cli.md`. A command line
   shorthand only if scripts will use it often. The SDK client and `call <tool>` derive their names
   from the operation, so they need nothing more.
+- **An MCP-only tool** (only for what the command line and SDK must not do, as `sign_in` opens a
+  browser window): its definition next to its registration in `src/mcp/` (name, toolset,
+  effects, description, output schema, annotations), `MCP_ONLY_TOOLS` and `LISTED_TOOL_NAMES` in
+  `src/mcp/tools.ts`, the condition under which `offeredToolNames()` lists it, its own tests in
+  `test/mcp/` (listing, output schema on every return path, error shape, annotations, toolset and
+  effect filtering), the `tools/list` snapshot, and in `docs/tools.md` a tagged heading and a note
+  that it has no command or SDK method. The counts the tests hold follow `LISTED_TOOL_NAMES`.
 - **An error code:** `ERROR_CODES` in `src/contracts/error-codes.ts`, its exit code in
   `src/cli/exit-codes.ts`, both exit tables in `test/cli/exit-codes.test.ts` and
   `test/cli/run.test.ts`, the exit-code table in `docs/cli.md`, the error table in

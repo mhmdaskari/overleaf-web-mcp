@@ -1,12 +1,21 @@
 import type { OperationContext, OperationDiagnostic, ProgressReporter } from '../contracts/context.js'
-import { OPERATION_NAMES, OPERATIONS } from '../contracts/operations.js'
-import type { OverleafServiceRuntime } from '../contracts/service.js'
+import { OPERATION_NAMES, OPERATIONS, type OperationName } from '../contracts/operations.js'
+import { isSignInCapable, type OverleafServiceRuntime, type SignInCapable } from '../contracts/service.js'
 import type { Toolset } from '../contracts/toolsets.js'
 import { asMcpError } from '../core/errors.js'
 import { createOverleafService } from '../service/operations.js'
+import { SIGN_IN_TOOL } from './sign-in.js'
 
-/** The registered tools, in order: exactly the operations in the contract registry. */
+/** The operations, in order: every tool except the MCP-only ones, and every `call` command and SDK method. */
 export const TOOL_NAMES = OPERATION_NAMES
+
+/** Tools that are not operations, so not commands or SDK methods either. */
+export const MCP_ONLY_TOOLS = [SIGN_IN_TOOL.name] as const
+
+/** Every tool `serve` can list, in order: `sign_in` follows `auth_status`, in the Account group. */
+export const LISTED_TOOL_NAMES: readonly string[] = OPERATION_NAMES.flatMap(name =>
+  name === 'auth_status' ? [name, SIGN_IN_TOOL.name] : [name]
+)
 
 /**
  * The part of the SDK's per-request context (`ServerContext.mcpReq`) a tool uses: the progress
@@ -124,10 +133,24 @@ export interface ToolRegistrationOptions {
   toolsets?: readonly Toolset[] | undefined
 }
 
-/** The tools `registerOverleafTools` registers under these options, in order. */
-export function offeredToolNames(options: Pick<ToolRegistrationOptions, 'toolsets'> = {}): string[] {
-  return OPERATION_NAMES.filter(
-    name => options.toolsets === undefined || options.toolsets.includes(OPERATIONS[name].toolset)
+/** Whether `sign_in` is offered: a runtime that can sign in, the account toolset, and the `sign-in` effect. */
+function offersSignIn(
+  options: Pick<ToolRegistrationOptions, 'toolsets'>,
+  runtime: object | undefined
+): runtime is SignInCapable & { policy?: OverleafServiceRuntime['policy'] } {
+  if (runtime === undefined || !isSignInCapable(runtime)) return false
+  if (options.toolsets !== undefined && !options.toolsets.includes(SIGN_IN_TOOL.toolset)) return false
+  const policy = (runtime as { policy?: OverleafServiceRuntime['policy'] }).policy
+  return policy === undefined || SIGN_IN_TOOL.effects.every(effect => policy.allowsEffect(effect))
+}
+
+/** The tools `registerOverleafTools` registers for this runtime under these options, in order. */
+export function offeredToolNames(options: Pick<ToolRegistrationOptions, 'toolsets'> = {}, runtime?: object): string[] {
+  const signIn = offersSignIn(options, runtime)
+  return LISTED_TOOL_NAMES.filter(name =>
+    name === SIGN_IN_TOOL.name
+      ? signIn
+      : options.toolsets === undefined || options.toolsets.includes(OPERATIONS[name as OperationName].toolset)
   )
 }
 
@@ -173,5 +196,25 @@ export function registerOverleafTools(
         ? (args: unknown, extra?: ToolCallExtra) => run(args, extra)
         : (extra?: ToolCallExtra) => run({}, extra)
     )
+    if (name === 'auth_status' && offersSignIn(options, runtime)) registerSignIn(server, runtime)
   }
+}
+
+function registerSignIn(server: ToolRegistrar, runtime: SignInCapable): void {
+  server.registerTool(
+    SIGN_IN_TOOL.name,
+    {
+      description: SIGN_IN_TOOL.description,
+      outputSchema: SIGN_IN_TOOL.outputSchema,
+      annotations: SIGN_IN_TOOL.annotations,
+    },
+    async (extra?: ToolCallExtra) => {
+      try {
+        const value = await runtime.signIn(progressReporter(extra))
+        return { ...success(value), structuredContent: value }
+      } catch (error) {
+        return failure(error)
+      }
+    }
+  )
 }
