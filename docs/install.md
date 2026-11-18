@@ -58,6 +58,13 @@ Using only the command line or the TypeScript library? Skip to
     args = ["-y", "overleaf-web-mcp", "serve"]
     ```
 
+    The Codex app, the command line, and the IDE extension share this file
+    <!-- md:version 1.3.0 -->, so one entry serves all three. Codex stops waiting for a tool after
+    60 seconds by default (`tool_timeout_sec`), which is why [`sign_in`](tools.md#sign_in)
+    answers `waiting` while you sign in. If the app was installed from the App Store as ChatGPT
+    and reports `ENOENT` for the server, see
+    [openai/codex#32202](https://github.com/openai/codex/issues/32202).
+
 === "Claude Desktop"
 
     **As an extension** <!-- md:version 1.3.0 -->. Download `overleaf-web-mcp-X.Y.Z.mcpb` from
@@ -95,8 +102,28 @@ Using only the command line or the TypeScript library? Skip to
 
 === "Cursor"
 
-    Add the same block to `~/.cursor/mcp.json` for all projects, or to `.cursor/mcp.json` inside
-    one project.
+    [Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=overleaf&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIm92ZXJsZWFmLXdlYi1tY3AiLCJzZXJ2ZSJdfQ%3D%3D) <!-- md:version 1.3.0 --> opens Cursor
+    with this server filled in; check the command it shows, `npx -y overleaf-web-mcp serve`, and
+    install. Or add the same block to `~/.cursor/mcp.json` for all projects, or to
+    `.cursor/mcp.json` inside one project.
+
+    ```json
+    {
+      "mcpServers": {
+        "overleaf": {
+          "command": "npx",
+          "args": ["-y", "overleaf-web-mcp", "serve"]
+        }
+      }
+    }
+    ```
+
+=== "Antigravity"
+
+    <!-- md:version 1.3.0 --> Add the block to `~/.gemini/config/mcp_config.json` for every
+    workspace, or to `.agents/mcp_config.json` inside one. In the IDE, open it from the **…**
+    menu of the agent panel: **MCP Servers**, **Manage MCP Servers**, **View raw config**. In the
+    app, **Customizations**, **Installed**, **MCP Servers** copies its path.
 
     ```json
     {
@@ -194,6 +221,14 @@ in `$(npm root -g)/overleaf-web-mcp/skills` after a global install;
       "$(dirname "$(nvm which 22)")/node" \
       "$(npm root -g)/overleaf-web-mcp/dist/cli.js" serve
     ```
+
+**"`spawn npx ENOENT`" or "command not found" in a desktop app.** <!-- md:version 1.3.0 --> An
+app opened from the Dock, Finder, or the Start menu does not read your shell profile, so a
+Node.js installed with nvm, Homebrew, or a version manager is not on its `PATH`, even though
+`npx` works in your terminal. Give the client the absolute path instead: find it with
+`command -v npx` on macOS and Linux, or `where npx` on Windows, and put that in `command`, or
+use the absolute `node` and `dist/cli.js` paths as in the nvm example above. Claude Desktop's
+extension needs neither, as it brings its own Node.js.
 
 **Not sure which part is failing.** Run `npx overleaf-web-mcp doctor`, and with a project id
 `npx overleaf-web-mcp doctor <projectId>`. It reports each check as `ok`, `failed` with its error

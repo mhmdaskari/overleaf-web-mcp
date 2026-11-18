@@ -53,12 +53,16 @@ download, the whole transfer included, in place of `OVERLEAF_REQUEST_TIMEOUT_MS`
 <!-- md:version 1.2.0 -->
 
 An MCP client loads the name, description, and input schema of every tool on every turn, about
-59,000 characters for all 36. `OVERLEAF_TOOLSETS` lists the groups of tools `serve` offers, so a
-client that only edits and compiles does not carry folder sync, project lifecycle, and tags:
+59,000 characters for all 37. `OVERLEAF_TOOLSETS` lists the groups of tools `serve` offers, so a
+client that only edits and compiles does not carry folder sync, project lifecycle, and tags.
+Some clients also cap how many tools they pass to the model across all servers (Cursor has been
+reported to keep about 40), and Antigravity loads tools lazily and filters them with
+`enabledTools`; with several servers connected, choosing groups here keeps the ones you use
+<!-- md:version 1.3.0 -->.
 
 | Group | Tools |
 | --- | --- |
-| `account` | `auth_status`, `list_projects` |
+| `account` | `auth_status`, `sign_in` (MCP only), `list_projects` |
 | `projects` | `create_project`, `clone_project`, `import_project_zip`, `manage_project`, `update_project_settings`, `manage_tags` |
 | `files` | `get_project_tree`, `read_file`, `search_project`, `write_file`, `create_file`, `manage_entity`, `upload_file`, `batch_upload`, `download_file`, `download_project_zip` |
 | `sync` | `plan_sync`, `sync_directory`, `delete_entities` |
