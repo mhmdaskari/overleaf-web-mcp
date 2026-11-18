@@ -7,13 +7,14 @@ import { readStdinStream } from './cli/stdin.js'
 import { parseCliCommand, renderHelp } from './cli-command.js'
 import { readConfig } from './config.js'
 import { asMcpError } from './core/errors.js'
-import { OverleafRuntime } from './runtime.js'
+import { SessionRuntime } from './session-runtime.js'
 
 async function serve(): Promise<void> {
   // Loaded only here, so an operation command never loads the MCP SDK.
   const { runStdioServer } = await import('./server.js')
   const config = readConfig()
-  const runtime = await OverleafRuntime.create(config)
+  // Starts without a working session too, so a client connects and its tools report AUTH_EXPIRED.
+  const runtime = await SessionRuntime.start(config)
   // stdout carries only MCP frames; a notice names the tool and a code, never content.
   const server = runStdioServer(runtime, {
     toolsets: config.toolsets,

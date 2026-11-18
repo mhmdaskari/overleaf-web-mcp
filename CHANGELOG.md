@@ -26,9 +26,19 @@ such change is listed.
   Node.js Claude Desktop ships with, on macOS and Windows. Its three optional settings are the
   Overleaf address (`OVERLEAF_BASE_URL`, default `https://www.overleaf.com`), the allowed
   project ids (`OVERLEAF_ALLOWED_PROJECTS`, default empty, which allows every project), and the
-  browser used to sign in (`OVERLEAF_BROWSER_PATH`, default empty, found automatically). Signing in
-  still needs `npx overleaf-web-mcp login` in a terminal, and the server does not start without a
-  saved session.
+  browser used to sign in (`OVERLEAF_BROWSER_PATH`, default empty, found automatically).
+
+### Changed
+
+- `serve` starts without a working session (#54). It used to exit with `AUTH_EXPIRED` before
+  answering the client, which an MCP client shows only as "failed to connect"; now the client
+  connects, `tools/list` is unchanged, and each tool answers `AUTH_EXPIRED` until the user signs
+  in. A session saved later, by `login` in a terminal, is picked up on the next call without a
+  restart, and a call that finds the session expired makes the next call read the session file
+  again. While signed out, a call sends nothing to Overleaf unless the session file has changed.
+  A session file that others can read, and any other startup failure, still stop the server.
+  Operation commands and the SDK still open the session up front and fail with `AUTH_EXPIRED`
+  when there is none.
 
 ### Fixed
 
