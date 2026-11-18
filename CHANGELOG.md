@@ -30,6 +30,15 @@ such change is listed.
   still needs `npx overleaf-web-mcp login` in a terminal, and the server does not start without a
   saved session.
 
+### Fixed
+
+- A process holding an older or expired session no longer overwrites a newer one. Every runtime
+  (the server, each command, the SDK) saves the cookies Overleaf sends back; it used to apply them
+  over whatever the session file held, so a server whose session had expired could replace the
+  session a `login` in another terminal had just saved with an anonymous one. It now leaves the
+  file alone when a cookie it changes no longer holds the value it had, and only that process's
+  own session fails with `AUTH_EXPIRED`.
+
 ### Internal
 
 - `scripts/build-mcpb.ts` builds the extension after `npm run build`. It installs the production

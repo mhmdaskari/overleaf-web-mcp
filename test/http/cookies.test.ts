@@ -67,6 +67,43 @@ describe('Netscape cookie jars', () => {
     expect(await readFile(path, 'utf8')).toContain('overleaf.sid\tnew')
   })
 
+  test('never overwrites a newer session another process saved since this one loaded', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-cookie-newer-'))
+    const path = join(directory, 'cookies.txt')
+    const line = (value: string) => `.overleaf.test\tTRUE\t/\tTRUE\t2147483647\toverleaf.sid\t${value}\n`
+    await writeFile(path, `# Netscape HTTP Cookie File\n${line('old')}`, { mode: 0o600 })
+    const store = await CookieStore.load(path)
+    const liveJar = store.jar
+
+    // Another process signs in and saves a new session over the file.
+    const newer = `# Netscape HTTP Cookie File\n${line('signed-in-elsewhere')}`
+    await writeFile(path, newer, { mode: 0o600 })
+    // This process's old session is answered with an anonymous cookie, as a /login redirect does.
+    await store.mergeSetCookies('https://overleaf.test/login', [
+      'overleaf.sid=anonymous; Domain=overleaf.test; Path=/; Secure',
+    ])
+
+    expect(await readFile(path, 'utf8')).toBe(newer)
+    expect(store.jar).toBe(liveJar)
+  })
+
+  test('still saves a cookie the file never had, next to an unchanged session', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-cookie-added-'))
+    const path = join(directory, 'cookies.txt')
+    await writeFile(
+      path,
+      '# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t2147483647\toverleaf.sid\tsame\n',
+      { mode: 0o600 }
+    )
+    const store = await CookieStore.load(path)
+
+    await store.mergeSetCookies('https://overleaf.test/project', ['GCLB=balancer; Path=/; Secure'])
+
+    const saved = await readFile(path, 'utf8')
+    expect(saved).toContain('GCLB\tbalancer')
+    expect(saved).toContain('overleaf.sid\tsame')
+  })
+
   test('creates a protected Netscape jar in a new config directory', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'overleaf-cookie-login-'))
     const path = join(directory, 'nested', 'cookies.txt')

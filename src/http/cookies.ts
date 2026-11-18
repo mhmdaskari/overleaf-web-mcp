@@ -103,6 +103,16 @@ function withArrivalDeadline(header: string, arrivedAt: number): Cookie | string
   return cookie
 }
 
+/** Each cookie's value, keyed by its domain, path, and name. */
+function cookieValues(jar: CookieJar): Map<string, string> {
+  const values = new Map<string, string>()
+  for (const json of jar.serializeSync()?.cookies ?? []) {
+    const cookie = Cookie.fromJSON(json)
+    if (cookie) values.set(`${cookie.domain ?? ''}\t${cookie.path ?? ''}\t${cookie.key}`, cookie.value)
+  }
+  return values
+}
+
 function serializeJar(jar: CookieJar): string {
   const serialized = jar.serializeSync()
   const cookies = (serialized?.cookies ?? [])
@@ -171,12 +181,20 @@ export class CookieStore {
     }
   }
 
+  /**
+   * Records the cookies of one response, in memory and in the jar file. The file is rewritten only
+   * when every cookie the response changes still holds, on disk, the value this process held
+   * before it, so a process with an old or anonymous session never overwrites a newer one.
+   */
   async mergeSetCookies(url: string, setCookies: string[]): Promise<void> {
     const arrivedAt = Date.now()
+    const before = cookieValues(this.jar)
     for (const value of setCookies) {
       await this.jar.setCookie(withArrivalDeadline(value, arrivedAt), url)
     }
     if (setCookies.length === 0) return
+    const after = cookieValues(this.jar)
+    const changed = [...new Set([...before.keys(), ...after.keys()])].filter(key => before.get(key) !== after.get(key))
 
     let release: (() => Promise<void>) | undefined
     try {
@@ -186,6 +204,12 @@ export class CookieStore {
       })
       // Reload under the lock so concurrent server processes do not overwrite each other's refreshes.
       const latest = await parseNetscapeCookies(await readFile(this.path, 'utf8'))
+      // A cookie this response changes no longer holds, on disk, the value this process sent: another
+      // process saved a different session since. Its file wins; this process's session, if dead, fails
+      // with AUTH_EXPIRED on its own. Adopting the file here would pair its cookies with this
+      // runtime's CSRF token and user id, so memory is left as it is too.
+      const onDisk = cookieValues(latest)
+      if (changed.some(key => onDisk.get(key) !== before.get(key))) return
       for (const value of setCookies) {
         await latest.setCookie(withArrivalDeadline(value, arrivedAt), url)
       }
