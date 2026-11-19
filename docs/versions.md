@@ -23,7 +23,7 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
 
 ## 1.3.0
 
-[Changelog](changelog.md#130-unreleased)
+[Changelog](changelog.md#130-2026-11-18)
 
 - **MCP prompts:** [`revise_manuscript`, `address_reviewer_comments`, and
   `sync_sources`](tools.md#workflow-prompts), the three workflows as prompts a client can offer

@@ -10,7 +10,14 @@ version, a deprecation is announced at least one minor version ahead with both n
 every change is listed below. Before 1.0.0, a minor or patch release could change them, and each
 such change is listed.
 
-## [1.3.0] - Unreleased
+## [1.3.0] - 2026-11-18
+
+For desktop apps. Claude Desktop installs the server as an extension, and any MCP client can sign
+in without a terminal: `serve` now starts without a saved session, and the new `sign_in` tool
+opens the sign-in window on request, on macOS, Windows, and Linux. The three workflows of the
+Agent Skills are offered as MCP prompts. Two processes sharing one session file no longer
+overwrite each other's session, and the installation guide covers Cursor, the Codex app, and
+Antigravity.
 
 ### Added
 
