@@ -74,6 +74,10 @@ such change is listed.
   replace the session a `login` in another terminal had just saved with an anonymous one. It now
   leaves the file alone when a cookie it changes no longer holds the value it had, and only that
   process's own session fails with `AUTH_EXPIRED`.
+- A running server or SDK client whose session file was removed failed every later call with
+  `PARTIAL_CLEANUP` ("Could not safely persist refreshed cookies") until restarted. It now writes
+  nothing back, as when another process saved a different session, and keeps the session it
+  holds.
 
 ### Documentation
 
