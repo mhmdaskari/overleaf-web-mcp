@@ -9,7 +9,9 @@ copyright: MIT License. Unofficial and not affiliated with Overleaf.
 theme:
   name: material
   language: en
+  favicon: assets/images/favicon.svg
   icon:
+    logo: material/leaf
     repo: fontawesome/brands/github
   features:
     - navigation.tracking
@@ -23,15 +25,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: teal
-      accent: teal
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: teal
-      accent: teal
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
