@@ -1,3 +1,31 @@
+/*
+ * Colours from the project image (docs/assets/overleaf-web-mcp-workflow*.webp). The header is its
+ * wordmark green in both schemes; links are that green on light and the brighter green of the
+ * image's dark version on dark. Each meets WCAG AA: white on #027449 is 5.8:1, #027449 on white
+ * 5.8:1, and #28bd76 on the slate background 6.6:1.
+ */
+[data-md-color-scheme='default'],
+[data-md-color-scheme='slate'] {
+  --md-primary-fg-color: #027449;
+  --md-primary-fg-color--light: #2a8a63;
+  --md-primary-fg-color--dark: #015a38;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+}
+
+[data-md-color-scheme='default'] {
+  --md-accent-fg-color: #015a38;
+  --md-accent-fg-color--transparent: rgba(2, 116, 73, 0.1);
+  --md-typeset-a-color: #027449;
+}
+
+[data-md-color-scheme='slate'] {
+  --md-hue: 215deg;
+  --md-accent-fg-color: #2fc87d;
+  --md-accent-fg-color--transparent: rgba(40, 189, 118, 0.1);
+  --md-typeset-a-color: #28bd76;
+}
+
 /* Version badges, after the version convention of Material for MkDocs. */
 .md-typeset .mdx-badge {
   font-size: 0.85em;
