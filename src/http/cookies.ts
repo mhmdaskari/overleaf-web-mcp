@@ -103,6 +103,10 @@ function withArrivalDeadline(header: string, arrivedAt: number): Cookie | string
   return cookie
 }
 
+function isMissingFile(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT'
+}
+
 /** Each cookie's value, keyed by its domain, path, and name. */
 function cookieValues(jar: CookieJar): Map<string, string> {
   const values = new Map<string, string>()
@@ -198,12 +202,26 @@ export class CookieStore {
 
     let release: (() => Promise<void>) | undefined
     try {
-      release = await lockfile.lock(this.path, {
-        retries: { retries: 5, minTimeout: 50, maxTimeout: 250 },
-        stale: 10_000,
-      })
+      // A removed session file signs every process out: this one writes nothing back, as when another
+      // process saved a different session below, and keeps working with the session it holds.
+      try {
+        release = await lockfile.lock(this.path, {
+          retries: { retries: 5, minTimeout: 50, maxTimeout: 250 },
+          stale: 10_000,
+        })
+      } catch (error) {
+        if (isMissingFile(error)) return
+        throw error
+      }
       // Reload under the lock so concurrent server processes do not overwrite each other's refreshes.
-      const latest = await parseNetscapeCookies(await readFile(this.path, 'utf8'))
+      let text: string
+      try {
+        text = await readFile(this.path, 'utf8')
+      } catch (error) {
+        if (isMissingFile(error)) return
+        throw error
+      }
+      const latest = await parseNetscapeCookies(text)
       // A cookie this response changes no longer holds, on disk, the value this process sent: another
       // process saved a different session since. Its file wins; this process's session, if dead, fails
       // with AUTH_EXPIRED on its own. Adopting the file here would pair its cookies with this

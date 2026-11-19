@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -85,6 +85,27 @@ describe('Netscape cookie jars', () => {
 
     expect(await readFile(path, 'utf8')).toBe(newer)
     expect(store.jar).toBe(liveJar)
+  })
+
+  test('saves nothing, and does not fail, once the session file has been removed', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-cookie-removed-'))
+    const path = join(directory, 'cookies.txt')
+    await writeFile(
+      path,
+      '# Netscape HTTP Cookie File\n.overleaf.test\tTRUE\t/\tTRUE\t2147483647\toverleaf.sid\tsigned-in\n',
+      { mode: 0o600 }
+    )
+    const store = await CookieStore.load(path)
+    // Removing the file signs every process out; a process still holding the session must not
+    // bring it back, nor fail every later call while it holds it.
+    await rm(path)
+
+    await store.mergeSetCookies('https://overleaf.test/project', [
+      'overleaf.sid=refreshed; Domain=overleaf.test; Path=/; Secure',
+    ])
+
+    expect(await readdir(directory)).toEqual([])
+    expect(await store.jar.getCookieString('https://overleaf.test/project')).toContain('overleaf.sid=refreshed')
   })
 
   test('still saves a cookie the file never had, next to an unchanged session', async () => {
