@@ -258,6 +258,19 @@ returned `nextSinceVersion` on later polls. Only update groups newer than the cu
 If `gapDetected` is true, the cursor predates the single window returned; the tool does not page
 backward or compute diffs.
 
+Before a large edit, label the current version with `manage_history` and `action: "create_label"`.
+`read_file_version` reads a document as it was at that label, or at any version the history lists,
+and `manage_history` with `action: "restore_file"` puts one document back, with `confirmPath`
+repeating its path. A restore replaces the document with a new one, so read it again before the
+next write. <!-- md:version 1.4.0 -->
+
+### Checking references and the build
+
+`check_references` lists undefined and unused labels, references, and citations from the source,
+without compiling. After a compile, `inspect_build` maps a source line to its place in the PDF, or
+a place in the PDF back to its line, through the compile's `buildRef`, and counts words.
+<!-- md:version 1.4.0 -->
+
 ### From a shell
 
 The same workflows run as commands, each printing one JSON result: `files read`, then

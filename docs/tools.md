@@ -1076,9 +1076,10 @@ collects:
 - the keys of `\ref`, `\eqref`, `\pageref`, `\autoref`, `\nameref`, `\cref`, `\Cref`, `\vref`,
   and their relatives, with comma-separated lists split and both ends of `\crefrange`;
 - the keys of `\cite` and the natbib and biblatex citation commands, multicite commands
-  such as `\parencites` included.
+  such as `\parencites` included, checked against the `.bib` entries and any `\bibitem` keys of a
+  `thebibliography` list.
 
-Returns `rootFilePath`, five lists of `{ key, filePath, line }` (`line` 1-based), `truncated`,
+Returns `rootFilePath`, five lists of `{ key, filePath, line }` (`line` 1-based), `citationsChecked`, `truncated`,
 `filesRead` (the LaTeX files visited, then the bibliography files read), and `unresolved`:
 
 | List | What it holds |
@@ -1089,6 +1090,8 @@ Returns `rootFilePath`, five lists of `{ key, filePath, line }` (`line` 1-based)
 | `unusedBibEntries` | Each bibliography entry nothing cites; empty when `\nocite{*}` is used |
 | `duplicateLabels` | Every definition of a key defined more than once |
 
+When a bibliography the document names could not be read, `citationsChecked` is `false` and
+`undefinedCitations` is empty: a key missing from the files read may be in the one that was not.
 Each list holds at most 500 entries; `truncated` is `true` when one was cut. `unresolved` is
 `get_full_document`'s, plus each bibliography file that is not in the project (`missing`), is an
 uploaded file rather than a text document (`binary_file`), or is named through a macro
@@ -1514,8 +1517,11 @@ Returns `filePath`, `version`, `content` (LF-normalized), and `newline: "LF"`. I
 revision: history text cannot be written back as it is. To put it back, restore the file with
 `manage_history`, or write the text with `write_file` against a fresh `read_file` revision. A path
 the version did not have, or an unknown `labelId`, is `NOT_FOUND`; a binary file is
-`INVALID_ARGUMENT` with `details.kind: "binary_file"`; passing both or neither of `version` and
-`labelId` is `INVALID_ARGUMENT`.
+`INVALID_ARGUMENT` with `details.kind: "binary_file"`; a version past the project's current one is
+`INVALID_ARGUMENT` with `details.kind: "version_ahead"` and `details.currentVersion`; passing both
+or neither of `version` and `labelId` is `INVALID_ARGUMENT`. Overleaf answers a missing path or a
+future version with a server error, so the server checks both first, from the current version and
+the file list at that version.
 
 ### `manage_history` <small>destructive</small>
 
@@ -1542,17 +1548,20 @@ starts from, and returns `label` (`{ id, comment, version, createdAt }`) and `ve
 `restore_file` puts one document back as it was. A missing or different `confirmPath` is
 `CONFIRMATION_MISMATCH`, and a path the version did not have is `NOT_FOUND`, and a binary file
 `INVALID_ARGUMENT` with `details.kind: "binary_file"`, all before anything is sent. Overleaf
-deletes the live file and creates a new document holding the old text with its tracked changes
-and comments. So the document gets a new id, every revision of the old one stops working, and a
-document that was the root document stays the root. It returns `filePath`, `version`, `docId`,
+deletes the live file and creates a new document holding that version's text with its tracked
+changes and comments. So edits, tracked changes, and comments made since that version are gone,
+comment threads get new ids, the document gets a new id, every revision of the old one stops
+working, and a document that was the root document stays the root. It returns `filePath`, `version`, `docId`,
 `previousDocId` (`null` when nothing was at the path), the new document's `revision`, `protocol`,
 and `trackChangesActive`, read from a fresh join, and `contentMatches`, `true` when its text equals
 what `read_file_version` reads. `false` can mean that version held tracked deletions.
 
-Neither action is retried. A request whose answer was lost is read back: `recoveredAfterTimeout:
-true` when it applied, `TIMEOUT` or `REMOTE_ERROR` with `details.outcome: "not_applied"` when
-nothing changed, and `OUTCOME_UNKNOWN` otherwise, which means read the history or the project tree
-before doing anything else. A restore that failed after Overleaf removed the live file, and before
+Neither action is retried. A request whose answer was lost or failed is read back:
+`recoveredAfterTimeout: true` when it applied; for a restore Overleaf failed with an error and
+that left the file as it was, `REMOTE_ERROR` with `details.outcome: "not_applied"`; and
+otherwise `OUTCOME_UNKNOWN`, which means read the history or the project tree before doing
+anything else. A restore whose answer was lost is never `not_applied`, since Overleaf may still be
+working on it. A restore that failed after Overleaf removed the live file, and before
 it created the restored one, leaves nothing at the path and is `OUTCOME_UNKNOWN`. Labels need edit
 or review access to the project, and a restore needs edit access; without it the call is
 `PERMISSION_DENIED`.

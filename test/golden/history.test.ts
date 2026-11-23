@@ -341,6 +341,10 @@ describe('read_file_version', () => {
       fetcher: async input => {
         const url = new URL(input instanceof Request ? input.url : String(input))
         if (url.pathname === '/project/p/labels') return Response.json([storedLabel('label-1', 'Ready', 7)])
+        if (url.pathname === '/project/p/updates') return Response.json(updatesAt(9))
+        if (url.pathname === '/project/p/filetree/diff') {
+          return Response.json({ diff: [{ pathname: 'chapters/intro.tex', editable: true }] })
+        }
         if (url.pathname === '/project/p/diff') return Response.json({ diff: [{ u: 'Old text\r\nline two\n' }] })
         throw new Error(`unexpected ${url.pathname}`)
       },
@@ -353,11 +357,12 @@ describe('read_file_version', () => {
         filePath: 'chapters/intro.tex',
         labelId: 'label-1',
       })
-      expect(fetches).toEqual([
+      const read = [
+        'GET /project/p/updates?min_count=1',
+        'GET /project/p/filetree/diff?from=7&to=7',
         'GET /project/p/diff?pathname=chapters%2Fintro.tex&from=7&to=7',
-        'GET /project/p/labels',
-        'GET /project/p/diff?pathname=chapters%2Fintro.tex&from=7&to=7',
-      ])
+      ]
+      expect(fetches).toEqual([...read, 'GET /project/p/labels', ...read])
       expect(byLabel).toEqual(byVersion)
       expect(byVersion).toEqual({
         filePath: 'chapters/intro.tex',
@@ -372,12 +377,20 @@ describe('read_file_version', () => {
     }
   })
 
-  test('a binary file, a missing path, and both version and labelId are refused', async () => {
-    const { runtime, directory } = await createTestRuntime({
+  test('a binary file, a missing path, a future version, and both version and labelId are refused', async () => {
+    const { runtime, fetches, directory } = await createTestRuntime({
       fetcher: async input => {
         const url = new URL(input instanceof Request ? input.url : String(input))
-        if (url.searchParams.get('pathname') === 'figure.png') return Response.json({ diff: { binary: true } })
-        return new Response('Not found', { status: 404 })
+        if (url.pathname === '/project/p/updates') return Response.json(updatesAt(9))
+        if (url.pathname === '/project/p/filetree/diff') {
+          return Response.json({
+            diff: [
+              { pathname: 'main.tex', editable: true },
+              { pathname: 'figure.png', editable: false },
+            ],
+          })
+        }
+        throw new Error(`unexpected ${url.pathname}`)
       },
     })
     try {
@@ -392,10 +405,16 @@ describe('read_file_version', () => {
         code: 'NOT_FOUND',
         details: { filePath: 'gone.tex', version: 2 },
       })
+      expect(await read({ projectId: 'p', filePath: 'main.tex', version: 12 })).toMatchObject({
+        code: 'INVALID_ARGUMENT',
+        details: { kind: 'version_ahead', version: 12, currentVersion: 9 },
+      })
       expect(await read({ projectId: 'p', filePath: 'main.tex', version: 2, labelId: 'l' })).toMatchObject({
         code: 'INVALID_ARGUMENT',
         details: { parameters: ['version', 'labelId'] },
       })
+      // Overleaf answers each of these with HTTP 500, so the history diff is never requested.
+      expect(fetches.some(fetch => fetch.includes('/project/p/diff'))).toBe(false)
     } finally {
       await runtime.close()
       await rm(directory, { recursive: true, force: true })
@@ -423,6 +442,9 @@ describe('manage_history restore_file', () => {
       env: { OVERLEAF_REQUEST_TIMEOUT_MS: '50' },
       fetcher: async (input, init) => {
         const url = new URL(input instanceof Request ? input.url : String(input))
+        if (url.pathname === '/project/p/updates') return Response.json(updatesAt(9))
+        if (url.pathname === '/project/p/filetree/diff')
+          return Response.json({ diff: [{ pathname: 'main.tex', editable: true }] })
         if (url.pathname === '/project/p/diff') return Response.json({ diff: [{ u: 'Old text' }] })
         if (url.pathname === '/project/p/revert_file') {
           posted.push(JSON.parse(String(init?.body)))
@@ -450,6 +472,8 @@ describe('manage_history restore_file', () => {
         confirmPath: 'main.tex',
       })
       expect(setup.fetches).toEqual([
+        'GET /project/p/updates?min_count=1',
+        'GET /project/p/filetree/diff?from=4&to=4',
         'GET /project/p/diff?pathname=main.tex&from=4&to=4',
         'POST /project/p/revert_file',
       ])
@@ -518,7 +542,8 @@ describe('manage_history restore_file', () => {
           confirmPath: 'main.tex',
         })
         .catch((error: unknown) => error)
-      expect(failure).toMatchObject({ code: 'TIMEOUT', retryable: false, details: { outcome: 'not_applied' } })
+      // Overleaf may still act on a request whose answer was lost, so an unchanged file proves nothing.
+      expect(failure).toMatchObject({ code: 'OUTCOME_UNKNOWN', details: { outcome: 'unknown' } })
       for (const setup of [applied, unchanged]) {
         expect(setup.fetches.filter(fetch => fetch.startsWith('POST'))).toHaveLength(1)
       }

@@ -184,6 +184,10 @@ const diffSchema = z.object({
 
 const restoreSchema = z.object({ type: z.enum(['doc', 'file']), id: z.string() })
 
+const fileTreeSchema = z.object({
+  diff: z.array(z.object({ pathname: z.string(), editable: z.boolean().optional(), operation: z.string().optional() })),
+})
+
 function unsupported(message: string, cause: unknown): McpError {
   return new McpError('PROTOCOL_UNSUPPORTED', message, { cause })
 }
@@ -467,11 +471,20 @@ export class HistoryApi {
         )
       }
       if (seen === undefined) {
+        // Only an error Overleaf answered with has finished: after a lost answer it may still act.
+        const answered = error instanceof McpError && typeof error.details?.status === 'number'
+        if (answered && (present || previousDocId === null)) {
+          throw new McpError(
+            'REMOTE_ERROR',
+            'Overleaf failed the restore, and the file is unchanged. Read it before deciding to restore again.',
+            { retryable: false, details: { ...details, outcome: 'not_applied' } }
+          )
+        }
         if (present || previousDocId === null) {
           throw new McpError(
-            error instanceof McpError && error.code === 'TIMEOUT' ? 'TIMEOUT' : 'REMOTE_ERROR',
-            'The restore was not answered, and the file is unchanged. Read it before deciding to restore again.',
-            { retryable: false, details: { ...details, outcome: 'not_applied' } }
+            'OUTCOME_UNKNOWN',
+            'The restore was not answered, and has not applied yet, but Overleaf may still apply it. Do not retry; read the project tree first.',
+            { cause: error, details: { ...details, outcome: 'unknown' } }
           )
         }
         throw new McpError(
@@ -561,19 +574,45 @@ export class HistoryApi {
     return label.version
   }
 
+  /**
+   * The text of a document at a version. Overleaf answers a version past the current one, or a
+   * path the version lacks, with HTTP 500, so both are checked first: the current version, then
+   * the file list at that version.
+   */
   async #textAtVersion(projectId: string, filePath: string, version: number): Promise<string> {
-    const query = new URLSearchParams({ pathname: filePath, from: String(version), to: String(version) })
-    let response: unknown
-    try {
-      response = await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/diff?${query.toString()}`)
-    } catch (error) {
-      if (error instanceof McpError && error.code === 'NOT_FOUND') {
-        throw new McpError('NOT_FOUND', `${filePath} was not found at version ${version}.`, {
-          details: { filePath, version },
-        })
-      }
-      throw error
+    const current = await this.#currentVersion(projectId)
+    if (version > current) {
+      throw new McpError('INVALID_ARGUMENT', `Version ${version} is newer than the project's version ${current}.`, {
+        details: { kind: 'version_ahead', version, currentVersion: current },
+      })
     }
+    const range = new URLSearchParams({ from: String(version), to: String(version) })
+    let listed: z.infer<typeof fileTreeSchema>
+    try {
+      listed = fileTreeSchema.parse(
+        await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/filetree/diff?${range.toString()}`)
+      )
+    } catch (error) {
+      if (error instanceof McpError) throw error
+      throw unsupported('Overleaf returned an unsupported history file list.', error)
+    }
+    const file = listed.diff.find(entry => entry.pathname === filePath && entry.operation !== 'removed')
+    if (file === undefined) {
+      throw new McpError('NOT_FOUND', `${filePath} was not in the project at version ${version}.`, {
+        details: { filePath, version },
+      })
+    }
+    if (file.editable === false) {
+      throw new McpError(
+        'INVALID_ARGUMENT',
+        `${filePath} was a binary file at version ${version}, not a text document.`,
+        {
+          details: { kind: 'binary_file', filePath, version },
+        }
+      )
+    }
+    const query = new URLSearchParams({ pathname: filePath, from: String(version), to: String(version) })
+    const response = await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/diff?${query.toString()}`)
     let parsed: z.infer<typeof diffSchema>
     try {
       parsed = diffSchema.parse(response)

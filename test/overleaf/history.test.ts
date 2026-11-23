@@ -308,11 +308,17 @@ describe('HistoryApi restoreFile', () => {
         if (options.after !== undefined) entities = options.after
       }
     })
-    const api = new HistoryApi(
-      { getJson: vi.fn(async () => options.diff ?? { diff: [{ u: 'Old' }] }), postJson: post },
-      undefined,
-      { listEntities: vi.fn(async () => entities), readFile: vi.fn(async () => readResult) }
-    )
+    const getJson = vi.fn(async (path: string) => {
+      if (path.includes('/updates')) return { updates: [{ ...firstUpdate, fromV: 8, toV: 9 }] }
+      if (path.includes('/filetree/diff')) {
+        return { diff: [{ pathname: 'main.tex', editable: options.diff === undefined }] }
+      }
+      return options.diff ?? { diff: [{ u: 'Old' }] }
+    })
+    const api = new HistoryApi({ getJson, postJson: post }, undefined, {
+      listEntities: vi.fn(async () => entities),
+      readFile: vi.fn(async () => readResult),
+    })
     return { api, post }
   }
 

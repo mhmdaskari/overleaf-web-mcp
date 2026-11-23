@@ -675,6 +675,48 @@ Text with \autoref{fig:plot}.
     expectGolden('check_references', result)
   })
 
+  test('a linked .bib file is unresolved, and citations are then left unchecked', async () => {
+    const project = createProject({
+      'main.tex': {
+        protocol: 'sharejs',
+        content: '\\cite{knuth1984,zotero2024}\n\\bibliography{refs,zotero}\n',
+      },
+      'refs.bib': { protocol: 'sharejs', content: REFS },
+    })
+    // A reference manager's linked file is an uploaded file, not a text document.
+    project.root.fileRefs = [{ _id: 'file-1', name: 'zotero.bib' }]
+    const result = await withService(
+      project,
+      async service => await service.check_references({ projectId: PROJECT, rootFilePath: 'main.tex' })
+    )
+    expect(result.unresolved).toEqual([{ file: 'main.tex', line: 2, target: 'zotero', reason: 'binary_file' }])
+    expect(result).toMatchObject({ citationsChecked: false, undefinedCitations: [] })
+    expectGolden('check_references', result)
+  })
+
+  test('\\bibitem keys define citations', async () => {
+    const project = createProject({
+      'main.tex': {
+        protocol: 'sharejs',
+        content: [
+          '\\cite{one,two}',
+          '\\begin{thebibliography}{9}',
+          '\\bibitem{one} First.',
+          '\\bibitem[Label]{three} Third.',
+          '\\end{thebibliography}',
+          '',
+        ].join('\n'),
+      },
+    })
+    const result = await withService(
+      project,
+      async service => await service.check_references({ projectId: PROJECT, rootFilePath: 'main.tex' })
+    )
+    expect(result.undefinedCitations).toEqual([{ key: 'two', filePath: 'main.tex', line: 1 }])
+    expect(result.unusedBibEntries).toEqual([{ key: 'three', filePath: 'main.tex', line: 4 }])
+    expect(result.citationsChecked).toBe(true)
+  })
+
   test('\\nocite{*} cites every entry, and a missing bibliography is unresolved', async () => {
     const project = createProject({
       'main.tex': {

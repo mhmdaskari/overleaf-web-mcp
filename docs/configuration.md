@@ -66,12 +66,12 @@ reported to keep about 40), and Antigravity loads tools lazily and filters them 
 | `projects` | `create_project`, `clone_project`, `import_project_zip`, `manage_project`, `update_project_settings`, `manage_tags` |
 | `files` | `get_project_tree`, `read_file`, `search_project`, `write_file`, `create_file`, `manage_entity`, `upload_file`, `batch_upload`, `download_file`, `download_project_zip` |
 | `sync` | `plan_sync`, `sync_directory`, `delete_entities` |
-| `sections` | `get_full_document`, `get_sections`, `get_section_content`, `write_section` |
-| `compile` | `compile_project`, `stop_compile`, `get_compile_log`, `download_compile_output` |
+| `sections` | `get_full_document`, `get_sections`, `get_section_content`, `write_section`, `check_references` |
+| `compile` | `compile_project`, `stop_compile`, `get_compile_log`, `download_compile_output`, `inspect_build` |
 | `review` | `list_comments`, `reply_to_comment`, `add_comment`, `set_comment_status`, `list_tracked_changes`, `manage_tracked_changes` |
-| `history` | `monitor_project_history` |
+| `history` | `monitor_project_history`, `read_file_version`, `manage_history` |
 
-For example, `OVERLEAF_TOOLSETS=files,compile` offers the 14 tools of those two groups; a call to
+For example, `OVERLEAF_TOOLSETS=files,compile` offers the 15 tools of those two groups; a call to
 any other is refused as an unknown tool. Unset or empty offers every tool. A name that is not one
 of the eight stops the server at startup with `INVALID_ARGUMENT`, and fails an operation command
 with exit 2. `capabilities` reports the groups in effect, and each operation's group.

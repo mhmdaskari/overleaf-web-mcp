@@ -2,6 +2,7 @@
 
 exports[`check_references > \\nocite{*} cites every entry, and a missing bibliography is unresolved 1`] = `
 {
+  "citationsChecked": false,
   "duplicateLabels": [],
   "filesRead": [
     "main.tex",
@@ -24,8 +25,45 @@ exports[`check_references > \\nocite{*} cites every entry, and a missing bibliog
 }
 `;
 
+exports[`check_references > a linked .bib file is unresolved, and citations are then left unchecked 1`] = `
+{
+  "citationsChecked": false,
+  "duplicateLabels": [],
+  "filesRead": [
+    "main.tex",
+    "refs.bib",
+  ],
+  "rootFilePath": "main.tex",
+  "truncated": false,
+  "undefinedCitations": [],
+  "undefinedReferences": [],
+  "unresolved": [
+    {
+      "file": "main.tex",
+      "line": 2,
+      "reason": "binary_file",
+      "target": "zotero",
+    },
+  ],
+  "unusedBibEntries": [
+    {
+      "filePath": "refs.bib",
+      "key": "lamport1994",
+      "line": 7,
+    },
+    {
+      "filePath": "refs.bib",
+      "key": "unused2020",
+      "line": 11,
+    },
+  ],
+  "unusedLabels": [],
+}
+`;
+
 exports[`check_references > a root document, two included files, and one .bib file 1`] = `
 {
+  "citationsChecked": true,
   "duplicateLabels": [
     {
       "filePath": "intro.tex",

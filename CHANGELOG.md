@@ -27,9 +27,11 @@ such change is listed.
   follows the include directives as `get_full_document` does, reads the `.bib` files named by
   `\bibliography` or `\addbibresource`, and returns `undefinedReferences`,
   `undefinedCitations`, `unusedLabels`, `unusedBibEntries`, and `duplicateLabels`, each a list of
-  `{ key, filePath, line }` of at most 500, with `truncated`, `filesRead`, and `unresolved`. A
-  missing or binary bibliography file is listed in `unresolved` with reason `missing` or
-  `binary_file` and does not fail the call. It reads source text, not TeX, which its description
+  `{ key, filePath, line }` of at most 500, with `citationsChecked`, `truncated`, `filesRead`, and
+  `unresolved`. `\bibitem` keys count as definitions. A missing or binary bibliography file, such
+  as a reference manager's linked file, is listed in `unresolved` with reason `missing` or
+  `binary_file` and does not fail the call; `citationsChecked` is then `false` and
+  `undefinedCitations` empty. It reads source text, not TeX, which its description
   states; it compiles nothing.
 - `manage_history` (#46, #47), a destructive tool in the `history` toolset, also `call
   manage_history` and `client.manageHistory`, with two actions. `create_label` takes `comment`
@@ -39,13 +41,18 @@ such change is listed.
   `filePath` (`CONFIRMATION_MISMATCH` otherwise, with nothing sent). Overleaf replaces the live
   document with a new one holding the old text, so the result names the new `docId`,
   `previousDocId`, and the new document's `revision`, `protocol`, and `trackChangesActive`, read
-  from a fresh join, and `contentMatches`. A lost answer is classified from a read-back:
-  `recoveredAfterTimeout: true`, `details.outcome: "not_applied"`, or `OUTCOME_UNKNOWN`; neither
-  action is ever resent. Its effects are `overleaf-write`, `overleaf-read`, and `overleaf-delete`.
+  from a fresh join, and `contentMatches`. Edits, tracked changes, and comments made since that
+  version are gone, and comment threads get new ids. A lost or failed answer is classified from a
+  read-back: `recoveredAfterTimeout: true`, `REMOTE_ERROR` with `details.outcome: "not_applied"`
+  (a restore Overleaf failed that changed nothing), or `OUTCOME_UNKNOWN`; neither action is ever
+  resent. A project with no history yet is `INVALID_ARGUMENT` with `details.kind: "no_history"`.
+  Its effects are `overleaf-write`, `overleaf-read`, and `overleaf-delete`.
 - `read_file_version` (#47), a read-only tool in the `history` toolset, also `call
   read_file_version` and `client.readFileVersion`: the text of a document at a `version` or at a
-  label's version (`labelId`), with no revision. A path the version lacks is `NOT_FOUND`, and a
-  binary file is `INVALID_ARGUMENT` with `details.kind: "binary_file"`.
+  label's version (`labelId`), with no revision. A path the version lacks is `NOT_FOUND`, a
+  binary file is `INVALID_ARGUMENT` with `details.kind: "binary_file"`, and a version past the
+  current one is `INVALID_ARGUMENT` with `details.kind: "version_ahead"` and
+  `details.currentVersion`.
 - `inspect_build` (#51), a read-only tool in the `compile` toolset, also `call inspect_build` and
   `client.inspectBuild`, with three actions. `source_to_pdf` (`filePath`, `line`, optional
   `column`) returns `positions` `{ page, h, v, width, height }` in PDF points, and
@@ -55,7 +62,8 @@ such change is listed.
   texcount over the current sources from `filePath` or the root document, with no build needed,
   and returns `rootFilePath` and `wordCount` with `textWords`, `headWords`, `outsideWords`,
   `totalWords`, `headers`, `floats`, `mathInline`, `mathDisplay`, and `errors`. Results never
-  carry document text.
+  carry document text. A `filePath` with `..` or a backslash is `INVALID_ARGUMENT` with
+  `details.kind: "invalid_path"`.
 
 ### Documentation
 
@@ -68,7 +76,7 @@ such change is listed.
 ### Internal
 
 - The bound `test/server.test.ts` holds on the names, descriptions, and input schemas of
-  `tools/list` rises from 60,000 to 68,000 characters for the four new tools; the list is 67,244
+  `tools/list` rises from 60,000 to 68,000 characters for the four new tools; the list is 67,684
   characters with all 41.
 - `compile_project` sends a random `editorId` with each compile, as Overleaf's editor does, and
   its `buildRef` carries it, so SyncTeX can find the build in Overleaf's compile cache. A

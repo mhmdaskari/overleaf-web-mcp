@@ -73,7 +73,7 @@ describe('scanBibEntries', () => {
 describe('compareReferences', () => {
   test('caps every list and says so', () => {
     const scan = scanLatexReferences('main.tex', String.raw`\ref{a}\ref{b}\ref{c}`)
-    const report = compareReferences([scan], [], 2)
+    const report = compareReferences([scan], [], { limit: 2 })
     expect(keys(report.undefinedReferences)).toEqual(['a', 'b'])
     expect(report.truncated).toBe(true)
   })
