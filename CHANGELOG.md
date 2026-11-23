@@ -10,7 +10,13 @@ version, a deprecation is announced at least one minor version ahead with both n
 every change is listed below. Before 1.0.0, a minor or patch release could change them, and each
 such change is listed.
 
-## [1.4.0] - Unreleased
+## [1.4.0] - 2026-11-23
+
+For history and build insight. An agent can label the project before a large edit, read a
+document as it stood at any earlier version, and restore it; check a manuscript's labels,
+references, and citations without compiling, `.bib` files linked from a reference manager
+included; and map a source line to its place in the PDF and back, or count words. The server is
+also offered as plugins for Claude and Cursor. There are 41 tools.
 
 ### Added
 
@@ -84,7 +90,7 @@ such change is listed.
 ### Internal
 
 - The bound `test/server.test.ts` holds on the names, descriptions, and input schemas of
-  `tools/list` rises from 60,000 to 68,000 characters for the four new tools; the list is 67,684
+  `tools/list` rises from 60,000 to 68,000 characters for the four new tools; the list is 67,750
   characters with all 41.
 - `compile_project` sends a random `editorId` with each compile, as Overleaf's editor does, and
   its `buildRef` carries it, so SyncTeX can find the build in Overleaf's compile cache. A
