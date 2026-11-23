@@ -1,5 +1,100 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`check_references > \\nocite{*} cites every entry, and a missing bibliography is unresolved 1`] = `
+{
+  "duplicateLabels": [],
+  "filesRead": [
+    "main.tex",
+    "refs.bib",
+  ],
+  "rootFilePath": "main.tex",
+  "truncated": false,
+  "undefinedCitations": [],
+  "undefinedReferences": [],
+  "unresolved": [
+    {
+      "file": "main.tex",
+      "line": 4,
+      "reason": "missing",
+      "target": "gone.bib",
+    },
+  ],
+  "unusedBibEntries": [],
+  "unusedLabels": [],
+}
+`;
+
+exports[`check_references > a root document, two included files, and one .bib file 1`] = `
+{
+  "duplicateLabels": [
+    {
+      "filePath": "intro.tex",
+      "key": "dup",
+      "line": 4,
+    },
+    {
+      "filePath": "methods.tex",
+      "key": "dup",
+      "line": 3,
+    },
+  ],
+  "filesRead": [
+    "main.tex",
+    "intro.tex",
+    "methods.tex",
+    "refs.bib",
+  ],
+  "rootFilePath": "main.tex",
+  "truncated": false,
+  "undefinedCitations": [
+    {
+      "filePath": "main.tex",
+      "key": "nobody2001",
+      "line": 9,
+    },
+  ],
+  "undefinedReferences": [
+    {
+      "filePath": "main.tex",
+      "key": "sec:gone",
+      "line": 7,
+    },
+  ],
+  "unresolved": [
+    {
+      "file": "main.tex",
+      "line": 6,
+      "reason": "missing",
+      "target": "missing",
+    },
+  ],
+  "unusedBibEntries": [
+    {
+      "filePath": "refs.bib",
+      "key": "unused2020",
+      "line": 11,
+    },
+  ],
+  "unusedLabels": [
+    {
+      "filePath": "intro.tex",
+      "key": "dup",
+      "line": 4,
+    },
+    {
+      "filePath": "methods.tex",
+      "key": "sec:methods",
+      "line": 1,
+    },
+    {
+      "filePath": "methods.tex",
+      "key": "dup",
+      "line": 3,
+    },
+  ],
+}
+`;
+
 exports[`get_full_document > a manuscript split across \\input and \\include, with directives it cannot follow 1`] = `
 {
   "files": [

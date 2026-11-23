@@ -29,6 +29,7 @@ export const INPUTS: Record<OperationName, Record<string, unknown>> = {
   get_sections: { projectId: 'p', filePath: 'main.tex' },
   get_section_content: { projectId: 'p', filePath: 'main.tex', sectionId: 's' },
   write_section: { projectId: 'p', filePath: 'main.tex', revision: 'r', sectionId: 's', content: 'x' },
+  check_references: { projectId: 'p' },
   compile_project: { projectId: 'p' },
   stop_compile: { projectId: 'p' },
   get_compile_log: { projectId: 'p' },

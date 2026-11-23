@@ -22,6 +22,15 @@ such change is listed.
   `/plugin install overleaf-web-mcp --marketplace mhmdaskari/overleaf-web-mcp` installs the
   server and the skills together, and `.cursor-plugin/marketplace.json` names the Cursor plugin's
   folder. The npm package does not include `plugins/`, and its contents are unchanged.
+- `check_references` (#59), a read-only tool in the `sections` toolset, also `call
+  check_references` and `client.checkReferences`. From `rootFilePath` or the root document it
+  follows the include directives as `get_full_document` does, reads the `.bib` files named by
+  `\bibliography` or `\addbibresource`, and returns `undefinedReferences`,
+  `undefinedCitations`, `unusedLabels`, `unusedBibEntries`, and `duplicateLabels`, each a list of
+  `{ key, filePath, line }` of at most 500, with `truncated`, `filesRead`, and `unresolved`. A
+  missing or binary bibliography file is listed in `unresolved` with reason `missing` or
+  `binary_file` and does not fail the call. It reads source text, not TeX, which its description
+  states; it compiles nothing.
 
 ### Internal
 

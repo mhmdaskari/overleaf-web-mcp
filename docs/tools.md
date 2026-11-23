@@ -1,6 +1,6 @@
 # Tool reference
 
-The server registers 37 tools. Names are `snake_case`. Each tool but
+The server registers 38 tools. Names are `snake_case`. Each tool but
 [`sign_in`](#sign_in) is also `overleaf-web-mcp call <name>` on the [command line](cli.md) and a
 camelCase method of `createOverleafClient` in the [TypeScript SDK](sdk.md), with the same
 parameters, results, and errors; `sign_in` opens a browser window, which only `login` does on
@@ -1055,6 +1055,49 @@ changed since the sections were listed is `REVISION_CONFLICT` with `details.file
 to the body of a section in an included file: it is not part of that section. A section with `spansFiles: true` is refused with `INVALID_ARGUMENT`,
 `details.kind: "spans_files"`, and `details.files`, before anything is sent: change each of its
 files with `write_file` instead.
+
+### `check_references` <small>read-only</small>
+
+<!-- md:version 1.4.0 -->
+
+Find broken cross-references and citations without compiling.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `rootFilePath` | no | Document to start from; defaults to the root document configured in Overleaf |
+
+It walks the manuscript through its include directives as `get_full_document` does, with the
+same depth and size limits, and reads the `.bib` files named by `\bibliography` (with `.bib`
+added) or `\addbibresource`, resolved from the project root as BibTeX and Biber resolve them. It
+collects:
+
+- `\label` keys;
+- the keys of `\ref`, `\eqref`, `\pageref`, `\autoref`, `\nameref`, `\cref`, `\Cref`, `\vref`,
+  and their relatives, with comma-separated lists split and both ends of `\crefrange`;
+- the keys of `\cite` and the natbib and biblatex citation commands, multicite commands
+  such as `\parencites` included.
+
+Returns `rootFilePath`, five lists of `{ key, filePath, line }` (`line` 1-based), `truncated`,
+`filesRead` (the LaTeX files visited, then the bibliography files read), and `unresolved`:
+
+| List | What it holds |
+| --- | --- |
+| `undefinedReferences` | Each use of a reference key that no `\label` defines |
+| `undefinedCitations` | Each use of a citation key that no bibliography entry defines |
+| `unusedLabels` | Each `\label` nothing refers to |
+| `unusedBibEntries` | Each bibliography entry nothing cites; empty when `\nocite{*}` is used |
+| `duplicateLabels` | Every definition of a key defined more than once |
+
+Each list holds at most 500 entries; `truncated` is `true` when one was cut. `unresolved` is
+`get_full_document`'s, plus each bibliography file that is not in the project (`missing`), is an
+uploaded file rather than a text document (`binary_file`), or is named through a macro
+(`macro_argument`). None of them fails the call.
+
+The check reads source text, not TeX. `%` comments and verbatim text are skipped, but keys built
+by macros, labels defined inside custom commands or packages, references to other documents, and
+conditionals are not understood. Treat a result as a list of places to look, not as proof: a
+compile remains the authority. Errors are those of `get_full_document`.
 
 ## Compilation
 

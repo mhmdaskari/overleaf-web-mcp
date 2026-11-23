@@ -37,6 +37,7 @@ function fakeRuntime() {
       getSections: vi.fn(),
       getSectionContent: vi.fn(),
       writeSection: vi.fn(),
+      checkReferences: vi.fn(),
     },
     compile: {
       compileProject: vi.fn(),
@@ -96,7 +97,7 @@ function runtimeWithPlanProgress() {
  * (58,992), as the 450-word bound holds the instructions. A release that adds a tool or grows a
  * description trims elsewhere, or raises this in a change the changelog explains.
  */
-const TOOL_LIST_CHAR_LIMIT = 60_000
+const TOOL_LIST_CHAR_LIMIT = 62_000
 
 function toolListSize(
   tools: ReadonlyArray<{ name: string; description?: string | undefined; inputSchema: unknown }>

@@ -4,6 +4,7 @@ import { DEFAULT_PROJECT_LIMIT, MAX_PROJECT_LIMIT } from '../overleaf/account.js
 import { DEFAULT_LOG_TAIL, MAX_ERROR_LINES, MAX_LOG_CHARS, MAX_LOG_TAIL } from '../overleaf/compile.js'
 import { MAX_LOG_ENTRIES, MAX_MESSAGE_LENGTH } from '../overleaf/compile-log.js'
 import { DEFAULT_INCLUDE_DEPTH, MAX_FLATTENED_LENGTH, MAX_INCLUDE_DEPTH, MAX_INCLUDE_VISITS } from '../core/includes.js'
+import { MAX_REFERENCE_FINDINGS } from '../core/references.js'
 import { SECTION_COMMANDS } from '../core/sections.js'
 import { COMPILERS, DEFAULT_ZIP_DOWNLOAD_TIMEOUT_MS } from '../overleaf/projects.js'
 import {
@@ -58,6 +59,7 @@ export const OPERATION_NAMES = [
   'get_sections',
   'get_section_content',
   'write_section',
+  'check_references',
   'compile_project',
   'stop_compile',
   'get_compile_log',
@@ -183,6 +185,12 @@ const unresolvedIncludeSchema = z.object({
   line: z.number().int().positive(),
   target: z.string(),
   reason: z.enum(['missing', 'binary_file', 'macro_argument', 'excluded_by_includeonly']),
+})
+
+const referenceSiteSchema = z.object({
+  key: z.string(),
+  filePath: z.string(),
+  line: z.number().int().positive(),
 })
 
 const followIncludes = z
@@ -978,6 +986,29 @@ export const OPERATIONS = {
     outputSchema: documentWriteSchema.extend({ filePath: z.string().optional() }),
     annotations: { destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'overleaf-write'],
+    toolset: 'sections',
+  },
+  check_references: {
+    description: `Find broken cross-references and citations without compiling. Walks the manuscript from rootFilePath, or the project's root document, through its include directives as get_full_document does, and reads the .bib files named by \\bibliography (.bib added) or \\addbibresource, resolved from the project root. It collects \\label keys; the keys of \\ref, \\eqref, \\pageref, \\autoref, \\nameref, \\cref, \\Cref, \\vref, and their relatives, comma-separated lists split; and the keys of \\cite and the natbib and biblatex citation commands. Returns rootFilePath; undefinedReferences and undefinedCitations, each use of a key nothing defines; unusedLabels, labels nothing refers to; unusedBibEntries, entries nothing cites (none when \\nocite{*} is used); duplicateLabels, every definition of a key defined more than once; each a list of { key, filePath, line } (1-based), at most ${MAX_REFERENCE_FINDINGS} per list, with truncated true when one was cut; filesRead; and unresolved, as get_full_document reports it, plus bibliography files that are missing (missing) or uploaded files (binary_file). It reads source text, not TeX: % comments and verbatim text are skipped, but keys built by macros, labels defined inside custom commands or packages, cross-document references, and conditionals are not understood, so a result is a prompt to look, not proof. A compile remains the authority. Errors are those of get_full_document.`,
+    inputSchema: z.object({
+      projectId,
+      rootFilePath: filePath
+        .optional()
+        .describe('Document to start from; defaults to the root document configured in Overleaf'),
+    }),
+    outputSchema: z.object({
+      rootFilePath: z.string(),
+      undefinedReferences: z.array(referenceSiteSchema),
+      undefinedCitations: z.array(referenceSiteSchema),
+      unusedLabels: z.array(referenceSiteSchema),
+      unusedBibEntries: z.array(referenceSiteSchema),
+      duplicateLabels: z.array(referenceSiteSchema),
+      truncated: z.boolean(),
+      filesRead: z.array(z.string()),
+      unresolved: z.array(unresolvedIncludeSchema),
+    }),
+    annotations: { readOnlyHint: true },
+    effects: ['overleaf-read'],
     toolset: 'sections',
   },
   compile_project: {

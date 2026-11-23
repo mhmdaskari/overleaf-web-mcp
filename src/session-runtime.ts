@@ -38,6 +38,7 @@ export const SESSION_RUNTIME_MEMBERS = [
   ['sections', 'getSections'],
   ['sections', 'getSectionContent'],
   ['sections', 'writeSection'],
+  ['sections', 'checkReferences'],
   ['compile', 'compileProject'],
   ['compile', 'stopCompile'],
   ['compile', 'downloadCompileOutput'],

@@ -29,6 +29,8 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
   plugin](install.md#2-connect-your-mcp-client), installed with
   `/plugin install overleaf-web-mcp --marketplace mhmdaskari/overleaf-web-mcp`, and a Cursor
   plugin in `plugins/cursor/`.
+- **MCP tools:** [`check_references`](tools.md#check_references), undefined and unused labels,
+  references, and citations read from the source without compiling.
 
 ## 1.3.0
 
