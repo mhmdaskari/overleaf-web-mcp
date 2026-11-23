@@ -1,7 +1,7 @@
 {
   "name": "overleaf-web-mcp",
   "displayName": "Overleaf Web MCP",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Read, edit, compile, and review your Overleaf projects through your own signed-in web session. Unofficial, not affiliated with Overleaf.",
   "author": {
     "name": "Mohammad Askari"

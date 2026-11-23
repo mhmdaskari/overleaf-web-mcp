@@ -2,7 +2,7 @@
   "mcpServers": {
     "overleaf": {
       "command": "npx",
-      "args": ["-y", "overleaf-web-mcp@1.4.0", "serve"]
+      "args": ["-y", "overleaf-web-mcp@1.4.1", "serve"]
     }
   }
 }

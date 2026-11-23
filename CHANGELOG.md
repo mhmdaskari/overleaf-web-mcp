@@ -10,7 +10,10 @@ version, a deprecation is announced at least one minor version ahead with both n
 every change is listed below. Before 1.0.0, a minor or patch release could change them, and each
 such change is listed.
 
-## [1.4.1] - Unreleased
+## [1.4.1] - 2026-11-23
+
+Dependency floors only. No tool, command, or result changes: the lowest versions of `undici`
+and `zod` the package accepts move past their published advisories.
 
 ### Fixed
 
