@@ -1,0 +1,70 @@
+# Overleaf Web MCP
+
+Read, edit, compile, and review your Overleaf projects from Claude, signed in as you. This is an
+unofficial plugin, not affiliated with or endorsed by Overleaf. It is a thin wrapper around the
+[`overleaf-web-mcp`](https://www.npmjs.com/package/overleaf-web-mcp) package and contains no
+server code of its own; the source is at
+[github.com/mhmdaskari/overleaf-web-mcp](https://github.com/mhmdaskari/overleaf-web-mcp).
+
+## What it adds
+
+- **An MCP server, `overleaf`.** Claude Code starts it on your computer with `npx`, pinned to the
+  package release that matches this plugin's version. Its tools list projects, read and write
+  files with revision checks, make tracked changes, compile and read the log, work with review
+  comments, and sync local folders into a project. Every tool is listed in the
+  [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/).
+- **Three skills**: `overleaf-revise-manuscript`, `overleaf-reviewer-comments`, and
+  `overleaf-sync-sources`. They run the same package's command line through `npx`.
+
+The server and the skills need Node.js 20 or newer on your computer. Check with `node --version`.
+They run in Claude Code and in Cowork sessions on your computer. In chat on claude.ai and in the
+desktop app, a plugin's local MCP server is not started; there, install the desktop extension
+described in the [installation guide](https://mhmdaskari.github.io/overleaf-web-mcp/install/)
+instead.
+
+## Install
+
+In Claude Code 2.1.275 or later:
+
+```text
+/plugin install overleaf-web-mcp --marketplace mhmdaskari/overleaf-web-mcp
+```
+
+On an earlier version, add the marketplace first with
+`/plugin marketplace add mhmdaskari/overleaf-web-mcp`, then run
+`/plugin install overleaf-web-mcp@overleaf-web-mcp`.
+
+## Signing in
+
+Ask Claude to sign you in to Overleaf. With your agreement it calls the `sign_in` tool, which
+opens a dedicated window of a Chrome-family browser already installed on your computer (Chrome,
+Chromium, Brave, or Edge), with its own profile. Sign in there as usual, including SSO or
+two-factor authentication. You can also sign in from a terminal with `npx overleaf-web-mcp login`.
+
+## What it runs, sends, and stores
+
+- **Downloads.** On first start, `npx` downloads `overleaf-web-mcp` and its dependencies from the
+  npm registry, as any `npx` command does.
+- **Network.** The server sends requests only to your Overleaf server: `https://www.overleaf.com`,
+  or the self-hosted address you set in `OVERLEAF_BASE_URL`, and it refuses any request that
+  would leave that address. It uses Overleaf's own web endpoints and its real-time editing
+  connection, the same ones the Overleaf editor in your browser uses, with your saved session. If
+  you set `HTTPS_PROXY`, requests go through that proxy. There is no telemetry or analytics. The
+  sign-in window is an ordinary browser window, so it also loads whatever sign-in page your
+  account uses, such as your institution's single sign-on.
+- **Stored on your computer.** The Overleaf session cookies, in one file in your user
+  configuration folder, readable only by your user on macOS and Linux, and the sign-in window's
+  own browser profile, kept apart from your everyday browser. Project content is not logged or
+  cached; files reach your disk only when you ask to download or sync them.
+- **Local files.** The server reads or writes files on your computer only when you ask it to
+  upload, download, or sync them. `OVERLEAF_LOCAL_READ_ROOTS` and `OVERLEAF_LOCAL_WRITE_ROOTS`
+  restrict it to folders you choose, and `OVERLEAF_ALLOWED_PROJECTS` to projects you choose.
+
+Edits are checked against the revision they were read at, and destructive tools ask for an
+explicit confirmation value. The [safety page](https://mhmdaskari.github.io/overleaf-web-mcp/safety/)
+covers both, and the [configuration page](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/)
+lists every setting.
+
+## License
+
+MIT. See [LICENSE](https://github.com/mhmdaskari/overleaf-web-mcp/blob/main/LICENSE).

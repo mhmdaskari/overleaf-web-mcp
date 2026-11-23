@@ -12,6 +12,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { PLUGINS } from './bump-version.js'
+
 /** The bound `test/server.test.ts` holds `SERVER_INSTRUCTIONS` under. */
 export const INSTRUCTION_WORD_LIMIT = 450
 
@@ -39,6 +41,11 @@ export interface PreflightInputs {
   serverJsonVersions: string[]
   /** `version` in `manifest.json`, the Claude Desktop extension manifest. */
   manifestVersion: string | undefined
+  /**
+   * Each plugin manifest's `version`, and the exact `overleaf-web-mcp@X.Y.Z` its MCP configuration
+   * starts, keyed by the file they were read from; undefined when missing.
+   */
+  pluginVersions: Array<[path: string, version: string | undefined]>
   installed: InstalledPackage[]
   instructions: string
 }
@@ -82,6 +89,7 @@ export function evaluatePreflight(inputs: PreflightInputs): Check[] {
       value,
     ]),
     ['manifest.json', inputs.manifestVersion],
+    ...inputs.pluginVersions,
   ]
   const differing = sources.filter(([, value]) => value === undefined || value !== version)
   checks.push({
@@ -158,6 +166,19 @@ export async function gatherPreflight(root: string, environment: PreflightEnviro
 
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as { version?: unknown }
 
+  const pluginVersions: Array<[string, string | undefined]> = []
+  for (const plugin of PLUGINS) {
+    const pluginManifest = JSON.parse(await readFile(join(root, ...plugin.manifest.split('/')), 'utf8')) as {
+      version?: unknown
+    }
+    pluginVersions.push([
+      plugin.manifest,
+      typeof pluginManifest.version === 'string' ? pluginManifest.version : undefined,
+    ])
+    const mcpConfig = await readFile(join(root, ...plugin.mcpConfig.split('/')), 'utf8')
+    pluginVersions.push([plugin.mcpConfig, /overleaf-web-mcp@(\d+\.\d+\.\d+)\b/u.exec(mcpConfig)?.[1]])
+  }
+
   const tags = attempt(() => environment.run('git', ['tag', '--list', 'v*', '--sort=-v:refname']))
   const latestTag = tags
     ?.split('\n')
@@ -175,6 +196,7 @@ export async function gatherPreflight(root: string, environment: PreflightEnviro
     serverVersion: /^export const SERVER_VERSION = '([^']*)'$/mu.exec(versionSource)?.[1],
     serverJsonVersions: [server.version, ...(server.packages ?? []).map(entry => entry.version)].map(String),
     manifestVersion: typeof manifest.version === 'string' ? manifest.version : undefined,
+    pluginVersions,
     installed: installed.map(({ name, version, location }) => ({ name, version, location })),
     instructions: await environment.instructions(),
   }
