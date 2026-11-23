@@ -20,7 +20,7 @@ npx overleaf-web-mcp call auth_status
 `login`, or the MCP tool `sign_in` of a running server, has its window open, another fails with
 `AUTH_EXPIRED` and `details.reason: "sign_in_in_progress"`. `call auth_status` then prints the account's
 project count and when the session expires, and exits 0. For frequent use, install the package
-once with `npm install -g overleaf-web-mcp` and run `overleaf-web-mcp` directly. In a script, pin the version and pass `--yes`, as in
+once with `npm install -g overleaf-web-mcp` and run `overleaf-web-mcp` directly. A global install also decides what `npx -y overleaf-web-mcp` runs in an MCP client's configuration, so update it with every release: `npm install -g overleaf-web-mcp@latest`. In a script, pin the version and pass `--yes`, as in
 `npx --yes overleaf-web-mcp@1.3 projects list`: without `--yes`, `npx` can print an install
 notice on stderr the first time.
 
@@ -539,3 +539,6 @@ npm install -g overleaf-web-mcp
 mkdir -p .agents/skills
 cp -R "$(npm root -g)/overleaf-web-mcp/skills/overleaf-revise-manuscript" .agents/skills/
 ```
+
+A global install also decides what `npx -y overleaf-web-mcp` runs in an MCP client's
+configuration, so update it with every release: `npm install -g overleaf-web-mcp@latest`.
