@@ -1,6 +1,6 @@
 # Tool reference
 
-The server registers 38 tools. Names are `snake_case`. Each tool but
+The server registers 40 tools. Names are `snake_case`. Each tool but
 [`sign_in`](#sign_in) is also `overleaf-web-mcp call <name>` on the [command line](cli.md) and a
 camelCase method of `createOverleafClient` in the [TypeScript SDK](sdk.md), with the same
 parameters, results, and errors; `sign_in` opens a browser window, which only `login` does on
@@ -1452,6 +1452,66 @@ its `projectOperations` list only operations with `atVersion` at or after `since
 operation at `atVersion` produces version `atVersion + 1`, so passing `nextSinceVersion` back
 never skips an operation and never repeats one. This is stateless polling, not a background
 watcher, and it never pages backward or computes diffs.
+
+### `read_file_version` <small>read-only</small>
+
+<!-- md:version 1.4.0 -->
+
+Read the text a document held at an earlier project version.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `filePath` | yes | The document, as it was named at that version |
+| `version` | one of the two | The project version, from `monitor_project_history`: an update's `toVersion` is the version after it, its `fromVersion` the one before |
+| `labelId` | one of the two | A label from `monitor_project_history` or `manage_history`, read at the version it marks |
+
+Returns `filePath`, `version`, `content` (LF-normalized), and `newline: "LF"`. It returns no
+revision: history text cannot be written back as it is. To put it back, restore the file with
+`manage_history`, or write the text with `write_file` against a fresh `read_file` revision. A path
+the version did not have, or an unknown `labelId`, is `NOT_FOUND`; a binary file is
+`INVALID_ARGUMENT` with `details.kind: "binary_file"`; passing both or neither of `version` and
+`labelId` is `INVALID_ARGUMENT`.
+
+### `manage_history` <small>destructive</small>
+
+<!-- md:version 1.4.0 -->
+
+Label the project's current version as a checkpoint, or restore one document to an earlier
+version.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `action` | yes | `create_label` or `restore_file` |
+| `comment` | `create_label` | What the checkpoint marks, 1 to 1,000 characters |
+| `filePath` | `restore_file` | The document, as it was named at that version |
+| `version` | `restore_file`, or `labelId` | The project version to restore |
+| `labelId` | `restore_file`, or `version` | A label whose version to restore |
+| `confirmPath` | `restore_file` | Must equal `filePath` |
+
+`create_label` labels the version that is current just before the call, the one the next edit
+starts from, and returns `label` (`{ id, comment, version, createdAt }`) and `verified`, which is
+`true` when the label was read back from the project's labels. Create one before a large edit;
+`monitor_project_history` lists it, and `read_file_version` and `restore_file` accept its id.
+
+`restore_file` puts one document back as it was. A missing or different `confirmPath` is
+`CONFIRMATION_MISMATCH`, and a path the version did not have is `NOT_FOUND`, and a binary file
+`INVALID_ARGUMENT` with `details.kind: "binary_file"`, all before anything is sent. Overleaf
+deletes the live file and creates a new document holding the old text with its tracked changes
+and comments. So the document gets a new id, every revision of the old one stops working, and a
+document that was the root document stays the root. It returns `filePath`, `version`, `docId`,
+`previousDocId` (`null` when nothing was at the path), the new document's `revision`, `protocol`,
+and `trackChangesActive`, read from a fresh join, and `contentMatches`, `true` when its text equals
+what `read_file_version` reads. `false` can mean that version held tracked deletions.
+
+Neither action is retried. A request whose answer was lost is read back: `recoveredAfterTimeout:
+true` when it applied, `TIMEOUT` or `REMOTE_ERROR` with `details.outcome: "not_applied"` when
+nothing changed, and `OUTCOME_UNKNOWN` otherwise, which means read the history or the project tree
+before doing anything else. A restore that failed after Overleaf removed the live file, and before
+it created the restored one, leaves nothing at the path and is `OUTCOME_UNKNOWN`. Labels need edit
+or review access to the project, and a restore needs edit access; without it the call is
+`PERMISSION_DENIED`.
 
 ## Workflow prompts
 

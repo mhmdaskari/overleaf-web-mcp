@@ -31,6 +31,21 @@ such change is listed.
   missing or binary bibliography file is listed in `unresolved` with reason `missing` or
   `binary_file` and does not fail the call. It reads source text, not TeX, which its description
   states; it compiles nothing.
+- `manage_history` (#46, #47), a destructive tool in the `history` toolset, also `call
+  manage_history` and `client.manageHistory`, with two actions. `create_label` takes `comment`
+  (1 to 1,000 characters), labels the version current just before the call, and returns `label`
+  `{ id, comment, version, createdAt }` and `verified`, from a read-back of the project's labels.
+  `restore_file` takes `filePath`, `version` or `labelId`, and `confirmPath`, which must equal
+  `filePath` (`CONFIRMATION_MISMATCH` otherwise, with nothing sent). Overleaf replaces the live
+  document with a new one holding the old text, so the result names the new `docId`,
+  `previousDocId`, and the new document's `revision`, `protocol`, and `trackChangesActive`, read
+  from a fresh join, and `contentMatches`. A lost answer is classified from a read-back:
+  `recoveredAfterTimeout: true`, `details.outcome: "not_applied"`, or `OUTCOME_UNKNOWN`; neither
+  action is ever resent. Its effects are `overleaf-write`, `overleaf-read`, and `overleaf-delete`.
+- `read_file_version` (#47), a read-only tool in the `history` toolset, also `call
+  read_file_version` and `client.readFileVersion`: the text of a document at a `version` or at a
+  label's version (`labelId`), with no revision. A path the version lacks is `NOT_FOUND`, and a
+  binary file is `INVALID_ARGUMENT` with `details.kind: "binary_file"`.
 
 ### Documentation
 

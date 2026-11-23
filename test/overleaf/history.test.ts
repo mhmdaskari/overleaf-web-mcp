@@ -285,3 +285,83 @@ describe('project history API', () => {
     await expect(api.monitorProjectHistory('project')).rejects.toBe(denied)
   })
 })
+
+describe('HistoryApi restoreFile', () => {
+  const readResult = {
+    content: 'Old',
+    revision: 'r',
+    newline: 'LF' as const,
+    protocol: 'sharejs' as const,
+    trackChangesActive: false,
+  }
+
+  function setup(options: {
+    diff?: unknown
+    post: () => Promise<unknown>
+    after?: Array<{ id: string; path: string; type: string }>
+  }) {
+    let entities = [{ id: 'd1', path: 'main.tex', type: 'doc' }]
+    const post = vi.fn(async () => {
+      try {
+        return await options.post()
+      } finally {
+        if (options.after !== undefined) entities = options.after
+      }
+    })
+    const api = new HistoryApi(
+      { getJson: vi.fn(async () => options.diff ?? { diff: [{ u: 'Old' }] }), postJson: post },
+      undefined,
+      { listEntities: vi.fn(async () => entities), readFile: vi.fn(async () => readResult) }
+    )
+    return { api, post }
+  }
+
+  test('a binary file at that version is refused before anything is sent', async () => {
+    const { api, post } = setup({ diff: { diff: { binary: true } }, post: async () => ({}) })
+    await expect(api.restoreFile('p', 'main.tex', { version: 2 }, 'main.tex')).rejects.toMatchObject({
+      code: 'INVALID_ARGUMENT',
+      details: { kind: 'binary_file' },
+    })
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  test('a refusal from Overleaf passes through, since nothing changed', async () => {
+    const denied = new McpError('PERMISSION_DENIED', 'Denied')
+    const { api, post } = setup({ post: async () => await Promise.reject(denied) })
+    await expect(api.restoreFile('p', 'main.tex', { version: 2 }, 'main.tex')).rejects.toBe(denied)
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+
+  test('a server error after the live file was removed is OUTCOME_UNKNOWN', async () => {
+    const failed = new McpError('REMOTE_ERROR', 'HTTP 500', { details: { status: 500 } })
+    const { api } = setup({ post: async () => await Promise.reject(failed), after: [] })
+    await expect(api.restoreFile('p', 'main.tex', { version: 2 }, 'main.tex')).rejects.toMatchObject({
+      code: 'OUTCOME_UNKNOWN',
+      details: { filePath: 'main.tex', version: 2, outcome: 'unknown' },
+    })
+  })
+
+  test('a server error that left the file as it was is not_applied', async () => {
+    const failed = new McpError('REMOTE_ERROR', 'HTTP 500', { details: { status: 500 } })
+    const { api } = setup({ post: async () => await Promise.reject(failed) })
+    await expect(api.restoreFile('p', 'main.tex', { version: 2 }, 'main.tex')).rejects.toMatchObject({
+      code: 'REMOTE_ERROR',
+      retryable: false,
+      details: { outcome: 'not_applied' },
+    })
+  })
+
+  test('a server error after which the restored document exists counts as applied', async () => {
+    const failed = new McpError('REMOTE_ERROR', 'HTTP 500', { details: { status: 500 } })
+    const { api } = setup({
+      post: async () => await Promise.reject(failed),
+      after: [{ id: 'd2', path: 'main.tex', type: 'doc' }],
+    })
+    await expect(api.restoreFile('p', 'main.tex', { version: 2 }, 'main.tex')).resolves.toMatchObject({
+      docId: 'd2',
+      previousDocId: 'd1',
+      recoveredAfterTimeout: true,
+      contentMatches: true,
+    })
+  })
+})

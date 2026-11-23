@@ -1,5 +1,46 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`manage_history create_label > a timed-out create that was applied is read back, never sent twice 1`] = `
+{
+  "action": "create_label",
+  "label": {
+    "comment": "Before revising",
+    "createdAt": "2026-11-20T10:00:00.000Z",
+    "id": "label-new",
+    "version": 12,
+  },
+  "recoveredAfterTimeout": true,
+  "verified": true,
+}
+`;
+
+exports[`manage_history create_label > labels the current version and reads the label back 1`] = `
+{
+  "action": "create_label",
+  "label": {
+    "comment": "Before revising",
+    "createdAt": "2026-11-20T10:00:00.000Z",
+    "id": "label-new",
+    "version": 12,
+  },
+  "verified": true,
+}
+`;
+
+exports[`manage_history restore_file > restores a document, and returns the new document from a fresh join 1`] = `
+{
+  "action": "restore_file",
+  "contentMatches": true,
+  "docId": "d2",
+  "filePath": "main.tex",
+  "previousDocId": "d1",
+  "protocol": "sharejs",
+  "revision": "eyJmb3JtYXQiOjEsInRva2VuVmVyc2lvbiI6MSwicHJvamVjdElkIjoicCIsImRvY0lkIjoiZDIiLCJwcm90b2NvbCI6InNoYXJlanMiLCJvdFZlcnNpb24iOjMsInNoYTI1NiI6IjMwNGZlNGM0NzBiMmEyMWJiYTU1OTE1NTQ0YjQwMTkxNzk3MTcxYjg3NGQ3ODZkZjRiN2Y0NTg4ZDQ4ZjgwMDkifQ",
+  "trackChangesActive": false,
+  "version": 4,
+}
+`;
+
 exports[`monitor_project_history golden results > a cursor at the current version returns no updates 1`] = `
 {
   "currentVersion": 10,
@@ -335,5 +376,16 @@ exports[`monitor_project_history golden results > without a cursor: newest first
       "toVersion": 8,
     },
   ],
+}
+`;
+
+exports[`read_file_version > reads a document at a version through a diff of that version with itself 1`] = `
+{
+  "content": "Old text
+line two
+",
+  "filePath": "chapters/intro.tex",
+  "newline": "LF",
+  "version": 7,
 }
 `;

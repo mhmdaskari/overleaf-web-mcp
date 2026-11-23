@@ -236,4 +236,10 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
       },
     ],
   },
+  read_file_version: { filePath: 'main.tex', version: 3, content: 'Old text\n', newline: 'LF' },
+  manage_history: {
+    action: 'create_label',
+    label: { id: 'l', comment: 'Before revising', version: 3, createdAt: '2026-11-01T00:00:00.000Z' },
+    verified: true,
+  },
 }

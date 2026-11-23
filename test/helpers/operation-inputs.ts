@@ -56,4 +56,6 @@ export const INPUTS: Record<OperationName, Record<string, unknown>> = {
     confirmCount: 1,
   },
   monitor_project_history: { projectId: 'p' },
+  read_file_version: { projectId: 'p', filePath: 'main.tex', version: 3 },
+  manage_history: { projectId: 'p', action: 'create_label', comment: 'Before revising' },
 }

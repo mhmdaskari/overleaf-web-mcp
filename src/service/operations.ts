@@ -10,6 +10,7 @@ import { asMcpError, McpError } from '../core/errors.js'
 import { resolveTextContent } from '../core/local-file.js'
 import { AccessPolicy } from '../core/policy.js'
 import type { EntityAction } from '../overleaf/entities.js'
+import type { VersionSelector } from '../overleaf/history.js'
 import type { ProjectAction } from '../overleaf/projects.js'
 import type { TagAction } from '../overleaf/tags.js'
 
@@ -83,6 +84,11 @@ function notify(context: OperationContext, diagnostic: OperationDiagnostic): voi
   } catch {
     // A diagnostic that cannot be delivered never changes the call's outcome.
   }
+}
+
+/** The version a history read or restore names; `checkInput` has made sure exactly one is given. */
+function versionSelector(input: { version?: number | undefined; labelId?: string | undefined }): VersionSelector {
+  return input.labelId === undefined ? { version: input.version! } : { labelId: input.labelId }
 }
 
 function manageProjectAction(input: OperationInput<'manage_project'>): ProjectAction {
@@ -374,6 +380,15 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
     monitor_project_history: operation(
       'monitor_project_history',
       async input => await runtime.history.monitorProjectHistory(input.projectId, input.sinceVersion)
+    ),
+    read_file_version: operation(
+      'read_file_version',
+      async input => await runtime.history.readFileVersion(input.projectId, input.filePath, versionSelector(input))
+    ),
+    manage_history: operation('manage_history', async input =>
+      input.action === 'create_label'
+        ? await runtime.history.createLabel(input.projectId, input.comment!)
+        : await runtime.history.restoreFile(input.projectId, input.filePath!, versionSelector(input), input.confirmPath)
     ),
   }
 }

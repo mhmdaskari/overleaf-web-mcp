@@ -43,7 +43,7 @@ export interface OverleafServiceRuntime {
   >
   comments: Pick<CommentsApi, 'listComments' | 'replyToComment' | 'addComment' | 'setCommentStatus'>
   trackedChanges: Pick<TrackedChangesApi, 'listTrackedChanges' | 'manageTrackedChanges'>
-  history: Pick<HistoryApi, 'monitorProjectHistory'>
+  history: Pick<HistoryApi, 'monitorProjectHistory' | 'createLabel' | 'readFileVersion' | 'restoreFile'>
   sync: Pick<SyncApi, 'planSync' | 'syncDirectory' | 'deleteEntities' | 'batchUpload'>
   tags: Pick<TagsApi, 'manageTags'>
   search: Pick<SearchApi, 'searchProject'>
