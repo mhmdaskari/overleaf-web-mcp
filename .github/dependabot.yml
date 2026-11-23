@@ -1,11 +1,14 @@
 # Weekly dependency updates. Minor and patch updates arrive together as one pull request for npm
 # and one for GitHub Actions. Majors arrive one per pull request, except those AGENTS.md has
 # handled by hand: the MCP SDK's major is pinned and one copy each of it and zod is required, and
-# @types/node follows the lowest supported Node.js, not the latest.
+# @types/node follows the lowest supported Node.js, not the latest. `increase` raises the lowest
+# version each range in package.json accepts along with the lockfile, so an install that reuses a
+# copy already in a project never picks a version older than the one tested here.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
+    versioning-strategy: increase
     schedule:
       interval: weekly
     commit-message:
