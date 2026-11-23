@@ -34,6 +34,8 @@ interface FakeProject {
   timeoutNextApply: boolean
   connections: number
   applied: number
+  /** Uploaded files' bytes by file id, served as Overleaf's file download route does. */
+  uploads: Map<string, string>
 }
 
 function createProject(
@@ -57,6 +59,7 @@ function createProject(
     timeoutNextApply: false,
     connections: 0,
     applied: 0,
+    uploads: new Map(),
   }
 }
 
@@ -158,6 +161,10 @@ async function withService<T>(project: FakeProject, operation: (service: Overlea
         const url = new URL(input instanceof Request ? input.url : String(input))
         const method = init?.method ?? 'GET'
         if (method === 'GET' && url.pathname === '/project') return new Response(BOOTSTRAP_PAGE)
+        const upload = /^\/Project\/[^/]+\/file\/([^/]+)$/u.exec(url.pathname)
+        if (method === 'GET' && upload !== null && project.uploads.has(upload[1]!)) {
+          return new Response(project.uploads.get(upload[1]!))
+        }
         throw new Error(`unexpected ${method} ${url.pathname}`)
       },
       connectionFactory: async projectId => {
@@ -675,22 +682,29 @@ Text with \autoref{fig:plot}.
     expectGolden('check_references', result)
   })
 
-  test('a linked .bib file is unresolved, and citations are then left unchecked', async () => {
+  test('a linked .bib file is downloaded and read like a text one', async () => {
     const project = createProject({
       'main.tex': {
         protocol: 'sharejs',
-        content: '\\cite{knuth1984,zotero2024}\n\\bibliography{refs,zotero}\n',
+        content: '\\cite{knuth1984,zotero2024,nobody2001}\n\\bibliography{refs,zotero}\n',
       },
       'refs.bib': { protocol: 'sharejs', content: REFS },
     })
-    // A reference manager's linked file is an uploaded file, not a text document.
+    // A reference manager's linked file is an uploaded file, not a text document, and may come
+    // with Windows line endings.
     project.root.fileRefs = [{ _id: 'file-1', name: 'zotero.bib' }]
+    project.uploads.set(
+      'file-1',
+      '\ufeff@misc{zotero2024,\r\n  title = {Linked},\r\n}\r\n\r\n@misc{spare2023,\r\n}\r\n'
+    )
     const result = await withService(
       project,
       async service => await service.check_references({ projectId: PROJECT, rootFilePath: 'main.tex' })
     )
-    expect(result.unresolved).toEqual([{ file: 'main.tex', line: 2, target: 'zotero', reason: 'binary_file' }])
-    expect(result).toMatchObject({ citationsChecked: false, undefinedCitations: [] })
+    expect(result).toMatchObject({ citationsChecked: true, unresolved: [] })
+    expect(result.undefinedCitations).toEqual([{ key: 'nobody2001', filePath: 'main.tex', line: 1 }])
+    expect(result.unusedBibEntries).toContainEqual({ key: 'spare2023', filePath: 'zotero.bib', line: 5 })
+    expect(result.filesRead).toEqual(['main.tex', 'refs.bib', 'zotero.bib'])
     expectGolden('check_references', result)
   })
 

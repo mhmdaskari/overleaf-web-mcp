@@ -1093,9 +1093,10 @@ Returns `rootFilePath`, five lists of `{ key, filePath, line }` (`line` 1-based)
 When a bibliography the document names could not be read, `citationsChecked` is `false` and
 `undefinedCitations` is empty: a key missing from the files read may be in the one that was not.
 Each list holds at most 500 entries; `truncated` is `true` when one was cut. `unresolved` is
-`get_full_document`'s, plus each bibliography file that is not in the project (`missing`), is an
-uploaded file rather than a text document (`binary_file`), or is named through a macro
-(`macro_argument`). None of them fails the call.
+`get_full_document`'s, plus each bibliography file that is not in the project (`missing`) or is
+named through a macro (`macro_argument`). None of them fails the call. A `.bib` file Overleaf
+holds as an uploaded file, as it does one linked from a reference manager or a URL, is downloaded
+and read like a text one.
 
 The check reads source text, not TeX. `%` comments and verbatim text are skipped, but keys built
 by macros, labels defined inside custom commands or packages, references to other documents, and

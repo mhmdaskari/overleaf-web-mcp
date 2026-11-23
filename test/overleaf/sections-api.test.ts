@@ -369,4 +369,40 @@ describe('section tools with followIncludes: edge cases', () => {
     expect(full.includeOnly).toEqual(['a'])
     expect(full.unresolved).toEqual([{ file: 'main.tex', line: 2, target: 'b', reason: 'excluded_by_includeonly' }])
   })
+
+  test('leaves a linked .bib unresolved, never empty, without a reader for uploaded files', async () => {
+    const documents = {
+      readFile: vi.fn(async () => ({
+        content: '\\cite{key}\n\\bibliography{linked}\n',
+        revision: 'revision',
+        newline: 'LF' as const,
+        protocol: 'sharejs' as const,
+        trackChangesActive: false,
+      })),
+      writeFile: vi.fn(),
+    }
+    const getProjectTree = vi.fn(async () => ({
+      entities: [
+        { id: 'doc-1', path: 'main.tex', type: 'doc' as const },
+        { id: 'file-1', path: 'linked.bib', type: 'file' as const },
+      ],
+    }))
+    const api = new SectionsApi(documents, { getProjectTree })
+    const report = await api.checkReferences('project', 'main.tex')
+    expect(report).toMatchObject({
+      citationsChecked: false,
+      undefinedCitations: [],
+      unresolved: [{ file: 'main.tex', line: 2, target: 'linked', reason: 'binary_file' }],
+    })
+    expect(documents.readFile).toHaveBeenCalledTimes(1)
+
+    const readFileBytes = vi.fn(async () => new TextEncoder().encode('@misc{key,\n}\n'))
+    const reading = new SectionsApi(documents, { getProjectTree, readFileBytes })
+    await expect(reading.checkReferences('project', 'main.tex')).resolves.toMatchObject({
+      citationsChecked: true,
+      undefinedCitations: [],
+      unresolved: [],
+    })
+    expect(readFileBytes).toHaveBeenCalledWith('project', 'linked.bib')
+  })
 })

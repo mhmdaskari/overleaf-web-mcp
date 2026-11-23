@@ -122,7 +122,7 @@ while building the archive is left out without an error.
 | `POST /project/:id/:type/:entityId/move` | `{ folder_id }` | nothing | `manage_entity` `move` |
 | `DELETE /project/:id/doc/:entityId`, `DELETE /project/:id/file/:entityId`, `DELETE /project/:id/folder/:entityId` | nothing | nothing | `manage_entity` `delete`; deleting a folder removes its subtree |
 | `POST /project/:id/upload?folder_id=` | multipart `qqfile` and `name` | `success`, `entity_id`, `entity_type`, `hash`; HTTP 422 with a short `error` code on rejection; HTTP 429 past about 500 a project in 15 minutes | `upload_file`, `batch_upload` |
-| `GET /Project/:id/doc/:entityId/download`, `GET /Project/:id/file/:entityId` | nothing | raw bytes | `download_file` |
+| `GET /Project/:id/doc/:entityId/download`, `GET /Project/:id/file/:entityId` | nothing | raw bytes | `download_file`; `check_references` reads an uploaded or linked `.bib` file through the second |
 
 `plan_sync`, `sync_directory`, `delete_entities`, and `batch_upload` add no routes of their own. They are built
 from the rows above and from the document channel: the tree comes from a fresh `joinProject`,

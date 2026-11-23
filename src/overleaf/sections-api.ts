@@ -35,6 +35,9 @@ interface SectionDocuments {
   ): Promise<WriteFileResult>
 }
 
+/** The bytes of an uploaded or linked project file, read into memory. */
+type FileBytesReader = (projectId: string, filePath: string) => Promise<Uint8Array>
+
 /** The project tree as the flattener needs it: entities and the configured root document. */
 type ProjectTreeReader = (projectId: string) => Promise<{ entities: readonly IncludeEntity[]; rootDocPath?: string }>
 
@@ -80,23 +83,21 @@ export interface ReferenceCheck extends ReferenceReport {
 }
 
 /**
- * The project path of a bibliography file. BibTeX and Biber look in the folder the compile runs
- * in, the project root, so a name is resolved from there: as written, then with `.bib` added.
+ * The project file a bibliography names. BibTeX and Biber look in the folder the compile runs in,
+ * the project root, so a name is resolved from there: as written, then with `.bib` added. A text
+ * document wins over an uploaded file of the other name. An uploaded file is how Overleaf holds a
+ * `.bib` linked from a reference manager or a URL.
  */
 function resolveBibliography(
   bibliography: BibliographyTarget,
   entities: readonly IncludeEntity[]
-): string | { reason: 'missing' | 'binary_file' | 'macro_argument' } {
+): { path: string; type: 'doc' | 'file' } | { reason: 'missing' | 'macro_argument' } {
   if (/[\\#]/u.test(bibliography.target)) return { reason: 'macro_argument' }
   const written = bibliography.target.replace(/^\.\//u, '')
   const candidates = bibliography.addsExtension && !written.endsWith('.bib') ? [`${written}.bib`, written] : [written]
-  let binary = false
-  for (const candidate of candidates) {
-    const entity = entities.find(item => item.path === candidate)
-    if (entity?.type === 'doc') return entity.path
-    if (entity?.type === 'file') binary = true
-  }
-  return { reason: binary ? 'binary_file' : 'missing' }
+  const found = candidates.flatMap(candidate => entities.filter(item => item.path === candidate))
+  const entity = found.find(item => item.type === 'doc') ?? found.find(item => item.type === 'file')
+  return entity === undefined ? { reason: 'missing' } : { path: entity.path, type: entity.type as 'doc' | 'file' }
 }
 
 const COMMAND_ALTERNATION = SECTION_COMMANDS.join('|')
@@ -189,11 +190,16 @@ function sectionNotFound(sectionId: string, followIncludes: boolean): McpError {
 export class SectionsApi {
   readonly #documents: SectionDocuments
   readonly #getProjectTree: ProjectTreeReader
+  readonly #readFileBytes: FileBytesReader | undefined
   readonly #policy: AccessPolicy
 
-  constructor(documents: SectionDocuments, options: { getProjectTree: ProjectTreeReader; policy?: AccessPolicy }) {
+  constructor(
+    documents: SectionDocuments,
+    options: { getProjectTree: ProjectTreeReader; readFileBytes?: FileBytesReader; policy?: AccessPolicy }
+  ) {
     this.#documents = documents
     this.#getProjectTree = options.getProjectTree
+    this.#readFileBytes = options.readFileBytes
     this.#policy = options.policy ?? AccessPolicy.permissive
   }
 
@@ -283,20 +289,26 @@ export class SectionsApi {
     let bibliographyComplete = true
     for (const bibliography of scans.flatMap(scan => scan.bibliographies)) {
       const resolved = resolveBibliography(bibliography, entities)
-      if (typeof resolved !== 'string') {
+      const readBytes = this.#readFileBytes
+      // Without a reader for uploaded files, as in a runtime built for documents alone, a linked
+      // .bib stays unresolved rather than being taken for an empty one.
+      if ('reason' in resolved || (resolved.type === 'file' && readBytes === undefined)) {
         bibliographyComplete = false
         unresolved.push({
           file: bibliography.filePath,
           line: bibliography.line,
           target: bibliography.target,
-          reason: resolved.reason,
+          reason: 'reason' in resolved ? resolved.reason : 'binary_file',
         })
         continue
       }
-      if (bibFiles.includes(resolved)) continue
-      bibFiles.push(resolved)
-      const bib = await this.#documents.readFile(projectId, resolved)
-      bibEntries.push(...scanBibEntries(resolved, bib.content))
+      if (bibFiles.includes(resolved.path)) continue
+      bibFiles.push(resolved.path)
+      const content =
+        resolved.type === 'file' && readBytes !== undefined
+          ? normalizeLf(new TextDecoder().decode(await readBytes(projectId, resolved.path)))
+          : (await this.#documents.readFile(projectId, resolved.path)).content
+      bibEntries.push(...scanBibEntries(resolved.path, content))
     }
     return {
       rootFilePath: document.rootFilePath,
