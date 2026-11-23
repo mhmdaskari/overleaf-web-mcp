@@ -32,6 +32,14 @@ such change is listed.
   `binary_file` and does not fail the call. It reads source text, not TeX, which its description
   states; it compiles nothing.
 
+### Documentation
+
+- A troubleshooting entry in the installation guide (#69) for an MCP client that starts an older
+  server, or lists no `sign_in`: `npx -y overleaf-web-mcp serve` runs a global install of any
+  version when there is one. It names `npm ls -g overleaf-web-mcp`, the update command, and the
+  uninstall command, with the caveat about a scheduled `keepalive`. Each `npm install -g` in the
+  installation and command line guides now says that a global install decides what `npx` runs.
+
 ### Internal
 
 - `scripts/bump-version.ts` sets the version in both plugin manifests and the exact

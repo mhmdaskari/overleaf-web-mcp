@@ -210,6 +210,9 @@ npm install -g overleaf-web-mcp
 overleaf-web-mcp --help
 ```
 
+A global install also decides what `npx -y overleaf-web-mcp` runs in an MCP client's
+configuration, so update it with every release: `npm install -g overleaf-web-mcp@latest`.
+
 The [command line guide](cli.md) covers every command, its output, and its exit codes, and the
 [TypeScript SDK](sdk.md) page covers the library. The three Agent Skills ship inside the package,
 in `$(npm root -g)/overleaf-web-mcp/skills` after a global install;
@@ -234,6 +237,18 @@ in `$(npm root -g)/overleaf-web-mcp/skills` after a global install;
       "$(dirname "$(nvm which 22)")/node" \
       "$(npm root -g)/overleaf-web-mcp/dist/cli.js" serve
     ```
+
+    A global install also decides what `npx -y overleaf-web-mcp` runs in an MCP client's
+    configuration, so update it with every release: `npm install -g overleaf-web-mcp@latest`.
+
+**An older version starts, or `sign_in` and other recent tools are missing.**
+<!-- md:version 1.3.0 --> `npx -y overleaf-web-mcp serve` runs a global install of the package
+when there is one, whatever its version, instead of the latest release, and nothing says so. A
+global install comes from `npm install -g overleaf-web-mcp`, which this guide and the command
+line guide suggest. Check with `npm ls -g overleaf-web-mcp`, then either update it with
+`npm install -g overleaf-web-mcp@latest`, or remove it with `npm uninstall -g overleaf-web-mcp`.
+Remove it only if nothing runs the global copy, such as a scheduled `keepalive` or a client
+registered with its `dist/cli.js` path. Restart the client afterwards.
 
 **"`spawn npx ENOENT`" or "command not found" in a desktop app.** <!-- md:version 1.3.0 --> An
 app opened from the Dock, Finder, or the Start menu does not read your shell profile, so a
