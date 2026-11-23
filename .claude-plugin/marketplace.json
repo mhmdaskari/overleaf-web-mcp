@@ -1,0 +1,17 @@
+{
+  "name": "overleaf-web-mcp",
+  "owner": {
+    "name": "Mohammad Askari",
+    "url": "https://github.com/mhmdaskari"
+  },
+  "metadata": {
+    "description": "The Overleaf Web MCP plugin: the MCP server and its Agent Skills for Overleaf projects."
+  },
+  "plugins": [
+    {
+      "name": "overleaf-web-mcp",
+      "source": "./plugins/claude",
+      "description": "Read, edit, compile, and review your Overleaf projects through your own signed-in web session."
+    }
+  ]
+}

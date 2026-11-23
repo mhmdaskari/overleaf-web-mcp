@@ -21,6 +21,15 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
 - The [SDK](sdk.md#stable-surface) surface has existed since 0.5.0 and follows Semantic
   Versioning from 1.0.0. Before 1.0.0 a minor release could change it.
 
+## 1.4.0
+
+[Changelog](changelog.md#140-unreleased)
+
+- **Plugins:** the server and the three Agent Skills as a [Claude Code
+  plugin](install.md#2-connect-your-mcp-client), installed with
+  `/plugin install overleaf-web-mcp --marketplace mhmdaskari/overleaf-web-mcp`, and a Cursor
+  plugin in `plugins/cursor/`.
+
 ## 1.3.0
 
 [Changelog](changelog.md#130-2026-11-18)

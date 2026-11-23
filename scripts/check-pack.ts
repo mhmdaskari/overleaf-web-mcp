@@ -31,6 +31,7 @@ const FORBIDDEN = [
   /^test\//u,
   /^scripts\//u,
   /^\.github\//u,
+  /^plugins\//u,
   /^node_modules\//u,
   /cookies?\.txt$/iu,
   /\.env$/u,

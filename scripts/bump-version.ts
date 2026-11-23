@@ -1,6 +1,7 @@
 /**
- * Sets a new release version in every place step 2 of "Releasing" in AGENTS.md names, and moves
- * the `npx --yes overleaf-web-mcp@X.Y` pin when the major or minor version changes.
+ * Sets a new release version in every place step 2 of "Releasing" in AGENTS.md names, including
+ * both plugin manifests and the exact `overleaf-web-mcp@X.Y.Z` pin in their MCP configurations, and
+ * moves the `npx --yes overleaf-web-mcp@X.Y` pin when the major or minor version changes.
  *
  *   npx tsx scripts/bump-version.ts X.Y.Z
  *
@@ -19,6 +20,20 @@ export interface FileChange {
 }
 
 export class BumpError extends Error {}
+
+/** The plugin folders under `plugins/`, each a thin wrapper over the published npm package. */
+export const PLUGINS = [
+  {
+    folder: 'plugins/claude',
+    manifest: 'plugins/claude/.claude-plugin/plugin.json',
+    mcpConfig: 'plugins/claude/.mcp.json',
+  },
+  {
+    folder: 'plugins/cursor',
+    manifest: 'plugins/cursor/.cursor-plugin/plugin.json',
+    mcpConfig: 'plugins/cursor/mcp.json',
+  },
+] as const
 
 type Version = [major: number, minor: number, patch: number]
 
@@ -119,21 +134,44 @@ export async function planVersionBump(root: string, next: string): Promise<FileC
     throw new BumpError('manifest.json has no top-level "version" line in its usual layout; nothing was changed.')
   changes.push({ ...manifestFile, after: manifestFile.before.replace(manifestVersion, `$1"${next}"`) })
 
+  // Each plugin's manifest carries the release, and its MCP configuration pins the exact package
+  // version, on every release: an unpinned launcher blocks a directory submission.
+  const exactPin = new RegExp(`(overleaf-web-mcp@)${escape(current)}(?![.\\d])`, 'gu')
+  for (const plugin of PLUGINS) {
+    const pluginManifest = await read(plugin.manifest)
+    if (json<Versioned>(pluginManifest.before, pluginManifest.path).version === undefined)
+      throw new BumpError(`${plugin.manifest} has no version.`)
+    if (!manifestVersion.test(pluginManifest.before))
+      throw new BumpError(
+        `${plugin.manifest} has no top-level "version" line in its usual layout; nothing was changed.`
+      )
+    changes.push({ ...pluginManifest, after: pluginManifest.before.replace(manifestVersion, `$1"${next}"`) })
+
+    const mcpConfig = await read(plugin.mcpConfig)
+    if (mcpConfig.before.search(exactPin) === -1)
+      throw new BumpError(`${plugin.mcpConfig} has no overleaf-web-mcp@${current} pin to move.`)
+    changes.push({ ...mcpConfig, after: mcpConfig.before.replace(exactPin, `$1${next}`) })
+  }
+
   if (nextVersion[0] !== currentVersion[0] || nextVersion[1] !== currentVersion[1]) {
     const from = `${currentVersion[0]}.${currentVersion[1]}`
     const to = `${nextVersion[0]}.${nextVersion[1]}`
     // `@1.1` but not `@1.10` or `@1.1.0`; a pin may end a sentence.
     const pin = new RegExp(`(overleaf-web-mcp@)${escape(from)}(?!\\.?\\d)`, 'gu')
-    const skills = (await readdir(join(root, 'skills'), { withFileTypes: true }))
+    const names = (await readdir(join(root, 'skills'), { withFileTypes: true }))
       .filter(entry => entry.isDirectory())
-      .map(entry => `skills/${entry.name}/SKILL.md`)
+      .map(entry => entry.name)
       .sort()
+    // The plugins carry copies of the skills, which a test keeps identical to `skills/`.
+    const skills = ['skills', ...PLUGINS.map(plugin => `${plugin.folder}/skills`)].flatMap(folder =>
+      names.map(name => `${folder}/${name}/SKILL.md`)
+    )
     for (const path of [...skills, 'docs/cli.md', 'test/skills.test.ts']) {
       const file = await read(path)
       if (file.before.search(pin) === -1) throw new BumpError(`${path} has no overleaf-web-mcp@${from} pin to move.`)
       let after = file.before.replace(pin, `$1${to}`)
       // The skills also say in words which releases they are pinned to.
-      if (path.startsWith('skills/'))
+      if (path.endsWith('/SKILL.md'))
         after = after.replace(new RegExp(`\\b${escape(from)} releases\\b`, 'gu'), `${to} releases`)
       changes.push({ ...file, after })
     }

@@ -12,19 +12,29 @@ const current = (JSON.parse(await readFile(join(repository, 'package.json'), 'ut
 const [major, minor, patch] = parseVersion(current)!
 const pin = `overleaf-web-mcp@${major}.${minor}`
 
-/** The files step 2 of "Releasing" names, as the release step lists them. */
-const STEP_TWO_FILES = [
+const SKILLS = ['overleaf-reviewer-comments', 'overleaf-revise-manuscript', 'overleaf-sync-sources']
+
+/** The files every release changes, in the order the bump reports them. */
+const VERSION_FILES = [
   'package.json',
   'package-lock.json',
   'src/version.ts',
   'server.json',
   'manifest.json',
-  'skills/overleaf-reviewer-comments/SKILL.md',
-  'skills/overleaf-revise-manuscript/SKILL.md',
-  'skills/overleaf-sync-sources/SKILL.md',
-  'docs/cli.md',
-  'test/skills.test.ts',
+  'plugins/claude/.claude-plugin/plugin.json',
+  'plugins/claude/.mcp.json',
+  'plugins/cursor/.cursor-plugin/plugin.json',
+  'plugins/cursor/mcp.json',
 ]
+const PLUGIN_MANIFESTS = [VERSION_FILES[5]!, VERSION_FILES[7]!]
+const PLUGIN_MCP_CONFIGS = [VERSION_FILES[6]!, VERSION_FILES[8]!]
+/** The skills and the plugins' copies of them, which carry the minor-version pin in words too. */
+const SKILL_FILES = ['skills', 'plugins/claude/skills', 'plugins/cursor/skills'].flatMap(folder =>
+  SKILLS.map(name => `${folder}/${name}/SKILL.md`)
+)
+const PIN_FILES = [...SKILL_FILES, 'docs/cli.md', 'test/skills.test.ts']
+/** The files step 2 of "Releasing" names, as the release step lists them. */
+const STEP_TWO_FILES = [...VERSION_FILES, ...PIN_FILES]
 
 const folders: string[] = []
 
@@ -60,16 +70,10 @@ describe('version parsing', () => {
 })
 
 describe('bump-version', () => {
-  test('a patch sets the version in five files and leaves the pins alone', async () => {
+  test('a patch sets the version and the plugins’ exact pins, and leaves the minor pins alone', async () => {
     const root = await copyOfRepository()
     const next = `${major}.${minor}.${patch + 1}`
-    expect(await bumpVersion(root, next)).toEqual([
-      'package.json',
-      'package-lock.json',
-      'src/version.ts',
-      'server.json',
-      'manifest.json',
-    ])
+    expect(await bumpVersion(root, next)).toEqual(VERSION_FILES)
 
     const read = async <T>(path: string) => JSON.parse(await readFile(join(root, path), 'utf8')) as T
     const packageJson = await read<{ version: string }>('package.json')
@@ -81,6 +85,11 @@ describe('bump-version', () => {
     expect((await read<{ version: string }>('manifest.json')).version).toBe(next)
     expect(await readFile(join(root, 'src/version.ts'), 'utf8')).toContain(`export const SERVER_VERSION = '${next}'`)
     expect(await readFile(join(root, 'docs/cli.md'), 'utf8')).toContain(pin)
+    for (const path of PLUGIN_MANIFESTS) expect((await read<{ version: string }>(path)).version, path).toBe(next)
+    for (const path of PLUGIN_MCP_CONFIGS) {
+      const config = await read<{ mcpServers: { overleaf: { args: string[] } } }>(path)
+      expect(config.mcpServers.overleaf.args, path).toEqual(['-y', `overleaf-web-mcp@${next}`, 'serve'])
+    }
   })
 
   test('a minor also moves every pin and the skills’ wording, and nothing else', async () => {
@@ -92,14 +101,14 @@ describe('bump-version', () => {
 
     const after = await snapshot(root)
     expect(after['CHANGELOG.md']).toBe(before['CHANGELOG.md'])
-    for (const path of STEP_TWO_FILES.slice(5)) {
+    for (const path of PIN_FILES) {
       expect(after[path], path).not.toContain(`${pin} `)
       expect(after[path], path).toContain(nextPin)
       // Only the pins and the wording moved: every other line is untouched.
       const changed = after[path]!.split('\n').filter((line, index) => line !== before[path]!.split('\n')[index])
       for (const line of changed) expect(line, `${path}: ${line}`).toMatch(new RegExp(`${major}\\.${minor + 1}`, 'u'))
     }
-    for (const path of STEP_TWO_FILES.slice(5, 8)) {
+    for (const path of SKILL_FILES) {
       expect(after[path], path).not.toMatch(new RegExp(`\\b${major}\\.${minor} releases`, 'u'))
     }
   })
@@ -111,6 +120,15 @@ describe('bump-version', () => {
     await writeFile(path, JSON.stringify(manifest))
     const before = await snapshot(root)
     await expect(bumpVersion(root, `${major}.${minor}.${patch + 1}`)).rejects.toThrow(/manifest\.json/u)
+    expect(await snapshot(root)).toEqual(before)
+  })
+
+  test('changes nothing when a plugin has no exact pin to move', async () => {
+    const root = await copyOfRepository()
+    const path = join(root, 'plugins/cursor/mcp.json')
+    await writeFile(path, (await readFile(path, 'utf8')).replace(`overleaf-web-mcp@${current}`, 'overleaf-web-mcp'))
+    const before = await snapshot(root)
+    await expect(bumpVersion(root, `${major}.${minor}.${patch + 1}`)).rejects.toThrow(/plugins\/cursor\/mcp\.json/u)
     expect(await snapshot(root)).toEqual(before)
   })
 

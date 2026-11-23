@@ -12,10 +12,14 @@ describe('packed file list', () => {
     expect(packProblems(paths)).toEqual(['missing dist/cli.js', 'missing skills/overleaf-sync-sources/SKILL.md'])
   })
 
-  test.each(['src/cli.ts', 'test/server.test.ts', 'scripts/check-pack.ts', 'cookies.txt', '.env'])(
-    'refuses to publish %s',
-    path => {
-      expect(packProblems([...REQUIRED_FILES, path])).toEqual([`must not publish ${path}`])
-    }
-  )
+  test.each([
+    'src/cli.ts',
+    'test/server.test.ts',
+    'scripts/check-pack.ts',
+    'plugins/claude/.mcp.json',
+    'cookies.txt',
+    '.env',
+  ])('refuses to publish %s', path => {
+    expect(packProblems([...REQUIRED_FILES, path])).toEqual([`must not publish ${path}`])
+  })
 })

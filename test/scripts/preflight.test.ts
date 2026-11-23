@@ -1,6 +1,6 @@
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { afterEach, describe, expect, test } from 'vitest'
@@ -31,9 +31,19 @@ const folders: string[] = []
 async function copyOfRepository(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'overleaf-preflight-'))
   folders.push(root)
-  await mkdir(join(root, 'src'))
-  for (const path of ['package.json', 'server.json', 'manifest.json', 'src/version.ts'])
+  for (const path of [
+    'package.json',
+    'server.json',
+    'manifest.json',
+    'src/version.ts',
+    'plugins/claude/.claude-plugin/plugin.json',
+    'plugins/claude/.mcp.json',
+    'plugins/cursor/.cursor-plugin/plugin.json',
+    'plugins/cursor/mcp.json',
+  ]) {
+    await mkdir(dirname(join(root, path)), { recursive: true })
     await cp(join(repository, path), join(root, path))
+  }
   return root
 }
 
@@ -94,6 +104,23 @@ describe('preflight', () => {
     expect(await failing(root)).toEqual(['versions agree'])
     const [agree] = evaluatePreflight(await gatherPreflight(root, environment()))
     expect(agree!.detail).toContain('manifest.json 0.0.1')
+  })
+
+  test.each([
+    ['plugins/claude/.claude-plugin/plugin.json', '"version": "0.0.1"'],
+    ['plugins/cursor/.cursor-plugin/plugin.json', '"version": "0.0.1"'],
+    ['plugins/claude/.mcp.json', 'overleaf-web-mcp@0.0.1'],
+    ['plugins/cursor/mcp.json', 'overleaf-web-mcp@0.0.1'],
+  ])('fails when %s names a different version', async (path, replacement) => {
+    const root = await copyOfRepository()
+    const file = join(root, path)
+    const text = await readFile(file, 'utf8')
+    const changed = text.replace(/"version": "[^"]*"|overleaf-web-mcp@\d+\.\d+\.\d+/u, replacement)
+    expect(changed).not.toBe(text)
+    await writeFile(file, changed)
+    expect(await failing(root)).toEqual(['versions agree'])
+    const [agree] = evaluatePreflight(await gatherPreflight(root, environment()))
+    expect(agree!.detail).toContain(`${path} 0.0.1`)
   })
 
   test('fails when npm, the latest tag, or SERVER_VERSION disagree, or npm cannot be reached', async () => {

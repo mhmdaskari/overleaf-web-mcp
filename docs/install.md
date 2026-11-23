@@ -41,6 +41,18 @@ Using only the command line or the TypeScript library? Skip to
 
     `claude mcp remove overleaf` undoes it.
 
+    **As a plugin** <!-- md:version 1.4.0 -->, which adds the three
+    [Agent Skills](cli.md#agent-skills) with the server, in Claude Code 2.1.275 or later:
+
+    ```text
+    /plugin install overleaf-web-mcp --marketplace mhmdaskari/overleaf-web-mcp
+    ```
+
+    On an earlier version, run `/plugin marketplace add mhmdaskari/overleaf-web-mcp` and then
+    `/plugin install overleaf-web-mcp@overleaf-web-mcp`. The plugin starts the release it was
+    published with and moves to the next one when the plugin updates. Use one or the other: with
+    both, Claude Code starts two copies of the server.
+
 === "Codex"
 
     One command adds the server to `~/.codex/config.toml` for every project:

@@ -10,6 +10,29 @@ version, a deprecation is announced at least one minor version ahead with both n
 every change is listed below. Before 1.0.0, a minor or patch release could change them, and each
 such change is listed.
 
+## [1.4.0] - Unreleased
+
+### Added
+
+- Plugins for Claude and Cursor (#68). `plugins/claude/` and `plugins/cursor/` each wrap the
+  published npm package and contain no server code: a manifest, an MCP configuration that starts
+  `npx -y overleaf-web-mcp@X.Y.Z serve` pinned to the exact release, copies of the three Agent
+  Skills, and a README that says what the plugin runs, sends, and stores.
+  `.claude-plugin/marketplace.json` makes the repository a Claude Code plugin marketplace, so
+  `/plugin install overleaf-web-mcp --marketplace mhmdaskari/overleaf-web-mcp` installs the
+  server and the skills together, and `.cursor-plugin/marketplace.json` names the Cursor plugin's
+  folder. The npm package does not include `plugins/`, and its contents are unchanged.
+
+### Internal
+
+- `scripts/bump-version.ts` sets the version in both plugin manifests and the exact
+  `overleaf-web-mcp@X.Y.Z` pin in both plugin MCP configurations on every release, and moves the
+  minor-version pin in the plugins' copies of the skills. `scripts/preflight.ts` fails when any
+  of them differs from `package.json`, and `scripts/check-pack.ts` refuses a package that
+  contains `plugins/`. `test/plugins.test.ts` keeps the skill copies identical to `skills/` and
+  holds each plugin folder to the directories' file rules: no lockfile, `.npmrc`, symbolic link,
+  or file over 256 KiB.
+
 ## [1.3.0] - 2026-11-18
 
 For desktop apps. Claude Desktop installs the server as an extension, and any MCP client can sign

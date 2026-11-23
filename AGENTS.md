@@ -150,6 +150,9 @@ Windows and macOS with Node 24, for every push and pull request. For the docs si
 - `docs/cli.md` lists every command `renderHelp` prints, and `docs/sdk.md` names the stable
   `overleaf-web-mcp/core` surface; a test holds both.
 - `skills/*/SKILL.md` use only commands `renderHelp` lists and name no assistant or model.
+  `plugins/claude/skills/` and `plugins/cursor/skills/` are copies, since a plugin may not link
+  outside its folder; copy a changed skill into both, and `test/plugins.test.ts` fails until they
+  match.
 - Every feature on the site carries a version tag, `<!-- md:version X.Y.Z -->`, which
   `overrides/hooks/shortcodes.py` renders as a badge linking to that release in the changelog;
   `mkdocs build` fails on a version without a `## [X.Y.Z]` heading. The tag goes on the line under
@@ -296,8 +299,9 @@ all but noting the MCP protocol versions, prints one line per check, and exits 1
 the rest need a person:
 
 - `npm view overleaf-web-mcp version`, the latest `vX.Y.Z` tag, `package.json`, `SERVER_VERSION`
-  in `src/version.ts`, both `version` fields of `server.json`, and the `version` of `manifest.json`
-  (the Claude Desktop extension) agree on the last release.
+  in `src/version.ts`, both `version` fields of `server.json`, the `version` of `manifest.json`
+  (the Claude Desktop extension), and each plugin's manifest `version` and pinned
+  `overleaf-web-mcp@X.Y.Z` agree on the last release.
 - The MCP SDK is still v2: `@modelcontextprotocol/server` 2.x in `dependencies`,
   `@modelcontextprotocol/client` 2.x in `devDependencies`, `npm ls @modelcontextprotocol/sdk`
   prints `(empty)`, and `npm ls zod @modelcontextprotocol/core` shows one copy of each. Note which
@@ -323,9 +327,10 @@ the rest need a person:
    starting `## [X.Y.Z]` exists, so it accepts a heading still marked `Unreleased`.
 2. **Version.** Run `npx tsx scripts/bump-version.ts X.Y.Z`. It sets the same version in
    `package.json` and `package-lock.json`, `SERVER_VERSION` in `src/version.ts`, both
-   `version` fields of `server.json`, and the `version` of `manifest.json`, and for a major or
-   minor release also moves the `npx --yes overleaf-web-mcp@X.Y` pin in `skills/*/SKILL.md`,
-   `docs/cli.md`, and
+   `version` fields of `server.json`, the `version` of `manifest.json`, and in `plugins/` each
+   manifest's `version` and the exact `overleaf-web-mcp@X.Y.Z` its MCP configuration starts. For
+   a major or minor release it also moves the `npx --yes overleaf-web-mcp@X.Y` pin in
+   `skills/*/SKILL.md`, the plugins' copies of them, `docs/cli.md`, and
    `test/skills.test.ts`, which fails until it matches. It prints the files it changed, refuses a
    version that is not greater than the current one, and changes nothing if a place it expects is
    missing. It does not touch `CHANGELOG.md`, commit, or tag.
@@ -356,7 +361,9 @@ the rest need a person:
    and attaches the Claude Desktop extension, `overleaf-web-mcp-X.Y.Z.mcpb`, built from the same
    commit. Publishing a GitHub Release with tag `vX.Y.Z` by hand still works and runs the same
    checks and publish. A run that failed after npm can be re-run; it skips what is already
-   published.
+   published. Run it right after the merge: the plugin marketplaces in `.claude-plugin/` and
+   `.cursor-plugin/` read `main`, so until npm has the version, a plugin update pins a release
+   that does not exist yet.
 8. **After publishing.** `npm view overleaf-web-mcp version` shows the new version,
    `npx --yes overleaf-web-mcp@X.Y.Z --help` runs, the GitHub Release and tag exist with the
    `.mcpb` file attached, the MCP Registry job succeeded, and the docs site, which redeploys on
