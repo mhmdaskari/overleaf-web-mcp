@@ -10,6 +10,24 @@ version, a deprecation is announced at least one minor version ahead with both n
 every change is listed below. Before 1.0.0, a minor or patch release could change them, and each
 such change is listed.
 
+## [1.4.1] - Unreleased
+
+### Fixed
+
+- The lowest versions of `undici` and `zod` the package accepts now have no published advisory.
+  `undici` rises from `^6.28.1` to `^6.29.1` (GHSA-2m5v-pch6-74hx, GHSA-qrxm-fqhp-jwvm,
+  GHSA-xjj6-f33q-929c, GHSA-4qv8-2p9j-2685, GHSA-9fm3-97px-rjf6) and `zod` from `^4.3.2` to
+  `^4.6.7` (GHSA-mrhx-c7xc-m3w5). A fresh install, `npx` included, already resolved the fixed
+  versions; an install into a project that held an older copy could reuse it.
+
+### Internal
+
+- Development dependencies: `vitest` rises to `^4.1.12` (GHSA-82fw-gwwq-j7x9) and
+  `typescript-eslint` to `^8.74.0`, whose `minimatch` is past GHSA-g3hv-75wg-m249. `npm audit`
+  reports no vulnerabilities.
+- Dependabot uses `versioning-strategy: increase`, so its updates raise the ranges in
+  `package.json` along with the lockfile.
+
 ## [1.4.0] - 2026-11-23
 
 For history and build insight. An agent can label the project before a large edit, read a
