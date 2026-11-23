@@ -14,6 +14,7 @@ import {
   MAX_SEARCH_QUERY_LENGTH,
   SEARCH_PREVIEW_CHARS,
 } from '../overleaf/search.js'
+import { MAX_LABEL_COMMENT_LENGTH } from '../overleaf/history.js'
 import { BATCH_UPLOAD_LIMIT } from '../overleaf/sync.js'
 import { MAX_TAG_NAME_LENGTH, MAX_TAG_PROJECT_IDS, TAG_COLOR_PATTERN } from '../overleaf/tags.js'
 import {
@@ -26,6 +27,7 @@ import {
 import { MAX_TEXT_EDITS } from '../core/text-edits.js'
 import type { Effect } from './effects.js'
 import { ERROR_CODES } from './error-codes.js'
+import { assertHistoryAction, assertOneVersion } from './history-input.js'
 import { assertOneTextSource } from './text-source.js'
 import type { Toolset } from './toolsets.js'
 
@@ -71,6 +73,8 @@ export const OPERATION_NAMES = [
   'list_tracked_changes',
   'manage_tracked_changes',
   'monitor_project_history',
+  'read_file_version',
+  'manage_history',
 ] as const
 
 export type OperationName = (typeof OPERATION_NAMES)[number]
@@ -278,6 +282,7 @@ const trackedChangeSchema = z.object({
 const projectActionSchema = z.enum(['rename', 'trash', 'restore', 'archive', 'unarchive', 'delete'])
 
 const historyVersion = z.number().int().nonnegative()
+const historyActionSchema = z.enum(['create_label', 'restore_file'])
 
 const historyProjectOperationSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('add'), atVersion: historyVersion, path: z.string() }),
@@ -1305,6 +1310,63 @@ export const OPERATIONS = {
     annotations: { readOnlyHint: true },
     effects: ['overleaf-read'],
     toolset: 'history',
+  },
+  read_file_version: {
+    description:
+      'Read the text a document held at an earlier project version, from Overleaf\'s history; nothing changes. Pass version (from monitor_project_history: an update\'s toVersion is the version after it, its fromVersion the one before) or labelId (a label from monitor_project_history or manage_history). filePath is the path the document had at that version. Returns filePath, version, content (LF-normalized), and newline "LF", with no revision: to put the text back, use manage_history restore_file, or write it with write_file against a fresh read_file revision. A path the version lacks, or an unknown labelId, is NOT_FOUND; a binary file is INVALID_ARGUMENT with details.kind binary_file.',
+    inputSchema: z.object({
+      projectId,
+      filePath,
+      version: historyVersion.optional().describe('Project version to read; or pass labelId'),
+      labelId: z.string().min(1).optional().describe('Label whose version to read; or pass version'),
+    }),
+    outputSchema: z.object({
+      filePath: z.string(),
+      version: historyVersion,
+      content: z.string(),
+      newline: z.literal('LF'),
+    }),
+    annotations: { readOnlyHint: true },
+    effects: ['overleaf-read'],
+    toolset: 'history',
+    checkInput: assertOneVersion,
+  },
+  manage_history: {
+    description: `Label the project's current version as a checkpoint, or restore one document to an earlier version. create_label takes comment, 1 to ${MAX_LABEL_COMMENT_LENGTH} characters, and labels the version current just before the call; create one before a large edit, so the version before it can be found again. It returns label { id, comment, version, createdAt } and verified (the label was read back). restore_file takes filePath, version or labelId, and confirmPath equal to filePath, else CONFIRMATION_MISMATCH and nothing is sent. filePath is the path the document had at that version; one the version lacks is NOT_FOUND, and a binary file INVALID_ARGUMENT with details.kind binary_file, before anything is sent. Overleaf deletes the live file and creates a new document with the old text, tracked changes, and comments, so it gets a new docId and every revision of the old one stops working; a root document stays the root. It returns filePath, version, docId, previousDocId (null when nothing was at the path), the new document's revision, protocol, trackChangesActive, and contentMatches (its text equals what read_file_version reads). Nothing is retried: a lost answer is read back, giving recoveredAfterTimeout: true when it applied and details.outcome not_applied when nothing changed; OUTCOME_UNKNOWN means read the history or the tree before acting again.`,
+    inputSchema: z.object({
+      projectId,
+      action: historyActionSchema,
+      comment: z
+        .string()
+        .min(1)
+        .max(MAX_LABEL_COMMENT_LENGTH)
+        .optional()
+        .describe('create_label: what the checkpoint marks'),
+      filePath: filePath.optional().describe('restore_file: the document, as named at that version'),
+      version: historyVersion.optional().describe('restore_file: the version to restore; or pass labelId'),
+      labelId: z.string().min(1).optional().describe('restore_file: the label whose version to restore'),
+      confirmPath: z.string().optional().describe('restore_file: must equal filePath'),
+    }),
+    outputSchema: z.object({
+      action: historyActionSchema,
+      label: z
+        .object({ id: z.string(), comment: z.string(), version: historyVersion, createdAt: z.string() })
+        .optional(),
+      verified: z.boolean().optional(),
+      filePath: z.string().optional(),
+      version: historyVersion.optional(),
+      docId: z.string().optional(),
+      previousDocId: z.string().nullable().optional(),
+      revision: z.string().optional(),
+      protocol: otProtocolSchema.optional(),
+      trackChangesActive: z.boolean().optional(),
+      contentMatches: z.boolean().optional(),
+      recoveredAfterTimeout: z.literal(true).optional(),
+    }),
+    annotations: { destructiveHint: true, idempotentHint: false },
+    effects: ['overleaf-write', 'overleaf-read', 'overleaf-delete'],
+    toolset: 'history',
+    checkInput: assertHistoryAction,
   },
 } as const satisfies Record<OperationName, OperationContract>
 

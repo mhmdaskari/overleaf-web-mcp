@@ -53,7 +53,7 @@ function fakeRuntime() {
       setCommentStatus: vi.fn(),
     },
     trackedChanges: { listTrackedChanges: vi.fn(), manageTrackedChanges: vi.fn() },
-    history: { monitorProjectHistory: vi.fn() },
+    history: { monitorProjectHistory: vi.fn(), createLabel: vi.fn(), readFileVersion: vi.fn(), restoreFile: vi.fn() },
     sync: { planSync: vi.fn(), syncDirectory: vi.fn(), deleteEntities: vi.fn(), batchUpload: vi.fn() },
     tags: { manageTags: vi.fn() },
     search: { searchProject: vi.fn() },
@@ -97,7 +97,7 @@ function runtimeWithPlanProgress() {
  * (58,992), as the 450-word bound holds the instructions. A release that adds a tool or grows a
  * description trims elsewhere, or raises this in a change the changelog explains.
  */
-const TOOL_LIST_CHAR_LIMIT = 62_000
+const TOOL_LIST_CHAR_LIMIT = 65_000
 
 function toolListSize(
   tools: ReadonlyArray<{ name: string; description?: string | undefined; inputSchema: unknown }>

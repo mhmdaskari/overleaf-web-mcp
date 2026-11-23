@@ -300,6 +300,20 @@ access (`owner` or `readAndWrite`).
 | Method and route | Sent | Read | Used by |
 | --- | --- | --- | --- |
 | `GET /project/:id/updates?min_count=25` | nothing | `updates[]` with version ranges, timestamps, and users (validated; email fields dropped) | `monitor_project_history` |
+| `GET /project/:id/updates?min_count=1` | nothing | the highest `toV`, the project's current version | `manage_history` `create_label` |
+| `GET /project/:id/labels` | nothing | `[{ id, comment, version, created_at }]` (validated; user fields dropped) | `manage_history`, `read_file_version` with `labelId` |
+| `POST /project/:id/labels` | `{ comment, version }` | `{ id, comment, version, created_at }` | `manage_history` `create_label` |
+| `GET /project/:id/diff?pathname=:path&from=:version&to=:version` | nothing | `diff`: `[{ u }]` chunks whose text joined is the document at that version, or `{ binary: true }` | `read_file_version`, `manage_history` `restore_file` |
+| `POST /project/:id/revert_file` | `{ version, pathname }` | `{ type, id }`, the restored entity | `manage_history` `restore_file` |
+
+Project-history processes the queued updates of a project before it answers `updates` and before it
+stores a label, so the current version includes edits made just before. Creating a label needs
+write or review access (`ensureUserCanWriteOrReviewProjectContent`), and `revert_file` needs write
+access (`ensureUserCanWriteProjectContent`); the public source checks no plan for either.
+`revert_file` (`RestoreManager.revertFile`) deletes the live entity at `pathname`, then adds a new
+document from the history snapshot with its tracked changes and comments, and makes it the root
+document again when the deleted one was. `restore_file`, the route the editor uses for a deleted
+file, is not used.
 
 ## HTTP status mapping
 

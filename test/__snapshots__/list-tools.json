@@ -4920,5 +4920,210 @@
     "annotations": {
       "readOnlyHint": true
     }
+  },
+  {
+    "name": "read_file_version",
+    "description": "Read the text a document held at an earlier project version, from Overleaf's history; nothing changes. Pass version (from monitor_project_history: an update's toVersion is the version after it, its fromVersion the one before) or labelId (a label from monitor_project_history or manage_history). filePath is the path the document had at that version. Returns filePath, version, content (LF-normalized), and newline \"LF\", with no revision: to put the text back, use manage_history restore_file, or write it with write_file against a fresh read_file revision. A path the version lacks, or an unknown labelId, is NOT_FOUND; a binary file is INVALID_ARGUMENT with details.kind binary_file.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Overleaf project ID"
+        },
+        "filePath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project-relative path using forward slashes"
+        },
+        "version": {
+          "description": "Project version to read; or pass labelId",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "labelId": {
+          "description": "Label whose version to read; or pass version",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "projectId",
+        "filePath"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "content": {
+          "type": "string"
+        },
+        "newline": {
+          "type": "string",
+          "const": "LF"
+        }
+      },
+      "required": [
+        "filePath",
+        "version",
+        "content",
+        "newline"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "manage_history",
+    "description": "Label the project's current version as a checkpoint, or restore one document to an earlier version. create_label takes comment, 1 to 1000 characters, and labels the version current just before the call; create one before a large edit, so the version before it can be found again. It returns label { id, comment, version, createdAt } and verified (the label was read back). restore_file takes filePath, version or labelId, and confirmPath equal to filePath, else CONFIRMATION_MISMATCH and nothing is sent. filePath is the path the document had at that version; one the version lacks is NOT_FOUND, and a binary file INVALID_ARGUMENT with details.kind binary_file, before anything is sent. Overleaf deletes the live file and creates a new document with the old text, tracked changes, and comments, so it gets a new docId and every revision of the old one stops working; a root document stays the root. It returns filePath, version, docId, previousDocId (null when nothing was at the path), the new document's revision, protocol, trackChangesActive, and contentMatches (its text equals what read_file_version reads). Nothing is retried: a lost answer is read back, giving recoveredAfterTimeout: true when it applied and details.outcome not_applied when nothing changed; OUTCOME_UNKNOWN means read the history or the tree before acting again.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Overleaf project ID"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "create_label",
+            "restore_file"
+          ]
+        },
+        "comment": {
+          "description": "create_label: what the checkpoint marks",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "filePath": {
+          "description": "restore_file: the document, as named at that version",
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "description": "restore_file: the version to restore; or pass labelId",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "labelId": {
+          "description": "restore_file: the label whose version to restore",
+          "type": "string",
+          "minLength": 1
+        },
+        "confirmPath": {
+          "description": "restore_file: must equal filePath",
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId",
+        "action"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "create_label",
+            "restore_file"
+          ]
+        },
+        "label": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "comment": {
+              "type": "string"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "createdAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "comment",
+            "version",
+            "createdAt"
+          ],
+          "additionalProperties": false
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "filePath": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "docId": {
+          "type": "string"
+        },
+        "previousDocId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "sharejs",
+            "history-ot"
+          ]
+        },
+        "trackChangesActive": {
+          "type": "boolean"
+        },
+        "contentMatches": {
+          "type": "boolean"
+        },
+        "recoveredAfterTimeout": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false
+    }
   }
 ]

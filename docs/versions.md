@@ -30,7 +30,10 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
   `/plugin install overleaf-web-mcp --marketplace mhmdaskari/overleaf-web-mcp`, and a Cursor
   plugin in `plugins/cursor/`.
 - **MCP tools:** [`check_references`](tools.md#check_references), undefined and unused labels,
-  references, and citations read from the source without compiling.
+  references, and citations read from the source without compiling;
+  [`read_file_version`](tools.md#read_file_version), a document's text at an earlier version or
+  label; and [`manage_history`](tools.md#manage_history), history labels as checkpoints and
+  restoring one document to an earlier version.
 
 ## 1.3.0
 

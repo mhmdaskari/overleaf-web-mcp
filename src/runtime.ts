@@ -288,7 +288,15 @@ export class OverleafRuntime implements OverleafServiceRuntime {
       recoveryTimeoutMs: config.recoveryTimeoutMs,
       policy,
     })
-    const history = new HistoryApi(http, policy)
+    // A restore replaces the document with a new one, so its tree is read from a fresh join.
+    const history = new HistoryApi(http, policy, {
+      listEntities: async projectId => {
+        await connections.invalidate(projectId)
+        return (await entities.getProjectTree(projectId)).entities
+      },
+      // Always called just after listEntities, whose join it reuses.
+      readFile: async (projectId, filePath) => await documents.readFile(projectId, filePath),
+    })
     const projects = new ProjectsApi({
       http,
       baseUrl: config.baseUrl,

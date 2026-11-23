@@ -114,6 +114,50 @@ describe.skipIf(!enabled)('disposable Overleaf live project', () => {
     }
   )
 
+  test.skipIf(process.env.RUN_OVERLEAF_LIVE_HISTORY_TESTS !== '1')(
+    'labels a checkpoint, reads a document at it, and restores the document to it',
+    async () => {
+      const service = createOverleafService(runtime)
+      const filePath = `mcp-history-${Date.now()}.tex`
+      const original = 'Original history text.\n'
+      try {
+        await service.create_file({ projectId, filePath, content: original })
+        const created = await service.manage_history({
+          projectId,
+          action: 'create_label',
+          comment: `mcp checkpoint ${filePath}`,
+        })
+        expect(created).toMatchObject({ action: 'create_label', verified: true })
+        const labelId = created.label!.id
+        const history = await service.monitor_project_history({ projectId })
+        expect(history.updates.flatMap(update => update.labels).map(label => label.id)).toContain(labelId)
+
+        const before = await service.read_file({ projectId, filePath })
+        await service.write_file({ projectId, filePath, revision: before.revision, content: 'Changed text.\n' })
+        const old = await service.read_file_version({ projectId, filePath, labelId })
+        expect(old.content).toBe(original)
+
+        const restored = await service.manage_history({
+          projectId,
+          action: 'restore_file',
+          filePath,
+          labelId,
+          confirmPath: filePath,
+        })
+        expect(restored).toMatchObject({ action: 'restore_file', contentMatches: true })
+        expect(restored.docId).not.toBe(restored.previousDocId)
+        const after = await service.read_file({ projectId, filePath })
+        expect(after).toMatchObject({ content: original, revision: restored.revision })
+      } finally {
+        const tree = await runtime.entities.getProjectTree(projectId)
+        if (tree.entities.some(entity => entity.path === filePath)) {
+          await service.manage_entity({ projectId, action: 'delete', path: filePath, confirmPath: filePath })
+        }
+      }
+    },
+    120_000
+  )
+
   test.skipIf(process.env.RUN_OVERLEAF_LIVE_TAG_TESTS !== '1')(
     'creates a throwaway tag, files the project in it, edits it, and deletes it again',
     async () => {

@@ -1,10 +1,60 @@
 import { z } from 'zod'
 
 import { McpError } from '../core/errors.js'
-import { AccessPolicy } from '../core/policy.js'
+import { AccessPolicy, assertPathSafeId } from '../core/policy.js'
+import { normalizeLf } from '../core/text.js'
+import type { ReadFileResult } from './documents.js'
+import { isUnconfirmedWriteError } from './recovery.js'
+import { normalizeProjectPath } from './tree.js'
 
 export interface HistoryJsonGetter {
   getJson(path: string): Promise<unknown>
+}
+
+/** A reader alone serves monitor_project_history; the history writes also need `postJson`. */
+export interface HistoryHttp extends HistoryJsonGetter {
+  postJson?(path: string, body?: unknown): Promise<unknown>
+}
+
+/** What restoring a file reads besides history: the live tree and the restored document. */
+export interface HistoryFiles {
+  /** Every entity's id, path, and type, from a fresh join. */
+  listEntities(projectId: string): Promise<ReadonlyArray<{ id: string; path: string; type: string }>>
+  /** Reads a document as read_file does, from a fresh join. */
+  readFile(projectId: string, filePath: string): Promise<ReadFileResult>
+}
+
+/** The longest label comment accepted. */
+export const MAX_LABEL_COMMENT_LENGTH = 1_000
+
+/** A version named directly, or through the label that marks it. */
+export type VersionSelector = { version: number; labelId?: undefined } | { labelId: string; version?: undefined }
+
+export interface CreatedLabel {
+  action: 'create_label'
+  label: { id: string; comment: string; version: number; createdAt: string }
+  verified: boolean
+  recoveredAfterTimeout?: true
+}
+
+export interface FileVersion {
+  filePath: string
+  version: number
+  content: string
+  newline: 'LF'
+}
+
+export interface RestoredFile {
+  action: 'restore_file'
+  filePath: string
+  version: number
+  docId: string
+  previousDocId: string | null
+  revision: string
+  protocol: ReadFileResult['protocol']
+  trackChangesActive: boolean
+  contentMatches: boolean
+  recoveredAfterTimeout?: true
 }
 
 export interface HistoryAuthor {
@@ -121,6 +171,23 @@ const responseSchema = z.object({
   nextBeforeTimestamp: z.number().finite().optional(),
 })
 
+const labelListSchema = z.array(labelSchema)
+
+const createdLabelSchema = labelSchema.pick({ id: true, comment: true, version: true, created_at: true })
+
+const diffSchema = z.object({
+  diff: z.union([
+    z.object({ binary: z.literal(true) }),
+    z.array(z.object({ u: z.string().optional(), i: z.string().optional(), d: z.string().optional() })),
+  ]),
+})
+
+const restoreSchema = z.object({ type: z.enum(['doc', 'file']), id: z.string() })
+
+function unsupported(message: string, cause: unknown): McpError {
+  return new McpError('PROTOCOL_UNSUPPORTED', message, { cause })
+}
+
 function isoTimestamp(value: number | string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) throw new TypeError('Invalid history timestamp.')
@@ -185,13 +252,19 @@ function normalizeUpdate(update: z.infer<typeof updateSchema>): ProjectHistoryUp
   }
 }
 
-export class HistoryApi {
-  readonly #http: HistoryJsonGetter
-  readonly #policy: AccessPolicy
+function publicLabel(label: z.infer<typeof createdLabelSchema>): CreatedLabel['label'] {
+  return { id: label.id, comment: label.comment, version: label.version, createdAt: isoTimestamp(label.created_at) }
+}
 
-  constructor(http: HistoryJsonGetter, policy: AccessPolicy = AccessPolicy.permissive) {
+export class HistoryApi {
+  readonly #http: HistoryHttp
+  readonly #policy: AccessPolicy
+  readonly #files: HistoryFiles | undefined
+
+  constructor(http: HistoryHttp, policy: AccessPolicy = AccessPolicy.permissive, files?: HistoryFiles) {
     this.#http = http
     this.#policy = policy
+    this.#files = files
   }
 
   async monitorProjectHistory(projectId: string, sinceVersion?: number): Promise<ProjectHistoryMonitorResult> {
@@ -254,5 +327,269 @@ export class HistoryApi {
       if (error instanceof McpError) throw error
       throw new McpError('PROTOCOL_UNSUPPORTED', 'Overleaf returned invalid project history values.', { cause: error })
     }
+  }
+
+  /**
+   * Labels the project's current version, read just before the write. A lost answer is observed
+   * through the label list, never resent: the one new label with this comment and version is it.
+   */
+  async createLabel(projectId: string, comment: string): Promise<CreatedLabel> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read', 'overleaf-write')
+    if (comment.trim() === '' || comment.length > MAX_LABEL_COMMENT_LENGTH) {
+      throw new McpError('INVALID_ARGUMENT', `comment must hold text, at most ${MAX_LABEL_COMMENT_LENGTH} characters.`)
+    }
+    const version = await this.#currentVersion(projectId)
+    const before = new Set((await this.#labels(projectId)).map(label => label.id))
+    const readBack = async (): Promise<Array<z.infer<typeof labelSchema>>> => {
+      try {
+        return await this.#labels(projectId)
+      } catch (error) {
+        throw new McpError(
+          'OUTCOME_UNKNOWN',
+          'The label was sent but the labels could not be read back to confirm it. Do not retry; list the history first.',
+          { cause: error, details: { version, outcome: 'unknown' } }
+        )
+      }
+    }
+    let created: z.infer<typeof createdLabelSchema>
+    try {
+      const response = await this.#post(`/project/${encodeURIComponent(projectId)}/labels`, {
+        comment,
+        version,
+      })
+      created = createdLabelSchema.parse(response)
+    } catch (error) {
+      // An answer in an unknown shape leaves the label's fate unknown, as a lost one does.
+      if (!isUnconfirmedWriteError(error) && !(error instanceof z.ZodError)) throw error
+      const matches = (await readBack()).filter(
+        label => !before.has(label.id) && label.comment === comment && label.version === version
+      )
+      if (matches.length !== 1) {
+        throw new McpError(
+          'OUTCOME_UNKNOWN',
+          'The label request was not answered and no single new label could be confirmed. Do not retry; list the history first.',
+          { details: { version, outcome: 'unknown' } }
+        )
+      }
+      return { action: 'create_label', label: publicLabel(matches[0]!), verified: true, recoveredAfterTimeout: true }
+    }
+    const verified = (await readBack()).some(label => label.id === created.id)
+    return { action: 'create_label', label: publicLabel(created), verified }
+  }
+
+  /** The text a document held at a version, from Overleaf's history. */
+  async readFileVersion(projectId: string, filePath: string, selector: VersionSelector): Promise<FileVersion> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read')
+    const path = normalizeProjectPath(filePath)
+    const version = await this.#resolveVersion(projectId, selector)
+    const content = await this.#textAtVersion(projectId, path, version)
+    return { filePath: path, version, content, newline: 'LF' }
+  }
+
+  /**
+   * Puts a document back as it was at a version. Overleaf deletes the live file and creates a new
+   * document with the old text, its tracked changes, and its comments, so the document gets a new
+   * id and every revision of the old one stops working. A lost or failed answer is observed,
+   * never resent.
+   */
+  async restoreFile(
+    projectId: string,
+    filePath: string,
+    selector: VersionSelector,
+    confirmPath: string | undefined
+  ): Promise<RestoredFile> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read', 'overleaf-write', 'overleaf-delete')
+    const files = this.#files
+    if (files === undefined) throw new McpError('PROTOCOL_UNSUPPORTED', 'This backend cannot restore files.')
+    if (confirmPath !== filePath) {
+      throw new McpError(
+        'CONFIRMATION_MISMATCH',
+        'confirmPath must exactly match filePath before a file is restored.',
+        {
+          details: { filePath },
+        }
+      )
+    }
+    const path = normalizeProjectPath(filePath)
+    const version = await this.#resolveVersion(projectId, selector)
+    // Read first: it refuses a path the version did not have, or a binary file, before anything is sent.
+    const expected = await this.#textAtVersion(projectId, path, version)
+    const live = (await files.listEntities(projectId)).find(entity => entity.path === path)
+    if (live !== undefined && live.type !== 'doc' && live.type !== 'file') {
+      throw new McpError('INVALID_ARGUMENT', `${path} is a ${live.type}, not a file.`, { details: { filePath: path } })
+    }
+    const previousDocId = live?.id ?? null
+    const details = { filePath: path, version }
+
+    const observe = async (): Promise<{ id: string; read: ReadFileResult } | undefined> => {
+      const entity = (await files.listEntities(projectId)).find(item => item.path === path)
+      if (entity === undefined || entity.type !== 'doc' || entity.id === previousDocId) return undefined
+      return { id: entity.id, read: await files.readFile(projectId, path) }
+    }
+
+    let restoredId: string
+    let recoveredAfterTimeout = false
+    try {
+      const response = await this.#post(`/project/${encodeURIComponent(projectId)}/revert_file`, {
+        version,
+        pathname: path,
+      })
+      const parsed = restoreSchema.safeParse(response)
+      restoredId = parsed.success ? parsed.data.id : ''
+    } catch (error) {
+      const refused =
+        error instanceof McpError &&
+        (error.code === 'PERMISSION_DENIED' ||
+          error.code === 'NOT_FOUND' ||
+          error.code === 'AUTH_EXPIRED' ||
+          error.code === 'RATE_LIMITED' ||
+          error.code === 'POLICY_DENIED' ||
+          (error.code === 'REMOTE_ERROR' &&
+            typeof error.details?.status === 'number' &&
+            error.details.status >= 300 &&
+            error.details.status < 500))
+      // Overleaf refused before acting: nothing changed.
+      if (refused) throw error
+      // Overleaf deletes the live file before it creates the restored one, so a failure can leave either.
+      let seen: Awaited<ReturnType<typeof observe>>
+      let present: boolean
+      try {
+        seen = await observe()
+        present = (await files.listEntities(projectId)).some(entity => entity.path === path)
+      } catch (observeError) {
+        throw new McpError(
+          'OUTCOME_UNKNOWN',
+          'The restore was sent but the project could not be read back. Do not retry; read the project tree first.',
+          { cause: observeError, details: { ...details, outcome: 'unknown' } }
+        )
+      }
+      if (seen === undefined) {
+        if (present || previousDocId === null) {
+          throw new McpError(
+            error instanceof McpError && error.code === 'TIMEOUT' ? 'TIMEOUT' : 'REMOTE_ERROR',
+            'The restore was not answered, and the file is unchanged. Read it before deciding to restore again.',
+            { retryable: false, details: { ...details, outcome: 'not_applied' } }
+          )
+        }
+        throw new McpError(
+          'OUTCOME_UNKNOWN',
+          'The restore was not answered, and nothing is at filePath now: Overleaf removes the file before it restores it. Do not retry; read the project tree first.',
+          { details: { ...details, outcome: 'unknown' } }
+        )
+      }
+      restoredId = seen.id
+      recoveredAfterTimeout = true
+    }
+
+    let seen: Awaited<ReturnType<typeof observe>>
+    try {
+      seen = await observe()
+    } catch (error) {
+      throw new McpError(
+        'OUTCOME_UNKNOWN',
+        'Overleaf restored the file but it could not be read back. Do not retry; read it with read_file.',
+        { cause: error, details: { ...details, outcome: 'unknown' } }
+      )
+    }
+    if (seen === undefined || (restoredId !== '' && seen.id !== restoredId)) {
+      throw new McpError(
+        'OUTCOME_UNKNOWN',
+        'Overleaf answered the restore, but no new document is at filePath. Do not retry; read the project tree first.',
+        { details: { ...details, outcome: 'unknown' } }
+      )
+    }
+    return {
+      action: 'restore_file',
+      filePath: path,
+      version,
+      docId: seen.id,
+      previousDocId,
+      revision: seen.read.revision,
+      protocol: seen.read.protocol,
+      trackChangesActive: seen.read.trackChangesActive,
+      contentMatches: seen.read.content === expected,
+      ...(recoveredAfterTimeout ? { recoveredAfterTimeout: true as const } : {}),
+    }
+  }
+
+  async #post(path: string, body: unknown): Promise<unknown> {
+    if (this.#http.postJson === undefined)
+      throw new McpError('PROTOCOL_UNSUPPORTED', 'This backend cannot write history.')
+    return await this.#http.postJson(path, body)
+  }
+
+  async #labels(projectId: string): Promise<Array<z.infer<typeof labelSchema>>> {
+    const response = await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/labels`)
+    try {
+      return labelListSchema.parse(response)
+    } catch (error) {
+      throw unsupported('Overleaf returned an unsupported label list.', error)
+    }
+  }
+
+  async #currentVersion(projectId: string): Promise<number> {
+    const response = await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/updates?min_count=1`)
+    let parsed: z.infer<typeof responseSchema>
+    try {
+      parsed = responseSchema.parse(response)
+    } catch (error) {
+      throw unsupported('Overleaf returned an unsupported project history response.', error)
+    }
+    if (parsed.updates.length === 0) {
+      throw new McpError('INVALID_ARGUMENT', 'The project has no history yet, so there is no version to label.', {
+        details: { kind: 'no_history' },
+      })
+    }
+    return Math.max(...parsed.updates.map(update => update.toV))
+  }
+
+  async #resolveVersion(projectId: string, selector: VersionSelector): Promise<number> {
+    if (selector.labelId === undefined) {
+      if (!Number.isInteger(selector.version) || selector.version < 0) {
+        throw new McpError('INVALID_ARGUMENT', 'version must be a non-negative integer.')
+      }
+      return selector.version
+    }
+    assertPathSafeId(selector.labelId, 'labelId')
+    const label = (await this.#labels(projectId)).find(item => item.id === selector.labelId)
+    if (label === undefined) {
+      throw new McpError('NOT_FOUND', 'No history label has this labelId.', { details: { labelId: selector.labelId } })
+    }
+    return label.version
+  }
+
+  async #textAtVersion(projectId: string, filePath: string, version: number): Promise<string> {
+    const query = new URLSearchParams({ pathname: filePath, from: String(version), to: String(version) })
+    let response: unknown
+    try {
+      response = await this.#http.getJson(`/project/${encodeURIComponent(projectId)}/diff?${query.toString()}`)
+    } catch (error) {
+      if (error instanceof McpError && error.code === 'NOT_FOUND') {
+        throw new McpError('NOT_FOUND', `${filePath} was not found at version ${version}.`, {
+          details: { filePath, version },
+        })
+      }
+      throw error
+    }
+    let parsed: z.infer<typeof diffSchema>
+    try {
+      parsed = diffSchema.parse(response)
+    } catch (error) {
+      throw unsupported('Overleaf returned an unsupported history diff.', error)
+    }
+    if (!Array.isArray(parsed.diff)) {
+      throw new McpError(
+        'INVALID_ARGUMENT',
+        `${filePath} was a binary file at version ${version}, not a text document.`,
+        {
+          details: { kind: 'binary_file', filePath, version },
+        }
+      )
+    }
+    // Unchanged and inserted text make up the text at `to`; with from equal to to there is only unchanged text.
+    return normalizeLf(parsed.diff.map(part => part.u ?? part.i ?? '').join(''))
   }
 }
