@@ -148,6 +148,9 @@ describe.skipIf(!enabled)('disposable Overleaf live project', () => {
         expect(restored.docId).not.toBe(restored.previousDocId)
         const after = await service.read_file({ projectId, filePath })
         expect(after).toMatchObject({ content: original, revision: restored.revision })
+        // Overleaf stamps a restore's origin with an ISO timestamp; the history must still read.
+        const restoredHistory = await service.monitor_project_history({ projectId })
+        expect(restoredHistory.updates.some(update => update.origin?.kind === 'file-restore')).toBe(true)
       } finally {
         const tree = await runtime.entities.getProjectTree(projectId)
         if (tree.entities.some(entity => entity.path === filePath)) {

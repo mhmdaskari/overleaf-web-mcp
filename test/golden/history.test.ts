@@ -255,6 +255,28 @@ const storedLabel = (id: string, comment: string, version: number) => ({
   user_display_name: 'Author One',
 })
 
+describe('monitor_project_history after a file restore', () => {
+  test('reads a restore origin whose timestamp Overleaf sends as an ISO string', async () => {
+    const restore = {
+      ...bridgedGroup,
+      fromV: 10,
+      toV: 12,
+      meta: {
+        ...restoredGroup.meta,
+        origin: { kind: 'file-restore', version: 6, path: 'main.tex', timestamp: '2026-11-23T11:18:22.824Z' },
+      },
+    }
+    const result = await monitor({ updates: [restore, bridgedGroup] })
+    expect(result.updates[0]!.origin).toEqual({
+      kind: 'file-restore',
+      path: 'main.tex',
+      timestamp: '2026-11-23T11:18:22.824Z',
+      version: 6,
+    })
+    expectGolden('monitor_project_history', result)
+  })
+})
+
 describe('manage_history create_label', () => {
   test('labels the current version and reads the label back', async () => {
     const posted: unknown[] = []

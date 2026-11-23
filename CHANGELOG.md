@@ -65,6 +65,13 @@ such change is listed.
   carry document text. A `filePath` with `..` or a backslash is `INVALID_ARGUMENT` with
   `details.kind: "invalid_path"`.
 
+### Fixed
+
+- `monitor_project_history` failed with `PROTOCOL_UNSUPPORTED` on a project whose recent history
+  holds a file restore, made in the web editor or with `restore_file`: Overleaf stamps that
+  update's origin with an ISO timestamp, not a number. Both forms are read, and `origin.timestamp`
+  is returned as an ISO string as before.
+
 ### Documentation
 
 - A troubleshooting entry in the installation guide (#69) for an MCP client that starts an older
