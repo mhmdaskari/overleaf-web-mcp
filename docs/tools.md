@@ -1248,8 +1248,8 @@ Map between a build's PDF and its source with SyncTeX, or count the words of a d
 | `h`, `v` | `pdf_to_source` | A point on the page, in PDF points (1/72 inch) from its left and top edges |
 
 `source_to_pdf` returns `buildId` and `positions`, each `{ page, h, v, width, height }` in PDF
-points from the page's top-left corner, with `v` at the box's baseline: where the line lands. A
-line that produced no output, such as a comment, has none. `pdf_to_source` returns `buildId` and
+points from the page's top-left corner, with `v` at the box's baseline: where the line lands.
+SyncTeX answers for a line with no output of its own, such as a comment, with the nearest output. `pdf_to_source` returns `buildId` and
 `locations`, each `{ filePath, line, column }`, the source that produced that point. Both read the
 build's SyncTeX data on Overleaf, through the `buildRef` that `compile_project` returned, in this
 process or another; without one, they read the latest build of the project compiled in this

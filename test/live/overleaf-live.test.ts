@@ -294,7 +294,8 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS !== '1
           action: 'source_to_pdf',
           buildRef: compiled.buildRef,
           filePath: 'paper.tex',
-          line: 3,
+          // Line 4 holds the text; line 3 is the '% edited' comment.
+          line: 4,
         })
         expect(mapped.positions?.[0]).toMatchObject({ page: 1 })
         const position = mapped.positions![0]!
@@ -306,7 +307,7 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS !== '1
           h: position.h,
           v: position.v,
         })
-        expect(back.locations?.[0]).toMatchObject({ filePath: 'paper.tex', line: 3 })
+        expect(back.locations?.[0]).toMatchObject({ filePath: 'paper.tex', line: 4 })
         const counted = await service.inspect_build({ projectId: created.projectId, action: 'word_count' })
         expect(counted.wordCount?.totalWords).toBeGreaterThan(0)
         const output = await mkdtemp(join(tmpdir(), 'overleaf-live-compile-'))
