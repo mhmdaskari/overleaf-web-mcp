@@ -80,9 +80,12 @@ will do.
 
 Add `RUN_OVERLEAF_LIVE_REVIEW_TESTS=1` for review reads,
 `RUN_OVERLEAF_LIVE_TRACKED_WRITE_TESTS=1` for a disposable tracked file create and delete,
-`RUN_OVERLEAF_LIVE_HISTORY_TESTS=1` for read-only history normalization, or
+`RUN_OVERLEAF_LIVE_HISTORY_TESTS=1` for history normalization and, on a file named
+`mcp-history-<time>.tex` that it creates and deletes, a history label, a read at that label, and
+a restore to it; the label stays in the project's history, or
 `RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS=1` to create a throwaway project named `mcp-lifecycle-<time>`,
-set its root document, compile it once, and trash it, or
+set its root document, compile it, map a line to the PDF and back with `inspect_build`, count its
+words, and trash it, or
 `RUN_OVERLEAF_LIVE_SYNC_TESTS=1` to create a throwaway project named `mcp-sync-<time>`, mirror a
 temporary local folder into it with `plan_sync` and `sync_directory`, check that a second plan
 finds nothing to do, and trash it, or
