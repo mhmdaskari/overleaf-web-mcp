@@ -130,6 +130,7 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
     unusedLabels: [],
     unusedBibEntries: [{ key: 'unused2020', filePath: 'refs.bib', line: 9 }],
     duplicateLabels: [],
+    citationsChecked: true,
     truncated: false,
     filesRead: ['main.tex', 'refs.bib'],
     unresolved: [],

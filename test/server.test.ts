@@ -96,7 +96,7 @@ function runtimeWithPlanProgress() {
  * The most characters the names, descriptions, and input schemas of tools/list may take as compact
  * JSON: what an MCP client loads into context on every turn. Set just over the size at 1.2.0
  * (58,992), as the 450-word bound holds the instructions, and raised at 1.4.0, whose four tools
- * took it to 67,244. A release that adds a tool or grows a description trims elsewhere, or raises
+ * took it to 67,684. A release that adds a tool or grows a description trims elsewhere, or raises
  * this in a change the changelog explains.
  */
 const TOOL_LIST_CHAR_LIMIT = 68_000

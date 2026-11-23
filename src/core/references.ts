@@ -24,6 +24,8 @@ export interface LatexReferenceScan {
   labels: ReferenceSite[]
   references: ReferenceSite[]
   citations: ReferenceSite[]
+  /** `\bibitem` keys of a `thebibliography` list, which define citations as .bib entries do. */
+  bibItems: ReferenceSite[]
   bibliographies: BibliographyTarget[]
   /** `\nocite{*}` cites every entry of the bibliography. */
   citesAll: boolean
@@ -35,6 +37,8 @@ export interface ReferenceReport {
   unusedLabels: ReferenceSite[]
   unusedBibEntries: ReferenceSite[]
   duplicateLabels: ReferenceSite[]
+  /** False when a bibliography the document names could not be read, so citations were not checked. */
+  citationsChecked: boolean
   truncated: boolean
 }
 
@@ -152,7 +156,14 @@ function splitKeys(value: string): string[] {
 export function scanLatexReferences(filePath: string, source: string): LatexReferenceScan {
   const masked = maskIgnored(source)
   const lineOf = lineIndex(source)
-  const scan: LatexReferenceScan = { labels: [], references: [], citations: [], bibliographies: [], citesAll: false }
+  const scan: LatexReferenceScan = {
+    labels: [],
+    references: [],
+    citations: [],
+    bibItems: [],
+    bibliographies: [],
+    citesAll: false,
+  }
   const add = (list: ReferenceSite[], keys: string[], offset: number): void => {
     for (const key of keys) if (isLiteralKey(key)) list.push({ key, filePath, line: lineOf(offset) })
   }
@@ -201,6 +212,9 @@ export function scanLatexReferences(filePath: string, source: string): LatexRefe
         keys.filter(key => key !== '*'),
         start
       )
+    } else if (name === 'bibitem') {
+      const argument = readBalanced(masked, skipOptionalArguments(masked, after), '{', '}')
+      if (argument !== null) add(scan.bibItems, [argument.value.trim()], start)
     } else if (name === 'bibliography' && !starred) {
       const argument = readBalanced(masked, skipWhitespace(masked, after), '{', '}')
       if (argument === null) continue
@@ -236,12 +250,15 @@ export function scanBibEntries(filePath: string, source: string): ReferenceSite[
  */
 export function compareReferences(
   scans: readonly LatexReferenceScan[],
-  bibEntries: readonly ReferenceSite[],
-  limit = MAX_REFERENCE_FINDINGS
+  bibFileEntries: readonly ReferenceSite[],
+  options: { limit?: number; bibliographyComplete?: boolean } = {}
 ): ReferenceReport {
+  const limit = options.limit ?? MAX_REFERENCE_FINDINGS
+  const citationsChecked = options.bibliographyComplete ?? true
   const labels = scans.flatMap(scan => scan.labels)
   const references = scans.flatMap(scan => scan.references)
   const citations = scans.flatMap(scan => scan.citations)
+  const bibEntries = [...bibFileEntries, ...scans.flatMap(scan => scan.bibItems)]
   const citesAll = scans.some(scan => scan.citesAll)
 
   const labelCounts = new Map<string, number>()
@@ -258,10 +275,12 @@ export function compareReferences(
   }
   return {
     undefinedReferences: cap(references.filter(site => !labelCounts.has(site.key))),
-    undefinedCitations: cap(citations.filter(site => !entryKeys.has(site.key))),
+    // Without every bibliography, a key missing from those read may be in one that was not.
+    undefinedCitations: citationsChecked ? cap(citations.filter(site => !entryKeys.has(site.key))) : [],
     unusedLabels: cap(labels.filter(site => !referenced.has(site.key))),
     unusedBibEntries: cap(citesAll ? [] : bibEntries.filter(site => !cited.has(site.key))),
     duplicateLabels: cap(labels.filter(site => (labelCounts.get(site.key) ?? 0) > 1)),
+    citationsChecked,
     truncated,
   }
 }

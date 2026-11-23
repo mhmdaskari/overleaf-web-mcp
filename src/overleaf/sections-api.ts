@@ -280,9 +280,11 @@ export class SectionsApi {
     const unresolved = [...document.unresolved]
     const bibFiles: string[] = []
     const bibEntries: ReferenceSite[] = []
+    let bibliographyComplete = true
     for (const bibliography of scans.flatMap(scan => scan.bibliographies)) {
       const resolved = resolveBibliography(bibliography, entities)
       if (typeof resolved !== 'string') {
+        bibliographyComplete = false
         unresolved.push({
           file: bibliography.filePath,
           line: bibliography.line,
@@ -298,7 +300,7 @@ export class SectionsApi {
     }
     return {
       rootFilePath: document.rootFilePath,
-      ...compareReferences(scans, bibEntries),
+      ...compareReferences(scans, bibEntries, { bibliographyComplete }),
       filesRead: [...document.files, ...bibFiles],
       unresolved,
     }
