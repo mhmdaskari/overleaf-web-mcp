@@ -25,26 +25,26 @@ exports[`check_references > \\nocite{*} cites every entry, and a missing bibliog
 }
 `;
 
-exports[`check_references > a linked .bib file is unresolved, and citations are then left unchecked 1`] = `
+exports[`check_references > a linked .bib file is downloaded and read like a text one 1`] = `
 {
-  "citationsChecked": false,
+  "citationsChecked": true,
   "duplicateLabels": [],
   "filesRead": [
     "main.tex",
     "refs.bib",
+    "zotero.bib",
   ],
   "rootFilePath": "main.tex",
   "truncated": false,
-  "undefinedCitations": [],
-  "undefinedReferences": [],
-  "unresolved": [
+  "undefinedCitations": [
     {
-      "file": "main.tex",
-      "line": 2,
-      "reason": "binary_file",
-      "target": "zotero",
+      "filePath": "main.tex",
+      "key": "nobody2001",
+      "line": 1,
     },
   ],
+  "undefinedReferences": [],
+  "unresolved": [],
   "unusedBibEntries": [
     {
       "filePath": "refs.bib",
@@ -55,6 +55,11 @@ exports[`check_references > a linked .bib file is unresolved, and citations are 
       "filePath": "refs.bib",
       "key": "unused2020",
       "line": 11,
+    },
+    {
+      "filePath": "zotero.bib",
+      "key": "spare2023",
+      "line": 5,
     },
   ],
   "unusedLabels": [],

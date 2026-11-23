@@ -255,6 +255,7 @@ export class OverleafRuntime implements OverleafServiceRuntime {
         await connections.invalidate(projectId)
         return await entities.getProjectTree(projectId)
       },
+      readFileBytes: async (projectId, filePath) => await entities.readFileBytes(projectId, filePath),
       policy,
     })
     // A fresh join before resolving, so a path is never looked up in a stale tree.

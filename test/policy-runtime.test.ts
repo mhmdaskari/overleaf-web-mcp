@@ -147,6 +147,7 @@ describe('allowed projects through the real runtime', () => {
       await expect(runtime.documents.readFile('b', 'main.tex')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
       await expect(runtime.compile.stopCompile('b')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
       await expect(runtime.search.searchProject('b', 'text')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
+      await expect(runtime.entities.readFileBytes('b', 'refs.bib')).rejects.toMatchObject({ code: 'POLICY_DENIED' })
       await expect(runtime.connections.withConnection('b', async () => undefined)).rejects.toMatchObject({
         code: 'POLICY_DENIED',
       })

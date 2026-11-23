@@ -544,7 +544,32 @@ export class EntitiesApi {
         throw localFileFailure(error, 'written')
       })
     }
-    const bytes = await this.#connections.withConnection(
+    const bytes = await this.#fetchBytes(projectId, filePath)
+    try {
+      if (replaced !== undefined) await replaceFileAtomically(replaced, bytes, followed?.mode)
+      // 'wx' fails rather than truncating a file that appeared since the check above.
+      else await writeFile(writePath, bytes, overwrite ? undefined : { flag: 'wx' })
+    } catch (error) {
+      if (replaced === undefined && (error as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw localFileExists(localPath, error)
+      }
+      throw localFileFailure(error, 'written')
+    }
+    return { bytes: bytes.byteLength, localPath }
+  }
+
+  /**
+   * The bytes of a project file, held in memory and never written anywhere, for a check that reads
+   * an uploaded or linked file, such as a reference manager's `.bib`.
+   */
+  async readFileBytes(projectId: string, filePath: string): Promise<Uint8Array> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read')
+    return await this.#fetchBytes(projectId, filePath)
+  }
+
+  async #fetchBytes(projectId: string, filePath: string): Promise<Uint8Array> {
+    return await this.#connections.withConnection(
       projectId,
       async connection =>
         await connection.queue.run(async () => {
@@ -560,16 +585,5 @@ export class EntitiesApi {
           return await this.#http.getBytes(route)
         })
     )
-    try {
-      if (replaced !== undefined) await replaceFileAtomically(replaced, bytes, followed?.mode)
-      // 'wx' fails rather than truncating a file that appeared since the check above.
-      else await writeFile(writePath, bytes, overwrite ? undefined : { flag: 'wx' })
-    } catch (error) {
-      if (replaced === undefined && (error as NodeJS.ErrnoException).code === 'EEXIST') {
-        throw localFileExists(localPath, error)
-      }
-      throw localFileFailure(error, 'written')
-    }
-    return { bytes: bytes.byteLength, localPath }
   }
 }

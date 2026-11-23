@@ -28,10 +28,11 @@ such change is listed.
   `\bibliography` or `\addbibresource`, and returns `undefinedReferences`,
   `undefinedCitations`, `unusedLabels`, `unusedBibEntries`, and `duplicateLabels`, each a list of
   `{ key, filePath, line }` of at most 500, with `citationsChecked`, `truncated`, `filesRead`, and
-  `unresolved`. `\bibitem` keys count as definitions. A missing or binary bibliography file, such
-  as a reference manager's linked file, is listed in `unresolved` with reason `missing` or
-  `binary_file` and does not fail the call; `citationsChecked` is then `false` and
-  `undefinedCitations` empty. It reads source text, not TeX, which its description
+  `unresolved`. `\bibitem` keys count as definitions. A `.bib` file Overleaf holds as an
+  uploaded file, such as a reference manager's linked file, is downloaded and read like a text
+  one. A bibliography file that is missing or named through a macro is listed in `unresolved`
+  with reason `missing` or `macro_argument` and does not fail the call; `citationsChecked` is
+  then `false` and `undefinedCitations` empty. It reads source text, not TeX, which its description
   states; it compiles nothing.
 - `manage_history` (#46, #47), a destructive tool in the `history` toolset, also `call
   manage_history` and `client.manageHistory`, with two actions. `create_label` takes `comment`
