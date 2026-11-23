@@ -114,7 +114,8 @@ const userSchema = z.object({
 const originSchema = z.object({
   kind: z.string(),
   path: z.string().optional(),
-  timestamp: z.number().finite().optional(),
+  // A milliseconds count, or for a file restore an ISO string (RestoreManager.revertFile).
+  timestamp: z.union([z.number().finite(), z.string()]).optional(),
   version: z.number().int().nonnegative().optional(),
 })
 

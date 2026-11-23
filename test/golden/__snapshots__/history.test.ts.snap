@@ -41,6 +41,62 @@ exports[`manage_history restore_file > restores a document, and returns the new 
 }
 `;
 
+exports[`monitor_project_history after a file restore > reads a restore origin whose timestamp Overleaf sends as an ISO string 1`] = `
+{
+  "currentVersion": 12,
+  "gapDetected": false,
+  "hasEarlierHistory": false,
+  "nextSinceVersion": 12,
+  "projectId": "p",
+  "updates": [
+    {
+      "authors": [
+        {
+          "displayName": "Author One",
+          "id": "user-1",
+        },
+        null,
+      ],
+      "endedAt": "2023-11-14T22:14:20.000Z",
+      "fromVersion": 10,
+      "labels": [],
+      "origin": {
+        "kind": "file-restore",
+        "path": "main.tex",
+        "timestamp": "2026-11-23T11:18:22.824Z",
+        "version": 6,
+      },
+      "paths": [
+        "main.tex",
+      ],
+      "projectOperations": [],
+      "startedAt": "2023-11-14T22:13:20.000Z",
+      "toVersion": 12,
+    },
+    {
+      "authors": [
+        {
+          "displayName": "Author Two",
+          "id": "user-2",
+        },
+      ],
+      "endedAt": "2023-11-14T22:16:20.000Z",
+      "fromVersion": 8,
+      "labels": [],
+      "origin": {
+        "kind": "git-bridge",
+      },
+      "paths": [
+        "main.tex",
+      ],
+      "projectOperations": [],
+      "startedAt": "2023-11-14T22:15:20.000Z",
+      "toVersion": 10,
+    },
+  ],
+}
+`;
+
 exports[`monitor_project_history golden results > a cursor at the current version returns no updates 1`] = `
 {
   "currentVersion": 10,
