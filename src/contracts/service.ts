@@ -33,7 +33,10 @@ export interface OverleafServiceRuntime {
   entities: Pick<EntitiesApi, 'getProjectTree' | 'manageEntity' | 'uploadFile' | 'downloadFile'>
   documents: Pick<DocumentsApi, 'readFile' | 'writeFile'>
   createFile(projectId: string, filePath: string, content?: string, writeMode?: WriteMode): Promise<WriteFileResult>
-  sections: Pick<SectionsApi, 'getFullDocument' | 'getSections' | 'getSectionContent' | 'writeSection'>
+  sections: Pick<
+    SectionsApi,
+    'getFullDocument' | 'getSections' | 'getSectionContent' | 'writeSection' | 'checkReferences'
+  >
   compile: Pick<
     CompileApi,
     'compileProject' | 'stopCompile' | 'downloadCompileOutput' | 'getCompileLog' | 'readCompileOutput'

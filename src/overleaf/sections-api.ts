@@ -10,6 +10,14 @@ import {
   type UnresolvedInclude,
 } from '../core/includes.js'
 import { AccessPolicy } from '../core/policy.js'
+import {
+  compareReferences,
+  scanBibEntries,
+  scanLatexReferences,
+  type BibliographyTarget,
+  type ReferenceReport,
+  type ReferenceSite,
+} from '../core/references.js'
 import { decodeRevision } from '../core/revision.js'
 import { findSections, replaceSection, SECTION_COMMANDS, type LatexSection } from '../core/sections.js'
 import { normalizeLf } from '../core/text.js'
@@ -61,6 +69,34 @@ interface SectionLocation {
 export interface SectionOptions {
   /** Parse the document with its include directives followed, from `filePath` down. */
   followIncludes?: boolean | undefined
+}
+
+/** What check_references returns. */
+export interface ReferenceCheck extends ReferenceReport {
+  rootFilePath: string
+  /** Every LaTeX file visited, in order, then every bibliography file read. */
+  filesRead: string[]
+  unresolved: UnresolvedInclude[]
+}
+
+/**
+ * The project path of a bibliography file. BibTeX and Biber look in the folder the compile runs
+ * in, the project root, so a name is resolved from there: as written, then with `.bib` added.
+ */
+function resolveBibliography(
+  bibliography: BibliographyTarget,
+  entities: readonly IncludeEntity[]
+): string | { reason: 'missing' | 'binary_file' | 'macro_argument' } {
+  if (/[\\#]/u.test(bibliography.target)) return { reason: 'macro_argument' }
+  const written = bibliography.target.replace(/^\.\//u, '')
+  const candidates = bibliography.addsExtension && !written.endsWith('.bib') ? [`${written}.bib`, written] : [written]
+  let binary = false
+  for (const candidate of candidates) {
+    const entity = entities.find(item => item.path === candidate)
+    if (entity?.type === 'doc') return entity.path
+    if (entity?.type === 'file') binary = true
+  }
+  return { reason: binary ? 'binary_file' : 'missing' }
 }
 
 const COMMAND_ALTERNATION = SECTION_COMMANDS.join('|')
@@ -233,6 +269,41 @@ export class SectionsApi {
     }
   }
 
+  /**
+   * Compares the labels, references, and citations of a manuscript, from `rootFilePath` or the
+   * project's root document down through its includes, with the entries of the `.bib` files it
+   * names. It reads source text only, so a result is a prompt to look, not proof.
+   */
+  async checkReferences(projectId: string, rootFilePath?: string): Promise<ReferenceCheck> {
+    const { document, entities } = await this.#flattenWithTree(projectId, rootFilePath)
+    const scans = document.files.map(path => scanLatexReferences(path, document.documents.get(path)!.content))
+    const unresolved = [...document.unresolved]
+    const bibFiles: string[] = []
+    const bibEntries: ReferenceSite[] = []
+    for (const bibliography of scans.flatMap(scan => scan.bibliographies)) {
+      const resolved = resolveBibliography(bibliography, entities)
+      if (typeof resolved !== 'string') {
+        unresolved.push({
+          file: bibliography.filePath,
+          line: bibliography.line,
+          target: bibliography.target,
+          reason: resolved.reason,
+        })
+        continue
+      }
+      if (bibFiles.includes(resolved)) continue
+      bibFiles.push(resolved)
+      const bib = await this.#documents.readFile(projectId, resolved)
+      bibEntries.push(...scanBibEntries(resolved, bib.content))
+    }
+    return {
+      rootFilePath: document.rootFilePath,
+      ...compareReferences(scans, bibEntries),
+      filesRead: [...document.files, ...bibFiles],
+      unresolved,
+    }
+  }
+
   async writeSection(
     projectId: string,
     filePath: string,
@@ -290,6 +361,14 @@ export class SectionsApi {
   }
 
   async #flatten(projectId: string, rootFilePath: string | undefined, maxDepth = DEFAULT_INCLUDE_DEPTH) {
+    return (await this.#flattenWithTree(projectId, rootFilePath, maxDepth)).document
+  }
+
+  async #flattenWithTree(
+    projectId: string,
+    rootFilePath: string | undefined,
+    maxDepth = DEFAULT_INCLUDE_DEPTH
+  ): Promise<{ document: FlattenedDocument; entities: readonly IncludeEntity[] }> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect('overleaf-read')
     const tree = await this.#getProjectTree(projectId)
@@ -306,7 +385,7 @@ export class SectionsApi {
     if (rootEntity.type !== 'doc') {
       throw new McpError('INVALID_ARGUMENT', `${rootEntity.path} is a ${rootEntity.type}, not a doc.`)
     }
-    return await flattenDocument(
+    const document = await flattenDocument(
       rootEntity.path,
       {
         entities: tree.entities,
@@ -314,5 +393,6 @@ export class SectionsApi {
       },
       { maxDepth }
     )
+    return { document, entities: tree.entities }
   }
 }

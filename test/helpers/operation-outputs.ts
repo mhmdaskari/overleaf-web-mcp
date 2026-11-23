@@ -123,6 +123,17 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
   get_sections: { sections: [section], revision: 'r', singleFileOnly: true },
   get_section_content: { content: 'Body', section, revision: 'r' },
   write_section: { revision: 'r2', protocol: 'sharejs', trackChangesActive: false, writeMode: 'untracked' },
+  check_references: {
+    rootFilePath: 'main.tex',
+    undefinedReferences: [{ key: 'fig:gone', filePath: 'main.tex', line: 4 }],
+    undefinedCitations: [],
+    unusedLabels: [],
+    unusedBibEntries: [{ key: 'unused2020', filePath: 'refs.bib', line: 9 }],
+    duplicateLabels: [],
+    truncated: false,
+    filesRead: ['main.tex', 'refs.bib'],
+    unresolved: [],
+  },
   compile_project: {
     status: 'success',
     outputFiles: [{ path: 'output.pdf', type: 'pdf', build: 'b' }],

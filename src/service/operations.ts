@@ -301,6 +301,10 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
           { followIncludes: input.followIncludes }
         )
     ),
+    check_references: operation(
+      'check_references',
+      async input => await runtime.sections.checkReferences(input.projectId, input.rootFilePath)
+    ),
     compile_project: operation(
       'compile_project',
       async input =>

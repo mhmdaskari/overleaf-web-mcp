@@ -37,6 +37,7 @@ export function fakeServiceRuntime() {
       getSections: resolved(OUTPUTS.get_sections),
       getSectionContent: resolved(OUTPUTS.get_section_content),
       writeSection: resolved(OUTPUTS.write_section),
+      checkReferences: resolved(OUTPUTS.check_references),
     },
     compile: {
       compileProject: resolved(OUTPUTS.compile_project),

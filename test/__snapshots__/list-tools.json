@@ -3078,6 +3078,222 @@
     }
   },
   {
+    "name": "check_references",
+    "description": "Find broken cross-references and citations without compiling. Walks the manuscript from rootFilePath, or the project's root document, through its include directives as get_full_document does, and reads the .bib files named by \\bibliography (.bib added) or \\addbibresource, resolved from the project root. It collects \\label keys; the keys of \\ref, \\eqref, \\pageref, \\autoref, \\nameref, \\cref, \\Cref, \\vref, and their relatives, comma-separated lists split; and the keys of \\cite and the natbib and biblatex citation commands. Returns rootFilePath; undefinedReferences and undefinedCitations, each use of a key nothing defines; unusedLabels, labels nothing refers to; unusedBibEntries, entries nothing cites (none when \\nocite{*} is used); duplicateLabels, every definition of a key defined more than once; each a list of { key, filePath, line } (1-based), at most 500 per list, with truncated true when one was cut; filesRead; and unresolved, as get_full_document reports it, plus bibliography files that are missing (missing) or uploaded files (binary_file). It reads source text, not TeX: % comments and verbatim text are skipped, but keys built by macros, labels defined inside custom commands or packages, cross-document references, and conditionals are not understood, so a result is a prompt to look, not proof. A compile remains the authority. Errors are those of get_full_document.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Overleaf project ID"
+        },
+        "rootFilePath": {
+          "description": "Document to start from; defaults to the root document configured in Overleaf",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "projectId"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "rootFilePath": {
+          "type": "string"
+        },
+        "undefinedReferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "filePath": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "key",
+              "filePath",
+              "line"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "undefinedCitations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "filePath": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "key",
+              "filePath",
+              "line"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "unusedLabels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "filePath": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "key",
+              "filePath",
+              "line"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "unusedBibEntries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "filePath": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "key",
+              "filePath",
+              "line"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "duplicateLabels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "filePath": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "key",
+              "filePath",
+              "line"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "filesRead": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "target": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "missing",
+                  "binary_file",
+                  "macro_argument",
+                  "excluded_by_includeonly"
+                ]
+              }
+            },
+            "required": [
+              "file",
+              "line",
+              "target",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "rootFilePath",
+        "undefinedReferences",
+        "undefinedCitations",
+        "unusedLabels",
+        "unusedBibEntries",
+        "duplicateLabels",
+        "truncated",
+        "filesRead",
+        "unresolved"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true
+    }
+  },
+  {
     "name": "compile_project",
     "description": "Compile a project and report on the build from its logs. Omit rootFilePath to build the root document configured in Overleaf, which is what the web UI's Recompile button uses; pass it to build a different document for this call only. Check summary.builtCleanly, not status: Overleaf reports status \"success\" whenever a PDF came out, even when LaTeX hit errors along the way. builtCleanly is true only when a PDF was produced, output.log was read, and it reports no error. summary lists the first 20 errors and warnings as { file?, line?, message } (errorCount and warningCount count all of them), undefined references and citations, missing files, pageCount, and pdfSizeBytes; messages never quote the document. A LaTeX error that stopped the build returns status \"failure\" with the same summary rather than an error. outputFiles is Overleaf's listing, less an output.blg and output.bbl left over from an earlier build when BibTeX did not run for this one. buildRef names this build to get_compile_log and download_compile_output, also in a later process. stopOnFirstError gives a short log holding the one error that matters; draft skips images for faster text-only builds. Compiles spend the account's compile allowance, so read the summary instead of recompiling. Errors: COMPILE_RATE_LIMITED (Overleaf ran nothing; wait details.retryAfterMs when given, then compile once more), COMPILE_UNAVAILABLE (try later), COMPILE_TIMEOUT (the build hit the time limit; details.buildRef, when present, reaches its partial log), COMPILE_FAILED (no build to report on), and TIMEOUT (the request timed out while Overleaf may still be compiling; it is not retried).",
     "inputSchema": {

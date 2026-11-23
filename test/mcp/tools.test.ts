@@ -41,6 +41,7 @@ function fakeRuntime() {
       getSections: vi.fn(),
       getSectionContent: vi.fn(),
       writeSection: vi.fn(),
+      checkReferences: vi.fn(),
     },
     compile: {
       compileProject: vi.fn(),

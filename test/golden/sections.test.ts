@@ -603,3 +603,93 @@ describe('section tools with followIncludes', () => {
     expect(project.applied).toBe(0)
   })
 })
+
+describe('check_references', () => {
+  const MAIN = String.raw`\documentclass{article}
+\usepackage{cleveref}
+\begin{document}
+\input{intro}
+\include{methods}
+\input{missing}
+See \cref{sec:intro,sec:gone} and \eqref{eq:energy}.
+% \ref{fig:commented} is a comment, not a reference.
+\cite{knuth1984,lamport1994} and \citep[p.~4]{nobody2001}.
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}
+`
+  const INTRO = String.raw`\section{Introduction}\label{sec:intro}
+Text with \autoref{fig:plot}.
+\begin{equation}\label{eq:energy} E = mc^2 \end{equation}
+\label{dup}
+`
+  const METHODS = String.raw`\section{Methods}\label{sec:methods}
+\begin{figure}\label{fig:plot}\end{figure}
+\label{dup}
+\begin{verbatim}
+\label{inside:verbatim} \ref{inside:verbatim:ref}
+\end{verbatim}
+\textcite{lamport1994}
+`
+  const REFS = `@book{knuth1984,
+  title = {The TeXbook},
+}
+
+@string{tug = "TeX Users Group"}
+
+@book{lamport1994,
+  title = {LaTeX},
+}
+
+@article{unused2020,
+  title = {Never cited},
+}
+`
+
+  test('a root document, two included files, and one .bib file', async () => {
+    const project = createProject({
+      'main.tex': { protocol: 'sharejs', content: MAIN },
+      'intro.tex': { protocol: 'sharejs', content: INTRO },
+      'methods.tex': { protocol: 'sharejs', content: METHODS },
+      'refs.bib': { protocol: 'sharejs', content: REFS },
+    })
+    const result = await withService(
+      project,
+      async service => await service.check_references({ projectId: PROJECT, rootFilePath: 'main.tex' })
+    )
+    expect(result.undefinedReferences).toEqual([{ key: 'sec:gone', filePath: 'main.tex', line: 7 }])
+    expect(result.undefinedCitations).toEqual([{ key: 'nobody2001', filePath: 'main.tex', line: 9 }])
+    expect(result.unusedLabels).toEqual([
+      { key: 'dup', filePath: 'intro.tex', line: 4 },
+      { key: 'sec:methods', filePath: 'methods.tex', line: 1 },
+      { key: 'dup', filePath: 'methods.tex', line: 3 },
+    ])
+    expect(result.unusedBibEntries).toEqual([{ key: 'unused2020', filePath: 'refs.bib', line: 11 }])
+    expect(result.duplicateLabels).toEqual([
+      { key: 'dup', filePath: 'intro.tex', line: 4 },
+      { key: 'dup', filePath: 'methods.tex', line: 3 },
+    ])
+    expect(result.unresolved).toEqual([{ file: 'main.tex', line: 6, target: 'missing', reason: 'missing' }])
+    expect(result.filesRead).toEqual(['main.tex', 'intro.tex', 'methods.tex', 'refs.bib'])
+    expect(project.applied).toBe(0)
+    expectGolden('check_references', result)
+  })
+
+  test('\\nocite{*} cites every entry, and a missing bibliography is unresolved', async () => {
+    const project = createProject({
+      'main.tex': {
+        protocol: 'sharejs',
+        content: '\\nocite{*}\n\\cite{knuth1984}\n\\addbibresource{refs.bib}\n\\addbibresource{gone.bib}\n',
+      },
+      'refs.bib': { protocol: 'sharejs', content: REFS },
+    })
+    const result = await withService(
+      project,
+      async service => await service.check_references({ projectId: PROJECT, rootFilePath: 'main.tex' })
+    )
+    expect(result.unusedBibEntries).toEqual([])
+    expect(result.undefinedCitations).toEqual([])
+    expect(result.unresolved).toEqual([{ file: 'main.tex', line: 4, target: 'gone.bib', reason: 'missing' }])
+    expectGolden('check_references', result)
+  })
+})
