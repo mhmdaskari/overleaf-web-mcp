@@ -17,7 +17,7 @@
   <a href="https://www.npmjs.com/package/overleaf-web-mcp"><img alt="Total npm installs" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmhmdaskari%2Foverleaf-web-mcp%2Fbadges%2Fnpm-downloads.json&amp;style=flat-square&amp;label=installs"></a>
   <a href="https://github.com/mhmdaskari/overleaf-web-mcp/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/mhmdaskari/overleaf-web-mcp/ci.yml?branch=main&amp;style=flat-square&amp;logo=githubactions&amp;logoColor=white&amp;label=CI"></a>
   <img alt="Node.js 20 or newer" src="https://img.shields.io/badge/Node.js-20%2B-339933?style=flat-square&amp;logo=nodedotjs&amp;logoColor=white">
-  <a href="#tools"><img alt="40 MCP tools" src="https://img.shields.io/badge/MCP-40_tools-1F6FEB?style=flat-square"></a>
+  <a href="#tools"><img alt="41 MCP tools" src="https://img.shields.io/badge/MCP-41_tools-1F6FEB?style=flat-square"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-0F766E?style=flat-square"></a>
   <br>
   <a href="https://mhmdaskari.github.io/overleaf-web-mcp/install/"><img alt="Works with Claude Code, Codex, Cursor, and VS Code" src="https://img.shields.io/badge/works_with-Claude_Code_%7C_Codex_%7C_Cursor_%7C_VS_Code-7C3AED?style=flat-square"></a>
@@ -132,10 +132,10 @@ try {
 
 ## Tools
 
-40 tools in eight groups: account, project lifecycle, files, folder sync, sections, compilation, review, and history. Read-only tools change nothing on Overleaf and write nothing on your computer. Destructive tools can replace or remove existing content, and all but `stop_compile` need a value repeated back first: the path, name, or count of what they delete, the revision of the document they replace, the `planToken` of a folder sync, or `overwrite` for a file that exists.
+41 tools in eight groups: account, project lifecycle, files, folder sync, sections, compilation, review, and history. Read-only tools change nothing on Overleaf and write nothing on your computer. Destructive tools can replace or remove existing content, and all but `stop_compile` need a value repeated back first: the path, name, or count of what they delete, the revision of the document they replace, the `planToken` of a folder sync, or `overwrite` for a file that exists.
 
 <details>
-<summary><strong>All 40 tools</strong>, with their annotations and local effects</summary>
+<summary><strong>All 41 tools</strong>, with their annotations and local effects</summary>
 
 An upload that would replace a file, and a folder sync without a `planToken`, are refused unless that replacement or unplanned sync is asked for by name. The last column shows which tools read or write files on the computer the server runs on. Every parameter and result is in the [tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/); each tool but `sign_in` is also `overleaf-web-mcp call <name>` and a method of `createOverleafClient`.
 
@@ -172,6 +172,7 @@ An upload that would replace a file, and a folder sync without a `planToken`, ar
 | Compilation | `stop_compile` | Stop the active compile | destructive | |
 | Compilation | `get_compile_log` | Read the end of a build's LaTeX or BibTeX log | read-only | |
 | Compilation | `download_compile_output` | Save the compiled PDF, or another output file, locally | destructive | writes |
+| Compilation | `inspect_build` | Map a source line to the PDF and back with SyncTeX, or count words | read-only | |
 | Review | `list_comments` | List review threads with their locations | read-only | |
 | Review | `reply_to_comment` | Reply in an existing thread | | |
 | Review | `add_comment` | Add a comment anchored to exact text | | |
@@ -219,7 +220,7 @@ Against the three most-starred Overleaf MCP servers and the two closest in desig
 | | **This project** | [OverleafMCP](https://github.com/mjyoo2/OverleafMCP) | [olcli](https://github.com/aloth/olcli) | [overleaf-mcp-server](https://github.com/YounesBensafia/overleaf-mcp-server) | [overleaf-mcp-rt](https://github.com/DanielHou315/overleaf-mcp-rt) | [netique/overleaf-mcp](https://github.com/netique/overleaf-mcp) |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
-| Tools | 40 | 8 | 21 | 5 | 22 | 17 |
+| Tools | 41 | 8 | 21 | 5 | 22 | 17 |
 | Works without an MCP client (command line or library) | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Self-hosted Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡 |
@@ -235,7 +236,7 @@ Against the three most-starred Overleaf MCP servers and the two closest in desig
 | --- | --- |
 | [Install](https://mhmdaskari.github.io/overleaf-web-mcp/install/) | Claude Code, Codex, Claude Desktop, Cursor, Antigravity, VS Code, the command line alone, self-hosted Overleaf, troubleshooting |
 | [Using it](https://mhmdaskari.github.io/overleaf-web-mcp/using/) | Example prompts and what happens underneath |
-| [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 40 tools with parameters and results |
+| [Tool reference](https://mhmdaskari.github.io/overleaf-web-mcp/tools/) | All 41 tools with parameters and results |
 | [Command line](https://mhmdaskari.github.io/overleaf-web-mcp/cli/) | Every command, request formats, output, exit codes, and the Agent Skills |
 | [TypeScript SDK](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) | `createOverleafClient`, results and errors, and the stable surface |
 | [Safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) | Revisions, tracked changes, confirmations, error codes |

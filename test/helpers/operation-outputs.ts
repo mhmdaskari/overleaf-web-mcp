@@ -164,6 +164,11 @@ export const OUTPUTS: { [N in OperationName]: OperationOutput<N> } = {
     buildId: 'b',
     replaced: false,
   },
+  inspect_build: {
+    action: 'source_to_pdf',
+    buildId: 'b',
+    positions: [{ page: 1, h: 72.5, v: 120.25, width: 343.75, height: 9.96 }],
+  },
   list_comments: { threads: [thread], positionsUnavailable: false },
   reply_to_comment: { threadId: 't', message: thread.messages[0]!, trackChangesActive: false, writeMode: 'untracked' },
   add_comment: {

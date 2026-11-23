@@ -27,6 +27,7 @@ import {
 import { MAX_TEXT_EDITS } from '../core/text-edits.js'
 import type { Effect } from './effects.js'
 import { ERROR_CODES } from './error-codes.js'
+import { assertInspectBuild } from './build-input.js'
 import { assertHistoryAction, assertOneVersion } from './history-input.js'
 import { assertOneTextSource } from './text-source.js'
 import type { Toolset } from './toolsets.js'
@@ -66,6 +67,7 @@ export const OPERATION_NAMES = [
   'stop_compile',
   'get_compile_log',
   'download_compile_output',
+  'inspect_build',
   'list_comments',
   'reply_to_comment',
   'add_comment',
@@ -282,6 +284,8 @@ const trackedChangeSchema = z.object({
 const projectActionSchema = z.enum(['rename', 'trash', 'restore', 'archive', 'unarchive', 'delete'])
 
 const historyVersion = z.number().int().nonnegative()
+const inspectBuildActionSchema = z.enum(['source_to_pdf', 'pdf_to_source', 'word_count'])
+const wordCountValue = z.number().int().nonnegative()
 const historyActionSchema = z.enum(['create_label', 'restore_file'])
 
 const historyProjectOperationSchema = z.discriminatedUnion('type', [
@@ -1121,6 +1125,63 @@ export const OPERATIONS = {
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     effects: ['overleaf-read', 'local-write'],
     toolset: 'compile',
+  },
+  inspect_build: {
+    description:
+      "Map between a build's PDF and its source with SyncTeX, or count words, without reading any text. source_to_pdf takes filePath, a 1-based line, and an optional column, and returns positions where that line lands: { page, h, v, width, height }, in PDF points (1/72 inch) from the page's top-left corner, v at the box's baseline; none when the line produced no output. pdf_to_source takes a 1-based page and a point h, v measured the same way, and returns locations { filePath, line, column } of the source that produced it. Both read the build buildRef names, from compile_project in this process or another, or else the latest build of this project in this process (NO_BUILD when there is none); a build Overleaf no longer keeps is BUILD_NOT_FOUND: compile again. word_count runs texcount over the current sources from filePath, or the project's root document, through its includes, with no compile and no build needed, and returns rootFilePath and wordCount: textWords, headWords (in headings), outsideWords (in captions and other text outside the body), totalWords (their sum, as texcount sums them), headers, floats, mathInline, mathDisplay, and errors (texcount's parse errors). An answer in an unknown shape is PROTOCOL_UNSUPPORTED.",
+    inputSchema: z.object({
+      projectId,
+      action: inspectBuildActionSchema,
+      buildRef: z
+        .string()
+        .min(1)
+        .optional()
+        .describe('The build to read, from compile_project; defaults to the latest one'),
+      filePath: filePath
+        .optional()
+        .describe('source_to_pdf: the source file; word_count: the document to count from, the root by default'),
+      line: z.number().int().positive().optional().describe('source_to_pdf: 1-based line'),
+      column: z.number().int().nonnegative().optional().describe('source_to_pdf: column on the line; default 0'),
+      page: z.number().int().positive().optional().describe('pdf_to_source: 1-based page'),
+      h: z.number().finite().nonnegative().optional().describe('pdf_to_source: points from the left edge'),
+      v: z.number().finite().nonnegative().optional().describe('pdf_to_source: points from the top edge'),
+    }),
+    outputSchema: z.object({
+      action: inspectBuildActionSchema,
+      buildId: z.string().optional(),
+      positions: z
+        .array(
+          z.object({
+            page: z.number().int().positive(),
+            h: z.number(),
+            v: z.number(),
+            width: z.number(),
+            height: z.number(),
+          })
+        )
+        .optional(),
+      locations: z
+        .array(z.object({ filePath: z.string(), line: z.number().int().nonnegative(), column: z.number().int() }))
+        .optional(),
+      rootFilePath: z.string().optional(),
+      wordCount: z
+        .object({
+          textWords: wordCountValue,
+          headWords: wordCountValue,
+          outsideWords: wordCountValue,
+          totalWords: wordCountValue,
+          headers: wordCountValue,
+          floats: wordCountValue,
+          mathInline: wordCountValue,
+          mathDisplay: wordCountValue,
+          errors: wordCountValue,
+        })
+        .optional(),
+    }),
+    annotations: { readOnlyHint: true },
+    effects: ['overleaf-read'],
+    toolset: 'compile',
+    checkInput: assertInspectBuild,
   },
   list_comments: {
     description:

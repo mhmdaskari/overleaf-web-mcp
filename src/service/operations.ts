@@ -339,6 +339,32 @@ export function createOverleafService(runtime: OverleafServiceRuntime): Overleaf
           overwrite: input.overwrite,
         })
     ),
+    inspect_build: operation('inspect_build', async input => {
+      const { projectId, buildRef } = input
+      if (input.action === 'source_to_pdf') {
+        return await runtime.compile.inspectBuild(projectId, {
+          action: 'source_to_pdf',
+          buildRef,
+          filePath: input.filePath!,
+          line: input.line!,
+          column: input.column,
+        })
+      }
+      if (input.action === 'pdf_to_source') {
+        return await runtime.compile.inspectBuild(projectId, {
+          action: 'pdf_to_source',
+          buildRef,
+          page: input.page!,
+          h: input.h!,
+          v: input.v!,
+        })
+      }
+      return await runtime.compile.inspectBuild(projectId, {
+        action: 'word_count',
+        buildRef,
+        rootFilePath: input.filePath,
+      })
+    }),
     list_comments: operation(
       'list_comments',
       async input =>

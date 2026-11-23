@@ -288,6 +288,27 @@ describe.skipIf(!enabled || process.env.RUN_OVERLEAF_LIVE_LIFECYCLE_TESTS !== '1
         const compiled = await runtime.compile.compileProject(created.projectId)
         expect(compiled).toMatchObject({ status: 'success', rootFilePath: 'paper.tex' })
         expect(compiled.summary).toMatchObject({ builtCleanly: true, errorCount: 0, pageCount: 1 })
+        // SyncTeX and the word count read the build through its buildRef, as another process would.
+        const mapped = await service.inspect_build({
+          projectId: created.projectId,
+          action: 'source_to_pdf',
+          buildRef: compiled.buildRef,
+          filePath: 'paper.tex',
+          line: 3,
+        })
+        expect(mapped.positions?.[0]).toMatchObject({ page: 1 })
+        const position = mapped.positions![0]!
+        const back = await service.inspect_build({
+          projectId: created.projectId,
+          action: 'pdf_to_source',
+          buildRef: compiled.buildRef,
+          page: position.page,
+          h: position.h,
+          v: position.v,
+        })
+        expect(back.locations?.[0]).toMatchObject({ filePath: 'paper.tex', line: 3 })
+        const counted = await service.inspect_build({ projectId: created.projectId, action: 'word_count' })
+        expect(counted.wordCount?.totalWords).toBeGreaterThan(0)
         const output = await mkdtemp(join(tmpdir(), 'overleaf-live-compile-'))
         try {
           const pdf = await runtime.compile.downloadCompileOutput(created.projectId, join(output, 'paper.pdf'))

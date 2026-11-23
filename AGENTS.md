@@ -309,7 +309,8 @@ the rest need a person:
 - `SERVER_INSTRUCTIONS` (`src/mcp/instructions.ts`) is under the 450-word bound in
   `test/server.test.ts`; it was 445 words at 1.0.0 and 446 at 1.3.0, so a release that adds
   guidance trims elsewhere. The `tools/list` size cap in the same file was 58,992 of 60,000
-  characters at 1.2.0 and 59,551 at 1.3.0, with `sign_in`.
+  characters at 1.2.0 and 59,551 at 1.3.0, with `sign_in`; 1.4.0 raised it to 68,000 for its
+  four new tools, at 67,244.
 - Every Overleaf route or socket message the release will touch is still in Overleaf's source as
   `docs/private-api.md` describes it.
 - The comparison in the README was checked on the date it states; re-check the projects it names

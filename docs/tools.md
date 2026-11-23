@@ -1,6 +1,6 @@
 # Tool reference
 
-The server registers 40 tools. Names are `snake_case`. Each tool but
+The server registers 41 tools. Names are `snake_case`. Each tool but
 [`sign_in`](#sign_in) is also `overleaf-web-mcp call <name>` on the [command line](cli.md) and a
 camelCase method of `createOverleafClient` in the [TypeScript SDK](sdk.md), with the same
 parameters, results, and errors; `sign_in` opens a browser window, which only `login` does on
@@ -1229,6 +1229,50 @@ not start with `%PDF-` is `PROTOCOL_UNSUPPORTED` and nothing is written. `NO_BUI
 and `BUILD_NOT_FOUND` are as for `get_compile_log`; an `output.blg` or `output.bbl` left over from
 an earlier build is `NOT_FOUND`, like any file the build did not produce. Returns the absolute
 `localPath`, `file`, `sizeBytes`, `buildId`, and `replaced`.
+
+### `inspect_build` <small>read-only</small>
+
+<!-- md:version 1.4.0 -->
+
+Map between a build's PDF and its source with SyncTeX, or count the words of a document.
+
+| Parameter | Required | Meaning |
+| --- | :---: | --- |
+| `projectId` | yes | Project id |
+| `action` | yes | `source_to_pdf`, `pdf_to_source`, or `word_count` |
+| `buildRef` | no | The build to read, from `compile_project`; defaults to this project's latest build in this process |
+| `filePath` | `source_to_pdf`; optional for `word_count` | The source file; for `word_count`, the document to count from, the root document by default |
+| `line` | `source_to_pdf` | 1-based line |
+| `column` | no | `source_to_pdf`: column on the line; default 0 |
+| `page` | `pdf_to_source` | 1-based page |
+| `h`, `v` | `pdf_to_source` | A point on the page, in PDF points (1/72 inch) from its left and top edges |
+
+`source_to_pdf` returns `buildId` and `positions`, each `{ page, h, v, width, height }` in PDF
+points from the page's top-left corner, with `v` at the box's baseline: where the line lands. A
+line that produced no output, such as a comment, has none. `pdf_to_source` returns `buildId` and
+`locations`, each `{ filePath, line, column }`, the source that produced that point. Both read the
+build's SyncTeX data on Overleaf, through the `buildRef` that `compile_project` returned, in this
+process or another; without one, they read the latest build of the project compiled in this
+process, or fail with `NO_BUILD`. Overleaf keeps build output only for a while, so an old build is
+`BUILD_NOT_FOUND`: compile again.
+
+`word_count` runs Overleaf's word count (texcount) over the current sources from `filePath`, or
+the root document, through its includes. It needs no compile and no build; a `buildRef` only sends
+it to the same compile server. It returns `rootFilePath` and `wordCount`:
+
+| Key | What texcount counts |
+| --- | --- |
+| `textWords` | Words in the body text |
+| `headWords` | Words in headings |
+| `outsideWords` | Words outside the body text, such as captions |
+| `totalWords` | The sum of the three, as texcount sums them |
+| `headers` | Headings |
+| `floats` | Floats, tables, and figures |
+| `mathInline`, `mathDisplay` | Inline and displayed formulas |
+| `errors` | Parse errors texcount reported |
+
+Results carry positions, paths, and counts, never document text: texcount's own messages are
+dropped. An answer in an unknown shape is `PROTOCOL_UNSUPPORTED`.
 
 ### Compile output resources
 
