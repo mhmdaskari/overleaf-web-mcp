@@ -39,7 +39,7 @@ export interface OverleafServiceRuntime {
   >
   compile: Pick<
     CompileApi,
-    'compileProject' | 'stopCompile' | 'downloadCompileOutput' | 'getCompileLog' | 'readCompileOutput'
+    'compileProject' | 'stopCompile' | 'downloadCompileOutput' | 'getCompileLog' | 'readCompileOutput' | 'inspectBuild'
   >
   comments: Pick<CommentsApi, 'listComments' | 'replyToComment' | 'addComment' | 'setCommentStatus'>
   trackedChanges: Pick<TrackedChangesApi, 'listTrackedChanges' | 'manageTrackedChanges'>

@@ -46,6 +46,16 @@ such change is listed.
   read_file_version` and `client.readFileVersion`: the text of a document at a `version` or at a
   label's version (`labelId`), with no revision. A path the version lacks is `NOT_FOUND`, and a
   binary file is `INVALID_ARGUMENT` with `details.kind: "binary_file"`.
+- `inspect_build` (#51), a read-only tool in the `compile` toolset, also `call inspect_build` and
+  `client.inspectBuild`, with three actions. `source_to_pdf` (`filePath`, `line`, optional
+  `column`) returns `positions` `{ page, h, v, width, height }` in PDF points, and
+  `pdf_to_source` (`page`, `h`, `v`) returns `locations` `{ filePath, line, column }`, both from
+  the SyncTeX data of the build `buildRef` names, or of the latest build in this process
+  (`NO_BUILD` without one, `BUILD_NOT_FOUND` once Overleaf has dropped it). `word_count` runs
+  texcount over the current sources from `filePath` or the root document, with no build needed,
+  and returns `rootFilePath` and `wordCount` with `textWords`, `headWords`, `outsideWords`,
+  `totalWords`, `headers`, `floats`, `mathInline`, `mathDisplay`, and `errors`. Results never
+  carry document text.
 
 ### Documentation
 
@@ -57,6 +67,12 @@ such change is listed.
 
 ### Internal
 
+- The bound `test/server.test.ts` holds on the names, descriptions, and input schemas of
+  `tools/list` rises from 60,000 to 68,000 characters for the four new tools; the list is 67,244
+  characters with all 41.
+- `compile_project` sends a random `editorId` with each compile, as Overleaf's editor does, and
+  its `buildRef` carries it, so SyncTeX can find the build in Overleaf's compile cache. A
+  `buildRef` from an earlier release still works everywhere.
 - `scripts/bump-version.ts` sets the version in both plugin manifests and the exact
   `overleaf-web-mcp@X.Y.Z` pin in both plugin MCP configurations on every release, and moves the
   minor-version pin in the plugins' copies of the skills. `scripts/preflight.ts` fails when any

@@ -53,7 +53,7 @@ download, the whole transfer included, in place of `OVERLEAF_REQUEST_TIMEOUT_MS`
 <!-- md:version 1.2.0 -->
 
 An MCP client loads the name, description, and input schema of every tool on every turn, about
-59,000 characters for all 37. `OVERLEAF_TOOLSETS` lists the groups of tools `serve` offers, so a
+67,000 characters for all 41. `OVERLEAF_TOOLSETS` lists the groups of tools `serve` offers, so a
 client that only edits and compiles does not carry folder sync, project lifecycle, and tags.
 Some clients also cap how many tools they pass to the model across all servers (Cursor has been
 reported to keep about 40), and Antigravity loads tools lazily and filters them with

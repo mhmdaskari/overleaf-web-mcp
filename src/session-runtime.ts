@@ -44,6 +44,7 @@ export const SESSION_RUNTIME_MEMBERS = [
   ['compile', 'downloadCompileOutput'],
   ['compile', 'getCompileLog'],
   ['compile', 'readCompileOutput'],
+  ['compile', 'inspectBuild'],
   ['comments', 'listComments'],
   ['comments', 'replyToComment'],
   ['comments', 'addComment'],

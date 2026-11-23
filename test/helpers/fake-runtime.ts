@@ -45,6 +45,7 @@ export function fakeServiceRuntime() {
       getCompileLog: resolved(OUTPUTS.get_compile_log),
       downloadCompileOutput: resolved(OUTPUTS.download_compile_output),
       readCompileOutput: resolved({}),
+      inspectBuild: resolved(OUTPUTS.inspect_build),
     },
     comments: {
       listComments: resolved(OUTPUTS.list_comments),

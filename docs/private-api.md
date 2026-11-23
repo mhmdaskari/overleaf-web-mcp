@@ -144,9 +144,20 @@ import). Only a value matching `^[a-z][a-z0-9_]{0,63}$` is ever propagated, unde
 
 | Method and route | Sent | Read | Used by |
 | --- | --- | --- | --- |
-| `POST /project/:id/compile?file_line_errors=true` | `{ rootDoc_id, rootResourcePath, check: "silent", incrementalCompilesEnabled: true }` (overleaf.com builds `rootResourcePath`, and the configured root without it), plus `stopOnFirstError: true` and `draft: true` when asked | `status`; `outputFiles[]` reduced to `path`, `type`, and `build`; numeric `stats`; `clsiServerId`; the user ID of a per-user compile, taken from `url` only when it has the shape `/project/<this project>/user/<id>/build/<this build>/output/` for every file that names one. Everything else, `url` itself, `timings`, and `pdfDownloadDomain` included, is dropped | `compile_project` |
+| `POST /project/:id/compile?file_line_errors=true` | `{ rootDoc_id, rootResourcePath, check: "silent", incrementalCompilesEnabled: true }` (overleaf.com builds `rootResourcePath`, and the configured root without it), plus `stopOnFirstError: true` and `draft: true` when asked, and a random `editorId` | `status`; `outputFiles[]` reduced to `path`, `type`, and `build`; numeric `stats`; `clsiServerId`; the user ID of a per-user compile, taken from `url` only when it has the shape `/project/<this project>/user/<id>/build/<this build>/output/` for every file that names one. Everything else, `url` itself, `timings`, and `pdfDownloadDomain` included, is dropped | `compile_project` |
 | `GET /project/:id/build/:buildId/output/:file`, `GET /project/:id/user/:userId/build/:buildId/output/:file` | `/user/:userId` when the compile was per user (Overleaf CE and Server Pro by default); `?clsiserverid=` when the compile response named one | the output file: `output.log` and `.blg` logs, at most 1 MB, for the summary and `get_compile_log`; any output for `download_compile_output` | `compile_project`, `get_compile_log`, `download_compile_output`, the compile output resources |
 | `POST /project/:id/compile/stop` | nothing | nothing | `stop_compile` |
+| `GET /project/:id/sync/code?file=:path&line=:line&column=:column&editorId=:editorId&buildId=:buildId` | the build's `editorId` and `buildId` from its `buildRef`, and `clsiserverid` when the compile named one | `pdf[]`, each `{ page, h, v, width, height }` (validated) | `inspect_build` `source_to_pdf` |
+| `GET /project/:id/sync/pdf?page=:page&h=:h&v=:v&editorId=:editorId&buildId=:buildId` | as for `sync/code` | `code[]`, each `{ file, line, column }` (validated) | `inspect_build` `pdf_to_source` |
+| `GET /project/:id/wordcount?rootResourcePath=:path` | `clsiserverid` when a `buildRef` names one | `texcount`'s numeric counts (validated); `encode` and `messages` are dropped | `inspect_build` `word_count` |
+
+The SyncTeX routes refuse a request without an `editorId` (`CompileController.proxySyncCode` and
+`proxySyncPdf`), and the compile server uses it with `buildId` to fetch the build's
+`output.synctex.gz` from Overleaf's compile cache when its own copy is gone. So every compile sends
+a fresh random `editorId`, a UUID as the editor sends, and its `buildRef` carries it; a `buildRef`
+from a release before 1.4.0 has none, and a random one is sent instead. A 404 from either route is
+`BUILD_NOT_FOUND`. The word count compiles nothing: the compile server writes the project's
+current sources into its compile directory and runs texcount from the root document.
 
 `file_line_errors` makes TeX run with `-file-line-error`, so each error names its file as
 `./path.tex:12: message`; the parser also reads the classic `! message` form with its `l.<n>`

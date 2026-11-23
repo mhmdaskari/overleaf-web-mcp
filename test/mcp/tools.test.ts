@@ -49,6 +49,7 @@ function fakeRuntime() {
       getCompileLog: vi.fn(),
       downloadCompileOutput: vi.fn(),
       readCompileOutput: vi.fn(),
+      inspectBuild: vi.fn(),
     },
     comments: {
       listComments: vi.fn(),

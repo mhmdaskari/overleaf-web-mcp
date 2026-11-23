@@ -92,6 +92,8 @@ describe('compile_project', () => {
       rootResourcePath: 'main.tex',
       check: 'silent',
       incrementalCompilesEnabled: true,
+      // A fresh editor id per compile, which Overleaf's compile cache files the build's SyncTeX data under.
+      editorId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u),
       stopOnFirstError: true,
       draft: true,
     })

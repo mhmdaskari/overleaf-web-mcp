@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto'
+
+import { z } from 'zod'
+
 import { readBoundedBody } from '../core/bounded-body.js'
 import { McpError } from '../core/errors.js'
 import { prepareLocalDownload, writeDownload } from '../core/local-download.js'
@@ -16,6 +20,8 @@ import type { ProjectEntity } from './tree.js'
 
 export interface CompileHttp {
   postJson(path: string, body?: unknown, options?: { timeoutMs?: number }): Promise<unknown>
+  /** Needed only by `inspectBuild`. */
+  getJson?(path: string): Promise<unknown>
   getStream(
     path: string,
     options?: { timeoutMs?: number }
@@ -111,6 +117,8 @@ const BUILD_ID_PATTERN = /^[0-9a-f]{1,64}-[0-9a-f]{1,64}$/u
 const CLSI_SERVER_ID_PATTERN = /^[a-z0-9-]{1,128}$/u
 /** A Mongo ObjectId, as Overleaf uses for users. */
 const USER_ID_PATTERN = /^[0-9a-f]{24}$/u
+/** The editor session id a compile is sent with, which Overleaf's compile cache files a build under. */
+const EDITOR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u
 /**
  * Overleaf CE and Server Pro compile per user by default and then serve outputs under
  * /project/:id/user/:userId/build/:build/output/, a path the compile response names in each
@@ -156,6 +164,8 @@ interface BuildRecord {
   clsiServerId?: string
   /** The user a per-user compile serves this build's outputs for. */
   userId?: string
+  /** The editor id the compile was sent with, which SyncTeX needs to find the build in Overleaf's cache. */
+  editorId?: string
   /** Every output path, when there were few enough to list. */
   files?: string[]
   /** BibTeX did not run for this build, so a listed output.blg or output.bbl is an earlier build's. */
@@ -257,6 +267,8 @@ export function decodeBuildRef(token: string): BuildRecord {
       (payload.clsiServerId !== undefined &&
         (typeof payload.clsiServerId !== 'string' || !CLSI_SERVER_ID_PATTERN.test(payload.clsiServerId))) ||
       (payload.userId !== undefined && (typeof payload.userId !== 'string' || !USER_ID_PATTERN.test(payload.userId))) ||
+      (payload.editorId !== undefined &&
+        (typeof payload.editorId !== 'string' || !EDITOR_ID_PATTERN.test(payload.editorId))) ||
       (payload.files !== undefined &&
         (!Array.isArray(payload.files) ||
           payload.files.length > MAX_LISTED_OUTPUTS ||
@@ -270,6 +282,7 @@ export function decodeBuildRef(token: string): BuildRecord {
       buildId: payload.buildId,
       ...(payload.clsiServerId === undefined ? {} : { clsiServerId: payload.clsiServerId }),
       ...(payload.userId === undefined ? {} : { userId: payload.userId }),
+      ...(payload.editorId === undefined ? {} : { editorId: payload.editorId }),
       ...(payload.files === undefined ? {} : { files: payload.files }),
       ...(payload.noBibliography === true ? { noBibliography: true } : {}),
     }
@@ -323,6 +336,89 @@ function outputPath(record: BuildRecord, file: string): string {
   return record.clsiServerId === undefined ? path : `${path}?clsiserverid=${encodeURIComponent(record.clsiServerId)}`
 }
 
+/** Where a source line lands in the PDF: a box on a page, in PDF points from the page's top left. */
+export interface PdfPosition {
+  page: number
+  h: number
+  v: number
+  width: number
+  height: number
+}
+
+/** A source line a place in the PDF comes from. */
+export interface SourceLocation {
+  filePath: string
+  line: number
+  column: number
+}
+
+/** texcount's counts for a document and the files it includes. */
+export interface WordCount {
+  textWords: number
+  headWords: number
+  outsideWords: number
+  totalWords: number
+  headers: number
+  floats: number
+  mathInline: number
+  mathDisplay: number
+  errors: number
+}
+
+export type BuildInspection =
+  | { action: 'source_to_pdf'; buildId: string; positions: PdfPosition[] }
+  | { action: 'pdf_to_source'; buildId: string; locations: SourceLocation[] }
+  | { action: 'word_count'; rootFilePath: string; wordCount: WordCount }
+
+export type BuildInspectionRequest =
+  | {
+      action: 'source_to_pdf'
+      buildRef?: string | undefined
+      filePath: string
+      line: number
+      column?: number | undefined
+    }
+  | { action: 'pdf_to_source'; buildRef?: string | undefined; page: number; h: number; v: number }
+  | { action: 'word_count'; buildRef?: string | undefined; rootFilePath?: string | undefined }
+
+const count = z.number().int().nonnegative()
+const coordinate = z.number().finite()
+const syncCodeSchema = z.object({
+  pdf: z.array(
+    z.object({ page: z.number().int().positive(), h: coordinate, v: coordinate, width: coordinate, height: coordinate })
+  ),
+})
+const syncPdfSchema = z.object({
+  code: z.array(z.object({ file: z.string(), line: z.number().int().nonnegative(), column: z.number().int() })),
+})
+const wordCountSchema = z.object({
+  texcount: z.object({
+    textWords: count,
+    headWords: count,
+    outside: count,
+    headers: count,
+    elements: count,
+    mathInline: count,
+    mathDisplay: count,
+    errors: count,
+  }),
+})
+
+function parseInspection<T>(schema: z.ZodType<T>, raw: unknown, what: string): T {
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) {
+    throw new McpError('PROTOCOL_UNSUPPORTED', `Overleaf returned an unsupported ${what} response.`, {
+      cause: parsed.error,
+    })
+  }
+  return parsed.data
+}
+
+/** SyncTeX names an input as the compile saw it, `./chapter.tex` or `chapter.tex`. */
+function sourcePath(file: string): string {
+  return file.replace(/^(?:\.\/)+/u, '')
+}
+
 function startsLikePdf(head: Uint8Array): boolean {
   return head.byteLength >= 5 && Buffer.from(head.subarray(0, 5)).toString('latin1') === '%PDF-'
 }
@@ -372,6 +468,7 @@ export class CompileApi {
         ? await this.#projectRootDocument(projectId)
         : await this.#resolvePath(projectId, rootFilePath, 'doc')
     let raw: unknown
+    const editorId = randomUUID()
     try {
       // file_line_errors makes TeX name the file of each error, as `./file.tex:12: message`.
       raw = await this.#http.postJson(
@@ -382,6 +479,7 @@ export class CompileApi {
           rootResourcePath: root.path,
           check: 'silent',
           incrementalCompilesEnabled: true,
+          editorId,
           ...(options.stopOnFirstError === true ? { stopOnFirstError: true } : {}),
           ...(options.draft === true ? { draft: true } : {}),
         },
@@ -393,7 +491,7 @@ export class CompileApi {
     const response = validateResponse(raw, projectId)
     const buildId = response.outputFiles.find(file => file.build !== undefined)?.build
     // Recorded before any throw, so a timed-out build's log stays reachable.
-    const record = buildId === undefined ? undefined : this.#remember(projectId, buildId, response)
+    const record = buildId === undefined ? undefined : this.#remember(projectId, buildId, response, editorId)
     if (!BUILT_STATUSES.has(response.status)) throw statusError(response.status, root.path, record)
     const paths = response.outputFiles.map(file => file.path)
     const bibliography =
@@ -517,11 +615,106 @@ export class CompileApi {
     return { ...read, buildId: record.buildId }
   }
 
+  /**
+   * Maps a source line to where it lands in a build's PDF, or a place in the PDF to its source
+   * line, with SyncTeX on the build a buildRef names; or counts words with texcount. Results carry
+   * positions, paths, and counts, never text.
+   */
+  async inspectBuild(projectId: string, request: BuildInspectionRequest): Promise<BuildInspection> {
+    this.#policy.assertProject(projectId)
+    this.#policy.assertEffect('overleaf-read')
+    const getJson = this.#http.getJson?.bind(this.#http)
+    if (getJson === undefined) throw new McpError('PROTOCOL_UNSUPPORTED', 'This backend cannot inspect builds.')
+    const project = `/project/${encodeURIComponent(projectId)}`
+    if (request.action === 'word_count') {
+      // texcount reads the current sources, not a build: a buildRef only routes to its compile server.
+      const record = request.buildRef === undefined ? undefined : this.#build(projectId, request.buildRef)
+      const root =
+        request.rootFilePath === undefined
+          ? await this.#projectRootDocument(projectId)
+          : await this.#resolvePath(projectId, request.rootFilePath, 'doc')
+      const query = new URLSearchParams({ rootResourcePath: root.path })
+      if (record?.clsiServerId !== undefined) query.set('clsiserverid', record.clsiServerId)
+      const counts = parseInspection(
+        wordCountSchema,
+        await getJson(`${project}/wordcount?${query.toString()}`),
+        'word count'
+      ).texcount
+      return {
+        action: 'word_count',
+        rootFilePath: root.path,
+        wordCount: {
+          textWords: counts.textWords,
+          headWords: counts.headWords,
+          outsideWords: counts.outside,
+          totalWords: counts.textWords + counts.headWords + counts.outside,
+          headers: counts.headers,
+          floats: counts.elements,
+          mathInline: counts.mathInline,
+          mathDisplay: counts.mathDisplay,
+          errors: counts.errors,
+        },
+      }
+    }
+    const record = this.#build(projectId, request.buildRef)
+    const query =
+      request.action === 'source_to_pdf'
+        ? new URLSearchParams({
+            file: this.#syncSourcePath(request.filePath),
+            line: String(request.line),
+            column: String(request.column ?? 0),
+          })
+        : new URLSearchParams({ page: String(request.page), h: request.h.toFixed(2), v: request.v.toFixed(2) })
+    // A build compiled by an earlier release has no editor id; any id serves while the compile server still has it.
+    query.set('editorId', record.editorId ?? randomUUID())
+    query.set('buildId', record.buildId)
+    if (record.clsiServerId !== undefined) query.set('clsiserverid', record.clsiServerId)
+    const direction = request.action === 'source_to_pdf' ? 'code' : 'pdf'
+    let raw: unknown
+    try {
+      raw = await getJson(`${project}/sync/${direction}?${query.toString()}`)
+    } catch (error) {
+      if (error instanceof McpError && error.code === 'NOT_FOUND') {
+        throw new McpError(
+          'BUILD_NOT_FOUND',
+          `Overleaf no longer has the SyncTeX data of build ${record.buildId}; it keeps build output only for a while. Compile again.`,
+          { details: { buildId: record.buildId }, cause: error }
+        )
+      }
+      throw error
+    }
+    if (request.action === 'source_to_pdf') {
+      const positions = parseInspection(syncCodeSchema, raw, 'SyncTeX').pdf
+      return { action: 'source_to_pdf', buildId: record.buildId, positions }
+    }
+    const locations = parseInspection(syncPdfSchema, raw, 'SyncTeX').code.map(location => ({
+      filePath: sourcePath(location.file),
+      line: location.line,
+      column: location.column,
+    }))
+    return { action: 'pdf_to_source', buildId: record.buildId, locations }
+  }
+
   async stopCompile(projectId: string): Promise<{ stopped: true }> {
     this.#policy.assertProject(projectId)
     this.#policy.assertEffect('compile')
     await this.#http.postJson(`/project/${encodeURIComponent(projectId)}/compile/stop`, {})
     return { stopped: true }
+  }
+
+  /** A project path, checked as Overleaf checks it: relative, without `..` or a backslash. */
+  #syncSourcePath(filePath: string): string {
+    const path = filePath.replace(/^\/+/u, '')
+    if (path === '' || path.split('/').some(segment => segment === '..' || segment === '') || path.includes('\\')) {
+      throw new McpError(
+        'INVALID_ARGUMENT',
+        'filePath must be a project path such as chapters/intro.tex, without "..".',
+        {
+          details: { kind: 'invalid_path' },
+        }
+      )
+    }
+    return path
   }
 
   async #projectRootDocument(projectId: string): Promise<ProjectEntity> {
@@ -567,13 +760,15 @@ export class CompileApi {
   #remember(
     projectId: string,
     buildId: string,
-    response: { outputFiles: CompileOutputFile[]; clsiServerId?: string; outputUserId?: string }
+    response: { outputFiles: CompileOutputFile[]; clsiServerId?: string; outputUserId?: string },
+    editorId: string
   ): BuildRecord {
     const record: BuildRecord = {
       projectId,
       buildId,
       ...(response.clsiServerId === undefined ? {} : { clsiServerId: response.clsiServerId }),
       ...(response.outputUserId === undefined ? {} : { userId: response.outputUserId }),
+      editorId,
       ...(response.outputFiles.length <= MAX_LISTED_OUTPUTS
         ? { files: response.outputFiles.map(file => file.path) }
         : {}),

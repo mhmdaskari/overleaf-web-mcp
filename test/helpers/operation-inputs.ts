@@ -34,6 +34,7 @@ export const INPUTS: Record<OperationName, Record<string, unknown>> = {
   stop_compile: { projectId: 'p' },
   get_compile_log: { projectId: 'p' },
   download_compile_output: { projectId: 'p', localPath: '/tmp/paper.pdf' },
+  inspect_build: { projectId: 'p', action: 'source_to_pdf', filePath: 'main.tex', line: 1 },
   list_comments: { projectId: 'p' },
   reply_to_comment: { projectId: 'p', threadId: 't', content: 'Thanks' },
   add_comment: {

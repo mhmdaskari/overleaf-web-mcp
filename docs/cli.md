@@ -1,6 +1,6 @@
 # Command line
 
-Every tool but one is also a command. `overleaf-web-mcp` reaches the same 39 operations as the
+Every tool but one is also a command. `overleaf-web-mcp` reaches the same 40 operations as the
 MCP server, through the same service, checks, and safety defaults, and prints one JSON result whose
 exit code says what is safe to do next. Use it from a shell, a script, a CI job, or a coding
 agent that works in a terminal; no MCP client is involved. Three [Agent Skills](#agent-skills)
@@ -266,7 +266,7 @@ Four rules reach beyond the codes in the table, and one rule overrides everythin
 
 The read-only operations are those annotated so in the [tool reference](tools.md): `auth_status`,
 `list_projects`, `get_project_tree`, `read_file`, `plan_sync`, `get_full_document`,
-`get_sections`, `get_section_content`, `check_references`, `get_compile_log`, `list_comments`, `list_tracked_changes`,
+`get_sections`, `get_section_content`, `check_references`, `get_compile_log`, `inspect_build`, `list_comments`, `list_tracked_changes`,
 `monitor_project_history`, and `read_file_version`. `download_file` and `download_compile_output` write a local file, so
 they are not; `capabilities <projectId>` exits as `list_projects` would.
 

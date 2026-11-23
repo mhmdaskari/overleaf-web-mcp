@@ -1,5 +1,53 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`inspect_build > pdf_to_source maps a point on a page back to its source line 1`] = `
+{
+  "action": "pdf_to_source",
+  "buildId": "18a2b3c4d5e-6f7a8b9c0d1e2f3a",
+  "locations": [
+    {
+      "column": -1,
+      "filePath": "chapters/intro.tex",
+      "line": 12,
+    },
+  ],
+}
+`;
+
+exports[`inspect_build > source_to_pdf maps a source line to its place in the PDF of a build from another process 1`] = `
+{
+  "action": "source_to_pdf",
+  "buildId": "18a2b3c4d5e-6f7a8b9c0d1e2f3a",
+  "positions": [
+    {
+      "h": 72.5,
+      "height": 9.96,
+      "page": 2,
+      "v": 140.25,
+      "width": 343.71,
+    },
+  ],
+}
+`;
+
+exports[`inspect_build > word_count counts the current sources and drops texcount messages 1`] = `
+{
+  "action": "word_count",
+  "rootFilePath": "main.tex",
+  "wordCount": {
+    "errors": 0,
+    "floats": 6,
+    "headWords": 38,
+    "headers": 9,
+    "mathDisplay": 12,
+    "mathInline": 54,
+    "outsideWords": 211,
+    "textWords": 7412,
+    "totalWords": 7661,
+  },
+}
+`;
+
 exports[`stop_compile > after a JSON body with keys of its own 1`] = `
 {
   "stopped": true,

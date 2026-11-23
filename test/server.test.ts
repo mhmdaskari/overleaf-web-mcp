@@ -45,6 +45,7 @@ function fakeRuntime() {
       getCompileLog: vi.fn(),
       downloadCompileOutput: vi.fn(),
       readCompileOutput: vi.fn(),
+      inspectBuild: vi.fn(),
     },
     comments: {
       listComments: vi.fn(),
@@ -94,10 +95,11 @@ function runtimeWithPlanProgress() {
 /**
  * The most characters the names, descriptions, and input schemas of tools/list may take as compact
  * JSON: what an MCP client loads into context on every turn. Set just over the size at 1.2.0
- * (58,992), as the 450-word bound holds the instructions. A release that adds a tool or grows a
- * description trims elsewhere, or raises this in a change the changelog explains.
+ * (58,992), as the 450-word bound holds the instructions, and raised at 1.4.0, whose four tools
+ * took it to 67,244. A release that adds a tool or grows a description trims elsewhere, or raises
+ * this in a change the changelog explains.
  */
-const TOOL_LIST_CHAR_LIMIT = 65_000
+const TOOL_LIST_CHAR_LIMIT = 68_000
 
 function toolListSize(
   tools: ReadonlyArray<{ name: string; description?: string | undefined; inputSchema: unknown }>
@@ -221,6 +223,7 @@ describe('MCP server', () => {
       'stop_compile',
       'get_compile_log',
       'download_compile_output',
+      'inspect_build',
     ])
     await expect(
       client.callTool({ name: 'manage_tags', arguments: { action: 'create', name: 'x' } })
