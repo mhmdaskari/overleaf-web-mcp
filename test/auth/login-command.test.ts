@@ -10,6 +10,19 @@ import { captureBrowserSession, type CdpTransport } from '../../src/auth/browser
 import { runLoginCommand } from '../../src/auth/login-command.js'
 import { readConfig } from '../../src/config.js'
 
+/**
+ * A capture that waits until its signal stops it, as the real one does: one stopped before it
+ * starts, which happens when the stop lands while the profile is still being locked, rejects at once.
+ */
+async function captureUntilStopped(options: { signal?: AbortSignal | undefined }): Promise<never> {
+  return await new Promise((_resolve, reject) => {
+    const signal = options.signal
+    if (signal === undefined) return
+    if (signal.aborted) reject(signal.reason)
+    else signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+  })
+}
+
 describe('login command', () => {
   test('captures, securely persists, and verifies a browser session', async () => {
     const configRoot = await mkdtemp(join(tmpdir(), 'overleaf-login-test-'))
@@ -115,14 +128,36 @@ describe('login command', () => {
       config,
       { signal: controller.signal },
       {
-        captureSession: async options =>
-          await new Promise((_resolve, reject) => {
-            options.signal?.addEventListener('abort', () => reject(options.signal?.reason))
-          }),
+        captureSession: captureUntilStopped,
         persistSession,
       }
     )
     await vi.waitFor(async () => expect(await lockfile.check(config.browserProfileDir)).toBe(true))
+    controller.abort(new Error('stopped'))
+
+    await expect(login).rejects.toThrow('stopped')
+    expect(persistSession).not.toHaveBeenCalled()
+    expect(await lockfile.check(config.browserProfileDir)).toBe(false)
+  })
+
+  test('stops before the browser when stopped while the profile is being locked', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'overleaf-login-early-'))
+    const config = readConfig({
+      OVERLEAF_COOKIE_JAR_FILE: join(directory, 'cookies.txt'),
+      OVERLEAF_BROWSER_PROFILE_DIR: join(directory, 'profile'),
+      OVERLEAF_BASE_URL: 'https://overleaf.test',
+    })
+    const controller = new AbortController()
+    const persistSession = vi.fn()
+    const login = runLoginCommand(
+      config,
+      { signal: controller.signal },
+      {
+        captureSession: captureUntilStopped,
+        persistSession,
+      }
+    )
+    // Stopped before the lock is taken, so the capture starts with its signal already aborted.
     controller.abort(new Error('stopped'))
 
     await expect(login).rejects.toThrow('stopped')
