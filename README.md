@@ -240,6 +240,7 @@ Against the three most-starred Overleaf MCP servers and the two closest in desig
 | [Command line](https://mhmdaskari.github.io/overleaf-web-mcp/cli/) | Every command, request formats, output, exit codes, and the Agent Skills |
 | [TypeScript SDK](https://mhmdaskari.github.io/overleaf-web-mcp/sdk/) | `createOverleafClient`, results and errors, and the stable surface |
 | [Safety model](https://mhmdaskari.github.io/overleaf-web-mcp/safety/) | Revisions, tracked changes, confirmations, error codes |
+| [Privacy](https://mhmdaskari.github.io/overleaf-web-mcp/privacy/) | What it sends and where, what it stores on your computer, and how to delete it |
 | [Configuration](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/) | Environment variables, the access policy, proxies, where the session is stored, and keeping it alive |
 | [Internals](https://mhmdaskari.github.io/overleaf-web-mcp/internals/) | Protocol notes, reliability guarantees, related projects |
 | [Contributing](https://mhmdaskari.github.io/overleaf-web-mcp/contributing/) | Reporting bugs and feedback, setting up, and opening a pull request |

@@ -23,7 +23,7 @@ which opens no session, and `SERVER_VERSION` in the SDK say which you have. The 
 
 ## 1.4.0
 
-[Changelog](changelog.md#140-unreleased)
+[Changelog](changelog.md#140-2026-11-23)
 
 - **Plugins:** the server and the three Agent Skills as a [Claude Code
   plugin](install.md#2-connect-your-mcp-client), installed with

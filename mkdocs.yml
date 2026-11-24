@@ -46,6 +46,7 @@ nav:
   - Command line: cli.md
   - TypeScript SDK: sdk.md
   - Safety model: safety.md
+  - Privacy: privacy.md
   - Configuration: configuration.md
   - Internals: internals.md
   - Comparison: comparison.md

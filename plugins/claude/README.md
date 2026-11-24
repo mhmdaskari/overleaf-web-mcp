@@ -16,11 +16,27 @@ server code of its own; the source is at
 - **Three skills**: `overleaf-revise-manuscript`, `overleaf-reviewer-comments`, and
   `overleaf-sync-sources`. They run the same package's command line through `npx`.
 
-The server and the skills need Node.js 20 or newer on your computer. Check with `node --version`.
-They run in Claude Code and in Cowork sessions on your computer. In chat on claude.ai and in the
-desktop app, a plugin's local MCP server is not started; there, install the desktop extension
-described in the [installation guide](https://mhmdaskari.github.io/overleaf-web-mcp/install/)
-instead.
+## Example prompts
+
+Once it is installed and you are signed in, ask in plain language; Claude picks the tools.
+
+- "List my Overleaf projects and open the one called *Thesis*."
+- "Rewrite the introduction of `main.tex` for a general audience, as a tracked change."
+- "Compile the paper and tell me whether it built cleanly, and where any errors are."
+- "Summarize the open review comments and reply to the one about Table 2."
+- "Find undefined references and citations in the paper before I compile."
+
+## What you need
+
+- Node.js 20 or newer on your computer. Check with `node --version`.
+- Your own Overleaf account, free or paid, on `www.overleaf.com` or a self-hosted Overleaf. You
+  sign in with it and the plugin acts only as you; there is no shared or demo account. A few
+  features, such as tracked changes, depend on what your Overleaf plan includes.
+
+The server and the skills run in Claude Code and in Cowork sessions on your computer. In chat on
+claude.ai and in the desktop app, a plugin's local MCP server is not started; there, install the
+desktop extension described in the
+[installation guide](https://mhmdaskari.github.io/overleaf-web-mcp/install/) instead.
 
 ## Install
 
@@ -64,6 +80,9 @@ Edits are checked against the revision they were read at, and destructive tools 
 explicit confirmation value. The [safety page](https://mhmdaskari.github.io/overleaf-web-mcp/safety/)
 covers both, and the [configuration page](https://mhmdaskari.github.io/overleaf-web-mcp/configuration/)
 lists every setting.
+
+The [privacy page](https://mhmdaskari.github.io/overleaf-web-mcp/privacy/) covers this in full,
+including how to delete what is stored. The plugin's author receives no data from it.
 
 ## License
 
