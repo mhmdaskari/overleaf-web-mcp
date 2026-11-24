@@ -10,7 +10,7 @@ follow the links for their current state. The capability rows describe each proj
 | Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
 | Tools | 41 | 8 | 21 | 5 | 22 | 17 |
 | Works without an MCP client (command line or library) | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Works without the Git bridge | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Self-hosted Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡¹ |
 | List and search your projects | ✅ | 🟡² | 🟡³ | ❌ | 🟡⁴ | ✅ |
 | Returns a document's text to the assistant | ✅ | ✅ | 🟡⁵ | ✅ | ✅ | ✅ |
