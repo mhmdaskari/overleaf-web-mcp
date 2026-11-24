@@ -11,7 +11,6 @@
   "repository": "https://github.com/mhmdaskari/overleaf-web-mcp",
   "license": "MIT",
   "keywords": ["overleaf", "latex", "manuscript", "compile", "comments", "track-changes"],
-  "network": { "hosts": ["www.overleaf.com", "registry.npmjs.org"] },
   "icon": "./icon.svg",
   "documentationUrl": "https://mhmdaskari.github.io/overleaf-web-mcp/install/",
   "supportUrl": "https://github.com/mhmdaskari/overleaf-web-mcp/issues"
