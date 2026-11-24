@@ -30,7 +30,7 @@
   </picture>
 </p>
 
-Overleaf Web MCP is a [Model Context Protocol](https://modelcontextprotocol.io) server, the `overleaf-web-mcp` command line, and a TypeScript library, `createOverleafClient` from `overleaf-web-mcp/core`, all over one engine with the same safety checks. It signs in to Overleaf once through a browser window you control, then lets an AI assistant, a script, or your own program work on your projects the way you would in the web editor: browse files, make revision-checked edits, optionally as tracked changes, compile, and handle review comments and tracked changes. It uses the same browser-facing endpoints the Overleaf editor uses, so no Git integration or premium plan is needed for the core workflow.
+Overleaf Web MCP is a [Model Context Protocol](https://modelcontextprotocol.io) server, the `overleaf-web-mcp` command line, and a TypeScript library, `createOverleafClient` from `overleaf-web-mcp/core`, all over one engine with the same safety checks. It signs in to Overleaf once through a browser window you control, then lets an AI assistant, a script, or your own program work on your projects the way you would in the web editor: browse files, make revision-checked edits, optionally as tracked changes, compile, and handle review comments and tracked changes. It uses the same browser-facing endpoints the Overleaf editor uses, so it works with the Overleaf account and plan you already have. Features your plan does not include, such as track changes, stay unavailable.
 
 ## What you can say
 
@@ -222,7 +222,7 @@ Against the three most-starred Overleaf MCP servers and the two closest in desig
 | Connects through | Web session | Git bridge | Web session | Git bridge | Web session | Web session |
 | Tools | 41 | 8 | 21 | 5 | 22 | 17 |
 | Works without an MCP client (command line or library) | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| Works without Overleaf's paid Git integration | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Works without the Git bridge | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Self-hosted Overleaf | ✅ | ❌ | ✅ | ❌ | ✅ | 🟡 |
 | Sends edits as collaborative OT operations, not whole files | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ |
 | Refuses an edit if the document changed since it was read | ✅ | 🟡 | ❌ | 🟡 | ✅ | 🟡 |
